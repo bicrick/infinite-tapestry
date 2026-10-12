@@ -443,3 +443,7 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
   .dock { bottom: calc(40px + var(--sb)); }
   body.composing .dock { bottom: calc(12px + var(--sb)); }
 }
+@media (max-width: 560px) {
+  body.composing .cmd .send { margin-left: auto; }
+  body.more-open .dock .now { visibility: hidden !important; }
+}
