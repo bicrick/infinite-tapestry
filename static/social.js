@@ -158,6 +158,7 @@ async function boot() {
     const { error } = await sb.rpc("submit_idea", { p_body: text, p_image: image });
     if (error) { toast(friendly(error)); return false; }
     refFile = null; $("ref-chip").classList.add("hidden");
+    window.dispatchEvent(new CustomEvent("tapestry:submitted"));
     toast(`Added to the pool <span class="muted">“${esc(text)}”</span>`, 3000);
     refreshIdeas();
     return true;
@@ -244,7 +245,7 @@ async function boot() {
     if (!rows.length) $("woven-list").innerHTML = '<li class="empty">Ideas appear here once they are painted.</li>';
   }
   refreshIdeas();
-  sb.channel("ideas").on("postgres_changes", { event: "*", schema: "public", table: "ideas" }, () => refreshIdeas()).subscribe();
+  sb.channel("ideas").on("postgres_changes", { event: "*", schema: "public", table: "ideas" }, (p) => { refreshIdeas(); window.dispatchEvent(new CustomEvent("tapestry:idea", { detail: p })); }).subscribe();
   setInterval(refreshIdeas, 60000);
 
   // ---------- chat ----------

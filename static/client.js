@@ -65,8 +65,11 @@
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
   }
 
+  // Battery saver: drop to 1x resolution and ~30fps on low battery (Battery API) or data-saver.
+  const saver = { on: false };
+  window.TapestrySaver = saver;
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = saver.on ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(canvas.clientWidth * dpr);
     canvas.height = Math.floor(canvas.clientHeight * dpr);
   }
@@ -74,10 +77,33 @@
   resize();
 
   const SW = () => config.strip_width;
-  const scale = () => canvas.height / Math.max(1, config.height);
+  // Portrait phones: the tapestry is a centred horizontal band (letterboxed), not a zoomed-in slice.
+  const portrait = () => canvas.height > canvas.width * 1.15;
+  const BAND_ASPECT = 1.25;   // band width : height
+  const scale = () => (portrait() ? Math.min(canvas.height, canvas.width / BAND_ASPECT) : canvas.height) / Math.max(1, config.height);
+  let ambCv = null, ambCtx = null;
+  function drawSurround(w, h, yOff, bandH) {
+    // Soft extension of the band into the dark space: downsample the band, upscale it (free blur), darken.
+    if (yOff < 4) return;
+    if (!ambCv) { ambCv = document.createElement("canvas"); ambCv.width = 24; ambCv.height = 12; ambCtx = ambCv.getContext("2d"); }
+    ambCtx.drawImage(canvas, 0, yOff, w, bandH, 0, 0, 24, 12);
+    ctx.save();
+    ctx.imageSmoothingQuality = "high";
+    ctx.globalAlpha = 0.55;
+    ctx.drawImage(ambCv, 0, 0, 24, 3, 0, 0, w, yOff + 2);                  // top edge, stretched up
+    ctx.drawImage(ambCv, 0, 9, 24, 3, 0, yOff + bandH - 2, w, h - yOff - bandH + 2);   // bottom edge, stretched down
+    ctx.globalAlpha = 1;
+    const g1 = ctx.createLinearGradient(0, 0, 0, yOff);
+    g1.addColorStop(0, "rgba(5,5,6,.96)"); g1.addColorStop(0.75, "rgba(5,5,6,.72)"); g1.addColorStop(1, "rgba(5,5,6,.35)");
+    ctx.fillStyle = g1; ctx.fillRect(0, 0, w, yOff);
+    const y2 = yOff + bandH, g2 = ctx.createLinearGradient(0, y2, 0, h);
+    g2.addColorStop(0, "rgba(5,5,6,.35)"); g2.addColorStop(0.25, "rgba(5,5,6,.72)"); g2.addColorStop(1, "rgba(5,5,6,.96)");
+    ctx.fillStyle = g2; ctx.fillRect(0, y2, w, h - y2);
+    ctx.restore();
+  }
   const viewWorld = () => canvas.width / scale();
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
-  window.TapestryView = { left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas };
+  window.TapestryView = { left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -265,7 +291,9 @@
     let downX = 0, moved = false;
     tl.addEventListener("pointermove", (ev) => {
       const f = fracFromEvent(ev);
-      tlTip.textContent = f > 0.995 ? "Live" : fmtTime(timeAt(f * maxIndex));
+      const label = f > 0.995 ? "Live" : fmtTime(timeAt(f * maxIndex));
+      if (tlScrub && label !== tlTip.textContent && navigator.vibrate && ev.pointerType === "touch") navigator.vibrate(3);   // scrubber tick
+      tlTip.textContent = label;
       tlTip.style.left = (f * 100) + "%";
       if (tlScrub) { if (Math.abs(ev.clientX - downX) > 3) moved = true; if (moved) scrubTo(f); }
     });
@@ -290,6 +318,7 @@
   window.TapestryJump = jumpTo;
 
   function frame(ts) {
+    if (saver.on && lastTs && ts - lastTs < 30) { requestAnimationFrame(frame); return; }   // ~30fps cap
     if (!lastTs) lastTs = ts;
     const dt = Math.min(0.1, (ts - lastTs) / 1000);
     lastTs = ts;
@@ -378,6 +407,7 @@
       }
     }
     ctx.restore();
+    if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
     // Motion blur that scales with scrub velocity (cheap: smear the frame onto itself).
     const blur = Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260)) * (window.devicePixelRatio || 1);
     if (blur > 0.5) {
@@ -1068,7 +1098,7 @@
     if (body.classList.contains("more-open") && !cmd.contains(e.target)) setMore(false);
   }, true);
   // Overflow: secondary actions in a compact row above the pill.
-  function setMore(on) { body.classList.toggle("more-open", on); more.setAttribute("aria-expanded", on ? "true" : "false"); }
+  function setMore(on) { const cap = document.querySelector(".dock .now"); if (cap) cap.style.visibility = on ? "hidden" : ""; body.classList.toggle("more-open", on); more.setAttribute("aria-expanded", on ? "true" : "false"); }
   more.addEventListener("click", (e) => { e.preventDefault(); setMore(!body.classList.contains("more-open")); });
   cmd.querySelectorAll(".sec").forEach((b) => b.addEventListener("click", () => phone.matches && b.id !== "speed-btn" && setTimeout(() => setMore(false), 150)));
   // Chat lives in the sheet on phones.

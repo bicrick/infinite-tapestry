@@ -447,3 +447,22 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
   body.composing .cmd .send { margin-left: auto; }
   body.more-open .dock .now { visibility: hidden !important; }
 }
+
+/* style chips (composer) */
+.chips { display: none; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; height: 32px; padding: 0 13px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--muted); font-size: 13px; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
+.chips button.on { background: #fff; color: #000; border-color: #fff; }
+@media (max-width: 560px) {
+  body.composing .chips { display: flex; order: 1; flex: 1 0 100%; margin: 0 -10px 0 -2px; padding-right: 10px; }
+  body.composing #cmd-input { order: 0; }
+  body.composing .dock { bottom: calc(12px + max(var(--sb), var(--kb, 0px))); }
+}
+.me-link { margin-left: 4px; padding: 0 10px; min-height: 44px; display: inline-flex; align-items: center; color: var(--muted); text-decoration: none; font-size: 15px; }
+.me-link:hover { color: var(--fg); }
+@media (min-width: 561px) { .me-link { font-size: 13px; min-height: 0; } }
+
+/* landscape phones: immersive full-bleed, chrome only on tap */
+body.immersive .veil { opacity: 0; }
+body.immersive .dock { width: min(560px, calc(100vw - 2 * max(16px, env(safe-area-inset-left)))); bottom: calc(14px + env(safe-area-inset-bottom)); }
+body.immersive .top { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
