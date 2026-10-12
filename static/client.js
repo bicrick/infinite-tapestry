@@ -139,7 +139,7 @@
   // Together with the decode-aware limit below, the visible right edge only ever shows final pixels.
   let maxOv = 128;
   const BAND = () => maxOv + 32;
-  const STAGE = () => SW() + BAND();
+  const STAGE = () => 2 * SW() + BAND();   // + one more full strip of margin (user-calibrated)
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
