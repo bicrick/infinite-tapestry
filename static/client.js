@@ -1183,8 +1183,8 @@
 
   window.TapestryWS = { send: (o) => send(o), toast: (h, ms) => toast(h, ms), esc: (x) => esc(x) };
   // Read-only view hooks for reactions/clips (fun.js).
-  window.TapestryView = { canvas, center: () => Math.round(centerIdx()), title: () => ($("now-title").textContent || "").trim(),
-    by: () => ($("now-src").textContent || "").trim() };
+  Object.assign(window.TapestryView, { title: () => ($("now-title").textContent || "").trim(),
+    by: () => ($("now-src").textContent || "").trim() });
   function connect() {
     const url = wsUrl();
     ws = new WebSocket(url + (url.includes("?") ? "&" : "?") + "v=2");
