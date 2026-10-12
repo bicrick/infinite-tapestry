@@ -378,6 +378,16 @@ class LiveDirector:
             self.loop = bool(d.get("loop", False))
             _scene_ids = __import__("itertools").count(int(d.get("next_id", 1)) + 1)
 
+    def caption(self) -> dict:
+        """Scene the most recent strip mostly shows (target once past halfway through a blend)."""
+        with self._lock:
+            sc = self._current or {}
+            if self._target is not None:
+                t = (self._last_index - self._blend_start + 1) / max(1, self._blend_len(self._target))
+                if t >= 0.5:
+                    sc = self._target
+            return {k: sc.get(k) for k in ("title", "by", "style", "origin") if sc.get(k)}
+
     def state(self) -> dict:
         with self._lock:
             idx = self._last_index

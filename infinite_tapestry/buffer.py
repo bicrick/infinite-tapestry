@@ -20,6 +20,7 @@ class Strip:
     jpeg: bytes
     prompt: str
     created_at: float = field(default_factory=time.time)
+    scene: dict | None = None   # {title, by, style, origin} of the scene this strip mostly shows
 
 
 Subscriber = Callable[[Strip], None]

@@ -506,3 +506,15 @@ button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { op
   /* the inset card is the band itself, not the whole screen */
   body.intro { background: #050506; }
 }
+
+/* live captions while scrubbing */
+.dock .now > * { transition: opacity .17s var(--ease); }
+.dock .now.swap > * { opacity: 0; }
+.now-time { color: rgba(255,255,255,.4); font-variant-numeric: tabular-nums; font-size: 11px; }
+.now-time:empty { display: none; }
+body.hist-cap .dock .now .bar { visibility: hidden; }
+.amb-time { display: none; }
+@media (max-width: 560px) and (orientation: portrait) {
+  .amb-time { display: block; position: absolute; left: 0; right: 0; top: calc(var(--band-bot, 70vh) + 44px); text-align: center;
+    font-size: 11px; color: rgba(255,255,255,.32); font-variant-numeric: tabular-nums; letter-spacing: .04em; transition: opacity .35s; }
+}

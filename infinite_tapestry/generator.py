@@ -177,6 +177,10 @@ class StripGenerator:
             m[:, ctx_w - band:] = 255
             mask = Image.fromarray(m, mode="L")
         prompt_a, prompt_b, blend_t = self.director.frame_for(self._strip_index)
+        try:
+            scene_meta = self.director.caption() if hasattr(self.director, "caption") else None
+        except Exception:
+            scene_meta = None
         from .guard import is_disallowed
 
         if is_disallowed(prompt_a):
@@ -294,6 +298,7 @@ class StripGenerator:
             overlap=overlap_meta,
             jpeg=jpeg,
             prompt=shown_prompt,
+            scene=scene_meta,
         )
 
         with self._lock:

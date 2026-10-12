@@ -82,7 +82,8 @@ class SupabaseMirror:
     def save_strip_row(self, s: Strip) -> None:
         row = {"session": self.prefix, "idx": s.index, "width": s.width, "height": s.height,
                "overlap": s.overlap, "prompt": s.prompt[:500], "path": f"{self.prefix}/strips/{s.index:08d}.jpg",
-               "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(s.created_at or time.time()))}
+               "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(s.created_at or time.time())),
+               "scene": s.scene}
         self.db_async(lambda: self._rest("POST", "strips?on_conflict=session,idx", [row],
                                          "resolution=merge-duplicates,return=minimal"))
 
@@ -153,7 +154,7 @@ class HistoryStore:
 
     def save_strip(self, s: Strip) -> None:
         meta = {"index": s.index, "width": s.width, "height": s.height, "overlap": s.overlap,
-                "prompt": s.prompt, "created_at": s.created_at}
+                "prompt": s.prompt, "created_at": s.created_at, "scene": s.scene}
         with self._lock:
             self._strip_path(s.index).write_bytes(s.jpeg)
             with open(self.dir / "strips.jsonl", "a") as f:
@@ -191,7 +192,8 @@ class HistoryStore:
                     meta = None
         m = meta or {}
         return Strip(index=index, width=m.get("width", 0), height=m.get("height", 0), overlap=m.get("overlap", 0),
-                     jpeg=p.read_bytes(), prompt=m.get("prompt", ""), created_at=m.get("created_at", 0.0))
+                     jpeg=p.read_bytes(), prompt=m.get("prompt", ""), created_at=m.get("created_at", 0.0),
+                     scene=m.get("scene"))
 
     def strips_between(self, start: int, end: int, meta: dict[int, dict] | None = None) -> list[Strip]:
         meta = meta if meta is not None else self.load_meta()

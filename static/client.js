@@ -258,9 +258,43 @@
   }
 
   // ---------- timeline scrubber ----------
-  let tlPoints = [], tlScrub = false;
+  let tlPoints = [], tlScrub = false, tlScenes = [], histKey = null, histTime = "", swapT = 0;
+  // Live captions while scrubbing: the caption follows the scene under the centre of the view.
+  function sceneAt(idx) {
+    let lo = 0, hi = tlScenes.length - 1, ans = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (tlScenes[m][0] <= idx) { ans = m; lo = m + 1; } else hi = m - 1; }
+    return ans < 0 ? null : tlScenes[ans];
+  }
+  function histCaption() {
+    if (live || !tlScenes.length) {
+      if (histKey !== null) { histKey = null; document.body.classList.remove("hist-cap"); $("now-time").textContent = ""; if (director) showDirector(director); }
+      return;
+    }
+    const idx = Math.max(0, Math.min(maxIndex, Math.round(centerIdx())));
+    const r = sceneAt(idx);
+    const t = fmtTime(timeAt(idx));
+    if (t !== histTime) { histTime = t; $("now-time").textContent = t; }
+    if (!r) return;
+    const key = r[0] + "|" + r[1];
+    if (key === histKey) return;
+    const first = histKey === null;
+    histKey = key;
+    document.body.classList.add("hist-cap");
+    const cap = document.querySelector(".dock .now");
+    const apply = () => {
+      const [, title, by, style, origin] = r;
+      $("now-title").textContent = title || "—";
+      const src = $("now-src");
+      src.textContent = (origin === "auto" ? "✦ Claude" : by ? by : origin === "user" ? "Audience" : "Earlier") + (style && style !== "none" ? " · " + style : "");
+      src.className = "src" + (origin === "auto" ? " auto" : "");
+      $("now-arrow").classList.add("hidden"); $("next-title").textContent = "";
+      cap && cap.classList.remove("swap");
+    };
+    clearTimeout(swapT);
+    if (first || !cap) apply(); else { cap.classList.add("swap"); swapT = setTimeout(apply, 170); }
+  }
   async function refreshTimeline() {
-    try { const r = await fetch(httpBase() + "/timeline?points=300"); const j = await r.json(); tlPoints = j.points || []; } catch (_) {}
+    try { const r = await fetch(httpBase() + "/timeline?points=300"); const j = await r.json(); tlPoints = j.points || []; tlScenes = j.scenes || tlScenes; } catch (_) {}
     // the whole history at 1/16 is small: prefetch it so flights never hit an empty frame
     for (let c = 0; (c + 1) * LOD_N[2] <= maxIndex && c < 300; c++) lodTile(2, c);
   }
@@ -290,6 +324,7 @@
     tlHead.style.left = (f * 100) + "%";
     tl.classList.toggle("away", !live);
     $("tl-start").textContent = fmtTime(timeAt(0));
+    histCaption();
   }
   function fracFromEvent(ev) { const r = tl.getBoundingClientRect(); return Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)); }
   function scrubTo(f) {
@@ -495,6 +530,7 @@
       panPos = panMode === "return" ? shownPan() : Math.max(0, liveScroll);
       ret = null;
     }
+    if (live && typeof refreshTimeline === "function") refreshTimeline();   // fresh scene index for captions
     live = false;
     liveBtn.classList.remove("hidden");
   }
@@ -932,9 +968,11 @@
     const cur = d.current_scene || { title: d.current };
     const tgt = d.target_scene;
     const next = tgt || (d.items && d.items[0]);
-    $("now-title").textContent = cur.title || d.current;
-    $("now-arrow").classList.toggle("hidden", !next);
-    $("next-title").textContent = next ? next.title : "";
+    if (histKey === null) {
+      $("now-title").textContent = cur.title || d.current;
+      $("now-arrow").classList.toggle("hidden", !next);
+      $("next-title").textContent = next ? next.title : "";
+    }
     const prog = tgt ? (d.transition_progress || 0) : Math.min(1, (d.held || 0) / Math.max(1, d.hold_for || d.hold || 1));
     $("now-bar").style.width = (prog * 100).toFixed(0) + "%";
     if (document.activeElement !== $("hold")) $("hold").value = d.hold;
@@ -947,8 +985,8 @@
     }
     const shown = tgt && (d.transition_progress || 0) >= 0.5 ? tgt : cur;
     const srcEl = $("now-src");
-    srcEl.textContent = shown.origin === "auto" ? "✦ Claude" : shown.origin === "user" ? (shown.by || "You") : "Now";
-    srcEl.className = "src" + (shown.origin === "auto" ? " auto" : "");
+    if (histKey === null) srcEl.textContent = shown.origin === "auto" ? "✦ Claude" : shown.origin === "user" ? (shown.by || "You") : "Now";
+    if (histKey === null) srcEl.className = "src" + (shown.origin === "auto" ? " auto" : "");
     renderQueue(d);
   }
 
