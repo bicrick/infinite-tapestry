@@ -2,7 +2,7 @@
 Supabase Storage when configured, restored on restart.
 
 Layout under data_dir:
-  strips/00000042.jpg   one file per strip (blended pixels, as sent to viewers)
+  strips/00000042.webp  one file per strip (blended pixels, as sent to viewers; legacy .jpg kept)
   strips.jsonl          one JSON line of metadata per strip
   state.json            director + timeline + generator counters (atomic write)
   canvas.png            the generator's rolling context canvas
@@ -26,6 +26,18 @@ from PIL import Image
 from .buffer import Strip
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_ext(data: bytes) -> str:
+    """Detect stored strip extension from payload magic bytes."""
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return "jpg"
+
+
+def _strip_mime(ext: str) -> str:
+    return "image/webp" if ext == "webp" else "image/jpeg"
+
 
 
 class SupabaseMirror:
@@ -91,8 +103,9 @@ class SupabaseMirror:
             self.failed += 1
 
     def save_strip_row(self, s: Strip) -> None:
+        ext = _strip_ext(s.jpeg)
         row = {"session": self.prefix, "idx": s.index, "width": s.width, "height": s.height,
-               "overlap": s.overlap, "prompt": s.prompt[:500], "path": f"{self.prefix}/strips/{s.index:08d}.jpg",
+               "overlap": s.overlap, "prompt": s.prompt[:500], "path": f"{self.prefix}/strips/{s.index:08d}.{ext}",
                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(s.created_at or time.time())),
                "scene": s.scene}
         self.db_async(lambda: self._rest("POST", "strips?on_conflict=session,idx", [row],
@@ -160,19 +173,27 @@ class HistoryStore:
         self._last_state = 0.0
 
     # ---- strips ----
-    def _strip_path(self, index: int) -> Path:
-        return self.dir / "strips" / f"{index:08d}.jpg"
+    def _strip_path(self, index: int, ext: str = "webp") -> Path:
+        return self.dir / "strips" / f"{index:08d}.{ext}"
+
+    def _find_strip_path(self, index: int) -> Path | None:
+        for ext in ("webp", "jpg"):
+            p = self._strip_path(index, ext)
+            if p.exists():
+                return p
+        return None
 
     def save_strip(self, s: Strip) -> None:
+        ext = _strip_ext(s.jpeg)
         meta = {"index": s.index, "width": s.width, "height": s.height, "overlap": s.overlap,
-                "prompt": s.prompt, "created_at": s.created_at, "scene": s.scene}
+                "prompt": s.prompt, "created_at": s.created_at, "scene": s.scene, "ext": ext}
         with self._lock:
-            self._strip_path(s.index).write_bytes(s.jpeg)
+            self._strip_path(s.index, ext).write_bytes(s.jpeg)
             with open(self.dir / "strips.jsonl", "a") as f:
                 f.write(json.dumps(meta) + "\n")
         if self.mirror:
             # One durable copy, in the public CDN bucket (viewers fetch it directly).
-            self.mirror.put(f"public:strips/{s.index:08d}.jpg", s.jpeg, "image/jpeg")
+            self.mirror.put(f"public:strips/{s.index:08d}.{ext}", s.jpeg, _strip_mime(ext))
             self.mirror.save_strip_row(s)
         if getattr(self, "lod", None):
             self.lod.on_strip(s.index)
@@ -190,14 +211,21 @@ class HistoryStore:
         return out
 
     def load_strip(self, index: int, meta: dict | None = None) -> Strip | None:
-        p = self._strip_path(index)
-        if not p.exists():
-            # Cache miss: fetch from durable Storage and re-cache.
+        p = self._find_strip_path(index)
+        if p is None:
+            # Cache miss: fetch from durable Storage and re-cache (webp first, then legacy jpg).
             data = None
-            if self.mirror:  # newer strips live in the public bucket, older ones in the private one
-                data = self.mirror.get(f"public:strips/{index:08d}.jpg") or self.mirror.get(f"strips/{index:08d}.jpg")
+            ext = "jpg"
+            if self.mirror:
+                for e in ("webp", "jpg"):
+                    data = (self.mirror.get(f"public:strips/{index:08d}.{e}")
+                            or self.mirror.get(f"strips/{index:08d}.{e}"))
+                    if data:
+                        ext = e
+                        break
             if not data:
                 return None
+            p = self._strip_path(index, ext)
             p.write_bytes(data)
             if not meta and self.mirror:
                 try:
@@ -219,7 +247,8 @@ class HistoryStore:
         return out
 
     def count(self) -> int:
-        return len(list((self.dir / "strips").glob("*.jpg")))
+        d = self.dir / "strips"
+        return len({p.stem for p in list(d.glob("*.jpg")) + list(d.glob("*.webp"))})
 
     # ---- state ----
     def save_state(self, state: dict[str, Any], canvas: Image.Image | None = None, force: bool = False) -> bool:

@@ -146,7 +146,7 @@
     if (prev && (prev.blob || !prev.url)) return;   // bytes only fill a CDN miss
     const entry = {
       index: m.index, overlap: m.overlap, prompt: m.prompt,
-      blob: new Blob([m.jpeg], { type: "image/jpeg" }), bitmap: null, decoding: false,
+      blob: new Blob([m.jpeg], { type: config.strip_mime || "image/jpeg" }), bitmap: null, decoding: false,
     };
     strips.set(m.index, entry);
     requested.delete(m.index);
@@ -166,8 +166,9 @@
     if (Array.isArray(r.s)) addStripScene(r.i, r.s);
     const base = config.strip_base;
     if (strips.has(r.i) || !base) return;
+    const ext = config.strip_ext || "jpg";
     strips.set(r.i, { index: r.i, overlap: r.o || 0, prompt: r.p || "",
-      url: base + String(r.i).padStart(8, "0") + ".jpg", blob: null, bitmap: null, decoding: false, tries: 0 });
+      url: base + String(r.i).padStart(8, "0") + "." + ext, blob: null, bitmap: null, decoding: false, tries: 0 });
     requested.delete(r.i);
     // Live strips arrive ahead of the view: prefetch once the CDN upload has landed.
     const e = strips.get(r.i);
@@ -189,6 +190,15 @@
       fetch(e.url, { mode: "cors" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
         .then((b) => { e.blob = b; e.decoding = false; ensureDecoded(e); })
         .catch(() => {
+          // New uploads are .webp; pre-switch history is still .jpg on the CDN.
+          if (e.url && e.url.endsWith(".webp") && !e.triedJpg) {
+            e.triedJpg = true;
+            e.url = e.url.slice(0, -5) + ".jpg";
+            e.decoding = false;
+            e.retryAt = 0;
+            ensureDecoded(e);
+            return;
+          }
           e.decoding = false;
           e.tries = (e.tries || 0) + 1;
           e.retryAt = performance.now() + Math.min(8000, 700 * e.tries);

@@ -19,7 +19,7 @@ def test_mock_generate_one_strip():
     assert strip.height == 64
     assert strip.width == 16  # first strip: new pixels only
     assert strip.overlap == 0
-    assert strip.jpeg[:2] == b"\xff\xd8"
+    assert strip.jpeg[:4] == b"RIFF" and strip.jpeg[8:12] == b"WEBP"
     assert gen.strip_index == 1
 
     strip2 = gen.generate_one()
