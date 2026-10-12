@@ -227,7 +227,8 @@
   }
   let corr = 0, lastClockAt = 0;
 
-  let zoom = 1, velS = 0, prevCenter = null, blurCv = null, blurCtx = null;
+  const COARSE = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+  let zoom = 1, zoomVel = 0, velS = 0, prevCenter = null, blurCv = null, blurCtx = null;
 
   // ---------- LOD tiles (served from the GPU box, mirrored in Storage) ----------
   const LOD_N = { 1: 16, 2: 64, 3: 256 };
@@ -248,21 +249,20 @@
     t.used = performance.now();
     return t.ok ? t.img : null;
   }
+  function drawLodChunk(level, c, left) {
+    const tw = LOD_N[level] * SW();
+    const img = lodTile(level, c);
+    if (img) { ctx.drawImage(img, c * tw - left, 0, tw, config.height); return; }
+    if (level > 1) for (let k = 0; k < 4; k++) drawLodChunk(level - 1, c * 4 + k, left);   // finer tiles fill the gap
+  }
   function drawLod(left, span, z) {
-    const level = z > 0.55 ? 1 : 2;
+    const level = z > 0.55 ? 1 : z > 0.14 ? 2 : 3;
     const tw = LOD_N[level] * SW();
     const c0 = Math.max(0, Math.floor(left / tw)), c1 = Math.floor((left + span) / tw);
-    for (let c = c0; c <= c1; c++) {
-      let img = lodTile(level, c);
-      if (!img && level === 1) {                 // fall back to the coarser tile
-        const p = lodTile(2, Math.floor(c / 4));
-        if (p) { const part = p.width / 4; ctx.drawImage(p, (c % 4) * part, 0, part, p.height, c * tw - left, 0, tw, config.height); continue; }
-      }
-      if (img) ctx.drawImage(img, c * tw - left, 0, tw, config.height);
-    }
-    // prefetch ahead in the direction of travel
-    const ahead = velS > 0 ? c1 + 1 : c0 - 1;
-    if (ahead >= 0) lodTile(level, ahead);
+    for (let c = c0; c <= c1; c++) drawLodChunk(level, c, left);
+    // prefetch a few tiles ahead in the direction of travel (more when moving fast)
+    const n = Math.abs(velS) > 20000 ? 4 : 2;
+    for (let k = 1; k <= n; k++) { const ahead = velS > 0 ? c1 + k : c0 - k; if (ahead >= 0) lodTile(level, ahead); }
   }
 
   // ---------- timeline scrubber ----------
@@ -397,9 +397,13 @@
         velS += (v - velS) * Math.min(1, dt * 10);
       }
       prevCenter = L;
-      const zt = 1 - Math.min(0.62, Math.max(0, (Math.abs(velS) - 500) / 5200));
-      zoom += (zt - zoom) * Math.min(1, dt * (zt < zoom ? 7 : 3.2));   // out fast, back in gently
-      if (Math.abs(zoom - 1) < 0.001) zoom = 1;
+      // Zoom out with speed: ~0.5x at 3k world px/s, ~0.05x when humming through hours.
+      const zt = COARSE ? 1 - Math.min(0.62, Math.max(0, (Math.abs(velS) - 500) / 5200))   // touch: unchanged
+        : Math.max(0.05, 1 / (1 + Math.max(0, Math.abs(velS) - 600) / 2600));
+      // Spring zoom: out quickly as speed builds, snappy (slightly underdamped) back in on settle.
+      if (zt < zoom) { zoom += (zt - zoom) * Math.min(1, dt * 6); zoomVel = 0; }
+      else { const k = 90, c = 1.6 * Math.sqrt(k); zoomVel += (k * (zt - zoom) - c * zoomVel) * dt; zoom = Math.min(1.015, zoom + zoomVel * dt); }
+      if (Math.abs(zoom - 1) < 0.001 && Math.abs(zoomVel) < 0.01) { zoom = 1; zoomVel = 0; }
     }
     draw();
     updateTimeline();
@@ -441,7 +445,8 @@
     if (zoom < 0.97 || fast) drawLod(left, w / s, zoom);
     {
       let want = 0, have = 0;
-      for (let i = Math.max(firstIdx, 0); i <= Math.min(lastIdx, maxIndex); i++) {
+      const stripLayer = zoom > 0.3;
+      for (let i = Math.max(firstIdx, 0); stripLayer && i <= Math.min(lastIdx, maxIndex); i++) {
         want++;
         const e = strips.get(i);
         if (!e) continue;
@@ -606,7 +611,7 @@
           if (panPos >= hi - 0.5) { panMode = "live"; live = true; liveBtn.classList.add("hidden"); }
         }
       } else {
-        panVel *= Math.exp(-FRICTION * dt);
+        panVel *= Math.exp(-(Math.abs(panVel) > 8000 ? 1.4 : FRICTION) * dt);
         panPos += panVel * dt;
         if (Math.abs(panVel) < 4) panVel = 0;
         // Gliding into the live edge with speed: just hand over to live.
@@ -715,41 +720,35 @@
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
 
-  // Wheel / trackpad: while live, accumulate backward scroll; commit past LEAVE_PX or on a fast flick.
+  // Wheel / trackpad = time. Scroll DOWN travels back into history, UP comes forward (reaching the
+  // live edge re-joins live). Each event is an impulse; impulses stack and accelerate with speed, so
+  // repeated flicks build up to "humming" through hours, then friction lets it coast down.
   let wheelAcc = 0, wheelAccAt = 0;
+  const WHEEL_MIN = 10;          // CSS px of same-direction scroll before engaging (ignores accidental deltas)
+  const VMAX = 260000;           // world px/s ceiling (~hours of history in seconds)
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
-    const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? innerWidth : 1;
-    const dCss = (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY) * unit;
-    if (panMode === "live") {
-      const now = performance.now();
-      if (now - wheelAccAt > 220) wheelAcc = 0;      // a pause resets the intent
+    if (ev.ctrlKey) return;      // pinch-zoom gesture: ignore
+    const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? innerHeight : 1;
+    const vert = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX);
+    const dCss = (vert ? -ev.deltaY : ev.deltaX) * unit;   // + = forward in time
+    const now = performance.now();
+    if (panMode === "live" || panMode === "return") {
+      if (dCss >= 0) return;                         // already live: forward scroll does nothing
+      if (now - wheelAccAt > 220 || Math.sign(wheelAcc) !== Math.sign(dCss)) wheelAcc = 0;
       wheelAccAt = now;
       wheelAcc += dCss;
-      const back = -wheelAcc;                          // negative delta = scroll back in time
-      if (back > LEAVE_PX || -dCss > 90) {
-        wheelAcc = 0;
-        commitRewind();
-        panMode = "wheel";
-        wheelIdleAt = now;
-      } else {
-        const lim = NUDGE_MAX * cssToWorld(), raw = -back * cssToWorld() * 0.35;
-        nudge = lim * Math.tanh(raw / lim); nudgeVel = 0;
-        clearTimeout(canvas._wheelRelease);
-        canvas._wheelRelease = setTimeout(() => { if (panMode === "live") wheelAcc = 0; }, 230);
-        return;   // springs back in frame() once wheel events stop feeding it
-      }
-    }
-    if (panMode !== "wheel") { panPos = shownPan(); panVel = 0; }
-    panMode = "wheel";
+      if (-wheelAcc < WHEEL_MIN) return;
+      wheelAcc = 0;
+      commitRewind();
+    } else if (panMode !== "wheel" && panMode !== "glide") { panPos = shownPan(); panVel = 0; }
+    panMode = "glide";
     const d = dCss * pxToWorld();
-    const lo = minPan(), hi = maxPan();
-    panPos += d * (panPos < lo || panPos > hi ? 0.35 : 1);
-    // Trackpads supply their own momentum; mice get a short glide.
-    const dtw = Math.max(8, performance.now() - wheelIdleAt);
-    panVel = 0.6 * panVel + 0.4 * (d / (dtw / 1000));
-    if (ev.deltaMode !== 0 || Math.abs(ev.deltaY) >= 50) panVel = Math.max(-2500, Math.min(2500, panVel)); else panVel = 0;
-    wheelIdleAt = performance.now();
+    // Reversing direction brakes hard first; same direction accelerates (gain grows with speed).
+    if (panVel !== 0 && Math.sign(panVel) !== Math.sign(d)) panVel *= 0.35;
+    const gain = 9 * (1 + Math.abs(panVel) / 2500);
+    panVel = Math.max(-VMAX, Math.min(VMAX, panVel + d * gain));
+    wheelIdleAt = now;
   }, { passive: false });
   function goLive() { if (!live || panMode !== "live") startReturn(); }
   liveBtn.addEventListener("click", goLive);
