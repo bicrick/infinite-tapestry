@@ -199,6 +199,16 @@
             ensureDecoded(e);
             return;
           }
+          // R2 miss (not yet copied) → Supabase public bucket → pod bytes below.
+          const fb = config.strip_base_fb;
+          if (fb && !e.triedFb && e.url && !e.url.startsWith(fb)) {
+            e.triedFb = true; e.triedJpg = false;
+            e.url = fb + String(e.index).padStart(8, "0") + "." + (config.strip_ext || "jpg");
+            e.decoding = false;
+            e.retryAt = 0;
+            ensureDecoded(e);
+            return;
+          }
           e.decoding = false;
           e.tries = (e.tries || 0) + 1;
           e.retryAt = performance.now() + Math.min(8000, 700 * e.tries);
@@ -291,7 +301,11 @@
       t.img.onload = () => { t.ok = true; };
       const pod = `${httpBase()}/lod/${level}/${c}.jpg`;
       // CDN first; a tile not mirrored yet falls back to the pod once (which builds and mirrors it).
-      t.img.onerror = () => { if (t.img.src !== pod && !t.podTried) { t.podTried = true; t.img.src = pod; } else t.failed = true; };
+      const fbTile = config.lod_base_fb ? `${config.lod_base_fb}${level}/${String(c).padStart(6, "0")}.jpg` : null;
+      t.img.onerror = () => {
+        if (fbTile && !t.fbTried && t.img.src !== pod) { t.fbTried = true; t.img.src = fbTile; }
+        else if (t.img.src !== pod && !t.podTried) { t.podTried = true; t.img.src = pod; } else t.failed = true;
+      };
       t.img.src = config.lod_base ? `${config.lod_base}${level}/${String(c).padStart(6, "0")}.jpg` : pod;
       lodCache.set(key, t);
       if (lodCache.size > 400) { const oldest = [...lodCache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 100); oldest.forEach(([k]) => lodCache.delete(k)); }
