@@ -116,6 +116,9 @@ def main(argv: list[str] | None = None) -> int:
             log_level="debug" if args.verbose else "info",
             ws_ping_interval=20.0,
             ws_ping_timeout=60.0,
+            # Per-viewer deflate costs CPU (and the GIL the painter shares) on every
+            # message; our messages are tiny JSON now, so compression isn't worth it.
+            ws_per_message_deflate=False,
         )
     finally:
         generator.stop()

@@ -356,7 +356,10 @@ def create_app(
             if visible_through >= 0:
                 buffer.acknowledge(visible_through)
             since_bcast += dt
-            if since_bcast >= 1.0 / broadcast_hz and clients:
+            n = len(clients)
+            # Big audiences: fewer clock ticks (clients extrapolate between them).
+            hz = broadcast_hz if n < 200 else (2.0 if n < 600 else 1.0)
+            if since_bcast >= 1.0 / min(broadcast_hz, hz) and clients:
                 since_bcast = 0.0
                 broadcast(clock_msg())
 
