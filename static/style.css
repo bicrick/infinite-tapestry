@@ -586,3 +586,11 @@ body.offline-on #intro, body.offline-on .ui, body.offline-on .amb { opacity: 0 !
 #queue-list.skeleton { min-height: 132px; border-radius: 12px; background: linear-gradient(90deg, rgba(127,127,127,.08) 25%, rgba(127,127,127,.16) 37%, rgba(127,127,127,.08) 63%); background-size: 400% 100%; animation: q-shimmer 1.4s ease infinite; }
 @keyframes q-shimmer { 0% { background-position: 100% 0 } 100% { background-position: 0 0 } }
 #queue-list .item.idea .meta { opacity: .7 }
+
+/* drop-anywhere reference overlay (desktop) */
+#drop-ov { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity .18s ease; background: color-mix(in srgb, var(--bg, #0b0b0c) 55%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+#drop-ov.on { opacity: 1; }
+#drop-ov .drop-card { position: absolute; inset: 18px; border: 1px dashed color-mix(in srgb, currentColor 35%, transparent); border-radius: 18px; display: flex; align-items: center; justify-content: center; color: var(--fg, #f2f2f2); font: 500 15px/1.2 inherit; letter-spacing: .01em; }
+#drop-ov.on .drop-card span { animation: drop-in .22s ease; }
+@keyframes drop-in { from { transform: translateY(4px); opacity: 0 } to { transform: none; opacity: 1 } }
+.ref-chip img { width: 30px; height: 30px; }
