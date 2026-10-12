@@ -43,6 +43,23 @@ def test_sdxl_preset_and_style_on_scenes():
     assert d.styles_for(1.0)[0] in ("pixel art", "none")
 
 
+def test_default_negatives_discourage_vertical_strata():
+    """Live failure mode is stacked horizons / strata, not vertical colour seams."""
+    from infinite_tapestry.config import Config
+
+    neg = Config().negative_prompt.lower()
+    for term in (
+        "multiple horizons",
+        "stacked landscapes",
+        "layered strata",
+        "split levels",
+        "horizontal bands",
+        "panorama panels",
+        "diptych",
+    ):
+        assert term in neg
+
+
 def test_prefill_masked_is_not_black():
     from infinite_tapestry.inpaint import prefill_masked
     img = Image.new("RGB", (64, 32), (120, 60, 200))

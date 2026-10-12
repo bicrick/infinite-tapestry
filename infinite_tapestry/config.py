@@ -68,6 +68,9 @@ class Config:
     negative_prompt: str = (
         "blurry, low quality, distorted, watermark, text, frame, border, "
         "ugly, duplicate, collage, split screen, diptych, panel, seam, "
+        "multiple horizons, stacked landscapes, layered strata, split levels, "
+        "horizontal bands, stripes, panorama panels, comic strip panels, "
+        "triptych, multi-panel, stacked scenes, cutaway layers, "
         "nsfw, nude, naked, nudity, sexual, nipples, cleavage, erotic"
     )
 

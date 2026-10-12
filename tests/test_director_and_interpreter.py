@@ -5,7 +5,14 @@ from fastapi.testclient import TestClient
 from infinite_tapestry.buffer import StripBuffer
 from infinite_tapestry.config import Config
 from infinite_tapestry.generator import StripGenerator
-from infinite_tapestry.interpreter import PromptInterpreter, fallback_plan, parse_plan
+from infinite_tapestry.interpreter import (
+    AUTO_SYSTEM,
+    SYSTEM,
+    _STYLE_NOTE,
+    PromptInterpreter,
+    fallback_plan,
+    parse_plan,
+)
 from infinite_tapestry.mock_inpaint import MockInpainter
 from infinite_tapestry.prompts import LiveDirector, make_scene
 from infinite_tapestry.server import create_app
@@ -48,6 +55,28 @@ def test_parse_plan_and_fallback():
     f = fallback_plan("ocean")
     assert f["source"] == "raw" and "ocean" in f["scenes"][0]["prompt"]
     assert PromptInterpreter(api_key="").plan("ocean")["source"] == "raw"
+
+
+def test_style_note_encourages_periodic_styles_and_lora_preference():
+    """Autopilot was stuck on style=none because guidance said use none most of the time."""
+    note = _STYLE_NOTE.lower()
+    assert "every 2" in note and "4 scenes" in note
+    assert 'do not default to "none"' in note
+    assert "pixel art" in note and "watercolor" in note and "papercut" in note
+    assert "lora" in note and "prefer" in note
+    assert "consecutive" in note
+    # Both system prompts carry the note and mention SDXL without dropping SD 1.5.
+    for sys in (SYSTEM, AUTO_SYSTEM):
+        assert _STYLE_NOTE in sys
+        assert "SDXL" in sys and "SD 1.5" in sys
+        low = sys.lower()
+        assert "full height" in low
+        assert "horizons" in low or "strata" in low
+
+
+def test_parse_plan_normalizes_style():
+    p = parse_plan('{"scenes":[{"title":"T","prompt":"forest","style":"Pixel Art"}],"note":"n"}')
+    assert p["scenes"][0]["style"] == "pixel art"
 
 
 def test_interpreter_falls_back_on_network_error(monkeypatch):
