@@ -22,6 +22,35 @@ VARIATIONS = [
 ]
 
 
+MOMENTUM_STEPS = 5  # auto scenes after a user idea before the normal mix resumes
+
+
+def momentum_brief(recent: list[dict]) -> str:
+    """Theme momentum: right after a user idea, Auto stays in that world and then drifts
+    away gradually instead of jumping somewhere unrelated."""
+    last_user = max((i for i, r in enumerate(recent) if r.get("origin") == "user"), default=None)
+    if last_user is None:
+        return ""
+    k = len(recent) - 1 - last_user  # auto scenes already planned since the idea
+    if k >= MOMENTUM_STEPS:
+        return ""
+    u = recent[last_user]
+    idea = (u.get("source") or u.get("title") or "")[:200]
+    steps = []
+    for n in range(k + 1, k + 3):
+        if n <= 2:
+            steps.append(f"scene {n} after the idea: STAY IN THE SAME WORLD as the idea (same theme, materials and tone), "
+                         "a neighboring place or different part of it, new camera angle and moment")
+        elif n <= MOMENTUM_STEPS:
+            steps.append(f"scene {n} after the idea: DRIFT one step, keeping ONE clear element (material, creature, "
+                         "color, setting or joke) from the previous scene while changing the rest")
+        else:
+            steps.append(f"scene {n}: free choice, loosely linked to the previous scene")
+    return ("THEME MOMENTUM: a viewer just played the idea \"" + idea + "\" (scene \"" + str(u.get("title", "")) + "\"). "
+            "Do not jump to something unrelated. " + "; ".join(steps) + ". Keep the idea's tone (if it was gross or absurd, "
+            "stay gross or absurd). Theme momentum overrides the usual ban list and repeat rules for this world.")
+
+
 class Autopilot:
     def __init__(
         self,
@@ -111,19 +140,26 @@ class Autopilot:
         epoch = self.epoch
         self._calls.append(time.monotonic())
         try:
-            heads = await asyncio.to_thread(self.headlines.sample, 6)
-            mode = pick_mode(have_news=bool(heads))
-            self.last_mode = mode
-            plan = await asyncio.to_thread(self.interpreter.autoplan, d.recent(8), self.vibe, 2,
-                                           brief(mode, heads, self.memory))
+            recent = d.recent(12)
+            mom = momentum_brief(recent)
+            if mom:
+                self.last_mode = "momentum"
+                text = mom
+            else:
+                heads = await asyncio.to_thread(self.headlines.sample, 6)
+                mode = pick_mode(have_news=bool(heads))
+                self.last_mode = mode
+                text = brief(mode, heads, self.memory)
+            plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
             from .guard import is_disallowed
 
             plan["scenes"] = [x for x in plan["scenes"] if not is_disallowed(x["prompt"])
-                              and not has_cliche(x.get("title", "") + " " + x["prompt"])
                               and not mentions_minor(x.get("title", "") + " " + x["prompt"])
-                              and not self.memory.is_repeat(x.get("title", ""))]
+                              # the carried-over user theme is exempt from the cliche/repeat filters
+                              and (mom or (not has_cliche(x.get("title", "") + " " + x["prompt"])
+                                           and not self.memory.is_repeat(x.get("title", ""))))]
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
             for s in plan["scenes"]:
