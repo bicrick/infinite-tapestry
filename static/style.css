@@ -698,7 +698,7 @@ body.idle .kept { opacity: .45; }
 .brand-link:hover { opacity:.7; }
 
 /* ---------- odometer (live · N watching) ---------- */
-.odo { display: inline-flex; position: relative; vertical-align: -0.1em; font-variant-numeric: tabular-nums; overflow: hidden;
+.odo { letter-spacing: 0; display: inline-flex; position: relative; vertical-align: -0.1em; font-variant-numeric: tabular-nums; overflow: hidden;
   height: 1.3em; line-height: 1.3em; transition: width 450ms cubic-bezier(.2,.8,.2,1); white-space: nowrap; }
 .odo-d { display: inline-block; flex: none; height: 1.3em; overflow: hidden; transition: opacity 450ms cubic-bezier(.2,.8,.2,1), transform 450ms cubic-bezier(.2,.8,.2,1);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22%, #000 78%, transparent 100%);

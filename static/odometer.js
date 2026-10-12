@@ -4,7 +4,7 @@
   const DUR = 450;
   function Odometer(el, opts = {}) {
     el.classList.add("odo");
-    el.setAttribute("aria-live", "off");
+    el.setAttribute("aria-live", "off"); el.setAttribute("role", "img");
     const wait = opts.debounce ?? 1000;
     let shown = null, pending = null, timer = 0, lastAt = 0;
     const digits = [];   // { box, strip, d }
@@ -12,7 +12,7 @@
       const box = document.createElement("span"); box.className = "odo-d";
       const strip = document.createElement("span"); strip.className = "odo-s";
       strip.textContent = "01234567890123456789".split("").join("\n");
-      box.appendChild(strip);
+      box.setAttribute("aria-hidden", "true"); box.appendChild(strip);
       return { box, strip, d: 0 };
     };
     const place = (g, cell, anim) => {
