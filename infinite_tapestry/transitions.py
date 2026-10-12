@@ -84,7 +84,7 @@ class Transitioner:
             return
         if nxt.get("origin") == "user":
             bridge = bridge[:1]  # ideas stay fast: at most one bridge strip
-        scenes = [make_scene(p, transition=1, hold=1, origin="auto", title=nxt.get("title", "")) for p in bridge]
+        scenes = [make_scene(p, transition=1, hold=0, origin="auto", title=nxt.get("title", "")) for p in bridge]
         for s in scenes:
             s["bridge"] = True
         with self.director._lock:
