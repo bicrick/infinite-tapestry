@@ -30,7 +30,7 @@ function settle(a, b) {
 }
 async function health() {
   if (!POD()) return null;
-  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 7000);
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
   const r = await fetch(`https://${POD()}-8000.proxy.runpod.net/health`, { signal: ctl.signal }).catch(() => null);
   clearTimeout(t);
   return r && r.ok ? r.json().catch(() => null) : null;
@@ -71,10 +71,10 @@ async function card(req, res) {
       return send(await render(o), final);
     }
     // home: rotate designs every 10 minutes, painted from the last few minutes of the live tapestry
-    const hz = await health();
-    const max = hz && (hz.strip_index || (hz.buffer && hz.buffer.acknowledged));
+    const [hz, last] = await Promise.all([health(), rest("GET", "strips?order=created_at.desc&limit=1&select=idx").catch(() => [])]);
+    const max = (last[0] && last[0].idx) || (hz && hz.strip_index);
     if (!max) return fallback();
-    const viewers = hz.viewers || 0;
+    const viewers = (hz && hz.viewers) || 0;
     const V = [
       { v: "live", line: "It's painting right now.", sub: "Suggest what comes next." },
       { v: "band", line: "An endless painting, steered by everyone watching." },
