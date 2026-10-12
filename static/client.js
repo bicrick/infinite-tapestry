@@ -1077,7 +1077,7 @@
       send({ type: "status_request" });
       const S = window.TapestrySocial;
       if (S && S.token()) send({ type: "auth", token: S.token() });
-      window.dispatchEvent(new CustomEvent("tapestry:ws", { detail: { open: true } }));
+      window.__tapestryWsOpen = true; window.dispatchEvent(new CustomEvent("tapestry:ws", { detail: { open: true } }));
     };
     ws.onmessage = (ev) => {
       if (typeof ev.data === "string") {
@@ -1088,7 +1088,7 @@
     };
     ws.onclose = () => {
       connected = false;
-      window.dispatchEvent(new CustomEvent("tapestry:ws", { detail: { open: false } }));
+      window.__tapestryWsOpen = false; window.dispatchEvent(new CustomEvent("tapestry:ws", { detail: { open: false } }));
       if (clientPingTimer) clearInterval(clientPingTimer);
       const wait = reconnectDelay * (0.75 + Math.random() * 0.5);  // jitter
       setTimeout(connect, navigator.onLine === false ? 3000 : wait);
