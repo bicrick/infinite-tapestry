@@ -12,3 +12,4 @@ build/
 .DS_Store
 huggingface/
 .cache/
+web/node_modules/

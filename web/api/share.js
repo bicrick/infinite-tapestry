@@ -8,7 +8,7 @@ function moment(req, res) {
   if (!m) { res.setHeader("location", "/"); return res.status(302).end(); }
   const a = +m[1], b = Math.max(a, Math.min(+m[2], a + 63));
   const host = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
-  const target = `/?at=${a}&to=${b}`, img = `${host}/api/og?a=${a}&b=${b}`;
+  const target = `/?at=${a}&to=${b}`, img = `${host}/api/og?card=at&a=${a}&b=${b}`;
   const title = "A moment from the Infinite Tapestry", desc = "An endless painting that never stops, steered by everyone watching.";
   res.setHeader("content-type", "text/html; charset=utf-8");
   res.setHeader("cache-control", "public, s-maxage=86400");
@@ -36,7 +36,7 @@ module.exports = async (req, res) => {
   const target = landed ? `/?at=${idea.start_strip}&to=${idea.end_strip ?? idea.start_strip + 12}` : `/u/${encodeURIComponent(idea.handle)}`;
   const title = `“${idea.body.length > 70 ? idea.body.slice(0, 68) + "…" : idea.body}”`;
   const desc = landed ? `@${idea.handle} steered the Infinite Tapestry here.` : `@${idea.handle}'s idea is waiting to be woven into the Infinite Tapestry.`;
-  const img = landed ? `${host}/api/og?id=${idea.id}` : `${host}/brand/og.jpg`;
+  const img = landed ? `${host}/api/og?card=idea&id=${idea.id}` : `${host}/brand/og/og-3-close.jpg`;
   res.setHeader("content-type", "text/html; charset=utf-8");
   res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=600");
   res.status(200).send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" />
