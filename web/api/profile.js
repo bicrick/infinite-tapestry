@@ -17,10 +17,17 @@ module.exports = async (req, res) => {
     const statuses = own ? "pending,playing,played,rejected,withdrawn" : "pending,playing,played";
     const rows = await rest("GET", `ideas?user_id=eq.${p.id}&status=in.(${statuses})&order=created_at.desc&limit=200` +
       `&select=id,body,status,votes,boost_cents,created_at,played_at,start_strip,end_strip,image_path,plan`);
+    // "played" means the director has taken it; it's only woven once it has a place on the canvas.
+    // Ideas from before landings were tracked (old canvas) count as woven after an hour.
+    const statusOf = (r) => {
+      if (r.status === "played" && r.start_strip == null && Date.now() - new Date(r.played_at || r.created_at).getTime() < 3600e3) return "upnext";
+      if (r.status === "played" && r.start_strip != null && r.end_strip == null) return "weaving";
+      return STATUS[r.status] || r.status;
+    };
     const ideas = rows.map((r) => ({
-      id: r.id, body: r.body, status: STATUS[r.status] || r.status, votes: r.votes, boosted: r.boost_cents > 0,
+      id: r.id, body: r.body, status: statusOf(r), votes: r.votes, boosted: r.boost_cents > 0,
       created_at: r.created_at, played_at: r.played_at, start_strip: r.start_strip, end_strip: r.end_strip,
-      image_path: r.image_path, title: r.plan && (r.plan.title || r.plan.name) || null,
+      image_path: r.image_path, title: (r.plan && Array.isArray(r.plan.titles) && r.plan.titles.length) ? r.plan.titles[r.plan.titles.length - 1] : null,
     }));
     res.setHeader("cache-control", own ? "private, no-store" : "public, s-maxage=20, stale-while-revalidate=60");
     res.status(200).json({
