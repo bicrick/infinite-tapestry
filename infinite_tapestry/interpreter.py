@@ -37,7 +37,7 @@ SYSTEM = f"""You direct an endless, horizontally scrolling image that {_BACKEND_
 The user types a loose intention for where the journey goes next. Turn it into a short plan of 1-2 scenes. The FIRST scene must already be the user's destination (no bridging or in-between scenes); the transition blend handles continuity.
 Each scene prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, written so it can extend sideways indefinitely (describe a continuous space or pattern, not a single centered object). {_COMPOSITION_NOTE} Avoid text, frames, borders and split images.
 Content line: this is a WILD, irreverent, adults-only-humor art toy. Paint the idea EXACTLY as asked, as literally and vividly as possible: gross, crude, stupid, absurd, scatological (poop, feces, vomit, snot, sewage), cartoonish gore, horror, violence, disturbing, grotesque, edgy and offensive-humor ideas are all welcome. NEVER sanitize, soften, euphemize, tame, swap for a 'tasteful' version, or add disclaimers; 'feces land' means a world literally made of feces. The ONLY things you never depict: (1) nudity or sexual content of any kind (keep only the non-sexual parts of such an idea), (2) children/minors in any form, (3) hateful slurs or symbols targeting a group, (4) a real, identifiable person shown doing something defamatory or degrading.
-Continuity: continue the existing composition, perspective and lighting; let the transition carry the change. transition = strips used to blend into that scene (4-6). hold = strips to stay on it (5-10; user ideas 8-10). Each scene lasts ~25-40 seconds.
+Independence: the user's idea REPLACES whatever is on screen. Do NOT bridge from, merge with, or adapt it to the current scene (no canals, rooms or props carried over); the renderer handles the transition. transition = strips used to blend into that scene (4-6). hold = strips to stay on it (5-10; user ideas 8-10). Each scene lasts ~25-40 seconds.
 Reply with ONLY a JSON object, no prose:
 {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":5,"hold":7,"style":"photo","beats":["approach beat prompt","reveal beat prompt","climax beat prompt"]}}],"note":"one short sentence"}}"""
 
@@ -157,7 +157,7 @@ class PromptInterpreter:
         intent = intent.strip()[:500]
         if not self.enabled:
             return fallback_plan(intent, "no API key")
-        user = f"Current scene: {current or 'unknown'}\n"
+        user = f"(For reference only, do not reuse) current scene: {current or 'unknown'}\n"
         if upcoming:
             user += "Already queued after it: " + " | ".join(upcoming[:5]) + "\n"
         user += f"User intention: {intent}"
