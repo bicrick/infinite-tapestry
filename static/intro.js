@@ -24,7 +24,7 @@
   let synth = 0, lastT = t0, offsetFix = null;   // synthetic world scroll until the real one exists
   let resolveAt = 0, finished = false;
   const RESOLVE = 2600;
-  let revealed = false;
+  let revealed = false, readyAt = null;
 
   function worldLeft(now) {
     const v = V();
@@ -53,7 +53,10 @@
       pg.drawImage(view, 0, 0, cols, rows);
       const d = pg.getImageData(0, 0, cols, rows).data;
       let lum = 0; for (let i = 0; i < d.length; i += 16) lum += d[i] + d[i + 1] + d[i + 2];
-      if (!resolveAt && lum / (d.length / 16) / 3 > 12 && now - t0 > 500) { resolveAt = now; }
+      if (readyAt == null) readyAt = now;
+      // Resolve once the visible span is (nearly) painted, so points densify everywhere at once, not from the live edge.
+      const cov = v.coverage ? v.coverage() : 1;
+      if (!resolveAt && now - t0 > 500 && ((cov >= 0.9 && lum / (d.length / 16) / 3 > 12) || now - readyAt > 2500)) { resolveAt = now; }
       src = { d, cols, rows };
     }
     const p = resolveAt ? Math.min(1, (now - resolveAt) / RESOLVE) : 0;

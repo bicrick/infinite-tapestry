@@ -81,6 +81,7 @@
   const portrait = () => canvas.height > canvas.width * 1.15;
   const BAND_ASPECT = 1.25;   // band width : height
   const scale = () => (portrait() ? Math.min(canvas.height, canvas.width / BAND_ASPECT) : canvas.height) / Math.max(1, config.height);
+  let coverage = 0;
   let ambCv = null, ambCtx = null, surroundA = 1, bandCache = "";
   // Theme: follow the OS. Surround tint (rgb) + empty-canvas fill.
   const lightMq = window.matchMedia ? matchMedia("(prefers-color-scheme: light)") : null;
@@ -120,7 +121,7 @@
   }
   const viewWorld = () => canvas.width / scale();
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
-  window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(), bh = config.height * s0; return { top: portrait() ? bandTopFor(canvas.height, bh) : 0, height: bh }; }, setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
+  window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(), bh = config.height * s0; return { top: portrait() ? bandTopFor(canvas.height, bh) : 0, height: bh }; }, setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, coverage: () => coverage, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -439,13 +440,17 @@
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet.
     if (zoom < 0.97 || fast) drawLod(left, w / s, zoom);
     {
-      for (let i = firstIdx; i <= Math.min(lastIdx, maxIndex); i++) {
+      let want = 0, have = 0;
+      for (let i = Math.max(firstIdx, 0); i <= Math.min(lastIdx, maxIndex); i++) {
+        want++;
         const e = strips.get(i);
         if (!e) continue;
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
+        have++;
         ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
       }
+      coverage = want ? have / want : 0;
     }
     if (mark) {
       const age = (performance.now() - mark.t0) / 1000;
