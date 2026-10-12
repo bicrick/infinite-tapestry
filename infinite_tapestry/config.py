@@ -58,9 +58,12 @@ class Config:
         ]
     )
     autopilot: bool = True
+    nsfw_model: str = "Falconsai/nsfw_image_detection"  # empty = off
+    nsfw_threshold: float = 0.6
     negative_prompt: str = (
         "blurry, low quality, distorted, watermark, text, frame, border, "
-        "ugly, duplicate, collage, split screen, diptych, panel, seam"
+        "ugly, duplicate, collage, split screen, diptych, panel, seam, "
+        "nsfw, nude, naked, nudity, sexual, nipples, cleavage, erotic"
     )
 
     def __post_init__(self) -> None:
