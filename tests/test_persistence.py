@@ -34,7 +34,7 @@ def test_restart_restores_strips_queue_and_index(tmp_path):
     g2 = StripGenerator(c, MockInpainter(c), StripBuffer(3, 1, history_limit=5))
     g2.attach_store(HistoryStore(tmp_path))
     assert g2.strip_index == 12
-    assert g2.buffer.produced == 12 and len(g2.buffer.snapshot()) == 5
+    assert g2.buffer.produced == 12 and len(g2.buffer.snapshot()) == 5  # warm window
     assert "a whale cathedral" in g2.director.queue or g2.director.target == "a whale cathedral" or "a whale cathedral" in g2.director.current
     st = g2.generate_one()
     assert st.index == 12

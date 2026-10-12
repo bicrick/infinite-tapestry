@@ -300,8 +300,14 @@ class StripGenerator:
             try:
                 self.director.load_dict(state.get("director", {}))
                 idx = int(state.get("strip_index", 0))
+                warm = min(self.buffer.history_limit, 64)  # older strips load lazily on pan
+                keep = list(range(max(0, idx - warm), idx))
                 meta = store.load_meta()
-                keep = list(range(max(0, idx - self.buffer.history_limit), idx))
+                if getattr(store, "mirror", None) and keep:
+                    try:
+                        meta.update(store.mirror.load_strip_rows(keep[0], keep[-1]))
+                    except Exception:
+                        pass
                 strips = [st for st in (store.load_strip(i, meta.get(i)) for i in keep) if st]
                 with self._lock:
                     if canvas is not None:

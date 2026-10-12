@@ -14,11 +14,51 @@
 
   <header class="top ui">
     <div class="brand">Infinite Tapestry</div>
-    <div id="status" class="status"><span class="dot"></span><span id="status-text">connecting</span></div>
+    <div class="top-right">
+      <button id="fuel-chip" class="fuel-chip hidden" type="button" title="Fuel keeps the GPU painting">
+        <span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span>
+      </button>
+      <div id="status" class="status"><span class="dot"></span><span id="status-text">connecting</span></div>
+      <button id="account-btn" class="quiet hidden" type="button">Sign in</button>
+    </div>
   </header>
 
   <button id="live-btn" class="pill ui hidden" type="button">Return to live <span aria-hidden="true">→</span></button>
   <div id="toast" class="toast"></div>
+
+  <div id="chat" class="chat ui hidden">
+    <ol id="chat-list" class="chat-list"></ol>
+    <form id="chat-form" autocomplete="off"><input id="chat-input" maxlength="280" placeholder="Say something…" /></form>
+  </div>
+
+  <div id="auth-pop" class="sheet hidden">
+    <div class="sheet-card">
+      <div class="sheet-title">Join the tapestry</div>
+      <p class="fine">Watching is open to all. Sign in to add ideas, vote and chat.</p>
+      <form id="auth-form" autocomplete="on">
+        <input id="auth-email" type="email" class="vibe" placeholder="you@example.com" required />
+        <button class="primary wide" type="submit">Email me a sign-in link</button>
+      </form>
+      <button id="auth-google" class="ghost wide hidden" type="button">Continue with Google</button>
+      <form id="handle-form" class="hidden">
+        <p class="fine">Pick a handle (letters, numbers, underscore).</p>
+        <input id="handle-input" class="vibe" maxlength="20" placeholder="handle" />
+        <button class="primary wide" type="submit">Save</button>
+      </form>
+      <div id="auth-signed" class="hidden"><p class="fine">Signed in as <b id="auth-handle"></b></p><button id="auth-out" class="ghost wide" type="button">Sign out</button></div>
+    </div>
+  </div>
+
+  <div id="sleep" class="sleep hidden">
+    <div class="sleep-card">
+      <div class="sleep-title">The tapestry is asleep</div>
+      <p>It ran out of fuel. Add a little and it wakes up where it left off.</p>
+      <div class="tiers" id="sleep-tiers">
+        <button data-cents="300">$3</button><button data-cents="1000">$10</button><button data-cents="2500">$25</button>
+      </div>
+      <p class="fine" id="sleep-note"></p>
+    </div>
+  </div>
 
   <div class="dock ui">
     <div class="now">
@@ -38,6 +78,12 @@
       <button id="speed-btn" type="button" class="icon text" title="Speed (F to fast-forward)">Auto</button>
       <button id="skip" type="button" class="icon" title="Next scene">
         <svg viewBox="0 0 24 24"><path d="M6 6l8 6-8 6V6zm10 0h2v12h-2z"/></svg>
+      </button>
+      <button id="hide-btn" type="button" class="icon" title="Hide interface (H) · or press and hold the canvas">
+        <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
+      </button>
+      <button id="fullscreen-btn" type="button" class="icon" title="Full screen (Shift+F)">
+        <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
       </button>
       <button id="export-btn" type="button" class="icon" title="Export tapestry (E)">
         <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
@@ -82,9 +128,15 @@
 
   <aside id="drawer" class="drawer">
     <div class="drawer-head">
-      <span>Up next</span>
+      <nav class="tabs" id="tabs">
+        <button data-tab="next" class="on">Next</button>
+        <button data-tab="ideas" class="social-only hidden">Ideas</button>
+        <button data-tab="fuel" class="social-only hidden">Fuel</button>
+        <button data-tab="audit" class="admin-only hidden">Audit</button>
+      </nav>
       <button id="drawer-close" type="button" class="icon" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
+    <section class="panel" id="panel-next">
     <div id="current-card" class="card current"></div>
     <ol id="queue-list" class="list"></ol>
     <div id="queue-empty" class="empty hidden">Nothing queued. Type a destination below.</div>
@@ -98,9 +150,34 @@
       <label class="num-field">Blend <input id="blend" type="number" min="1" max="64" value="8" /></label>
       <button id="clear" type="button" class="ghost">Clear</button>
     </div>
+    </section>
+    <section class="panel hidden" id="panel-ideas">
+      <p class="fine pad">Ideas from everyone. The most-loved (and boosted) are woven in by Claude next.</p>
+      <ol id="idea-list" class="list"></ol>
+      <div id="idea-empty" class="empty hidden">The pool is empty. Claude is improvising.</div>
+    </section>
+    <section class="panel hidden" id="panel-fuel">
+      <div class="fuel-big"><div class="fuel-line big"><span id="fuel-fill-big"></span></div>
+        <div class="fuel-caption"><span id="fuel-hours">…</span><span class="muted"> of painting left</span></div></div>
+      <p class="fine pad">Fuel pays for the GPU (about $0.17 an hour) and Claude. When it runs out, the tapestry sleeps until someone adds more.</p>
+      <div class="tiers" id="tiers">
+        <button data-cents="300">$3<small>~17 h</small></button>
+        <button data-cents="1000">$10<small>~2 days</small></button>
+        <button data-cents="2500">$25<small>~6 days</small></button>
+      </div>
+      <input id="donor-note" class="vibe pad-x" maxlength="140" placeholder="A note for the wall (optional)" />
+      <div class="drawer-sub">Fueled by</div>
+      <ol id="donor-list" class="list donors"></ol>
+    </section>
+    <section class="panel hidden" id="panel-audit">
+      <div class="pad"><input id="audit-filter" class="vibe" placeholder="Filter by action (e.g. chat, vote, admin_ban)" /></div>
+      <ol id="audit-list" class="list audit"></ol>
+    </section>
   </aside>
 
   <script src="config.js"></script>
   <script src="client.js"></script>
+  <script src="intro.js"></script>
+  <script type="module" src="social.js"></script>
 </body>
 </html>
