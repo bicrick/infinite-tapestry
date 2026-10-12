@@ -79,7 +79,8 @@
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
   window.TapestryView = { left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas };
   const panoramaWidth = () => (maxIndex + 1) * SW();
-  const viewLeft = () => (panMode === "live" ? liveScroll : shownPan());
+  let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
+  const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
 
   function decodeStrip(buf) {
     const view = new DataView(buf);
@@ -301,8 +302,14 @@
       liveScroll = livePos - viewWorld();
     }
     stepPan(dt);
+    if (!gesture && (nudge !== 0 || nudgeVel !== 0)) {   // spring the nudge back to the live edge
+      const k = 220, c = 2 * Math.sqrt(k);
+      nudgeVel += (-k * nudge - c * nudgeVel) * dt;
+      nudge += nudgeVel * dt;
+      if (Math.abs(nudge) < 0.3 && Math.abs(nudgeVel) < 3) { nudge = 0; nudgeVel = 0; }
+    }
     {
-      const L = viewLeft() + viewWorld() / 2;
+      const L = viewLeft() - (panMode === "live" ? nudge : 0) + viewWorld() / 2;
       if (prevCenter !== null && dt > 0) {
         const v = (L - prevCenter) / dt;
         velS += (v - velS) * Math.min(1, dt * 10);
@@ -518,33 +525,89 @@
     }
   }
 
+  // ---------- gestures ----------
+  // While live, input is "armed" rather than acted on: taps toggle the UI, small jiggles nudge the
+  // view elastically and spring back, and only a deliberate backward drag/scroll/flick leaves live.
+  const LEAVE_PX = 60;          // backward distance (CSS px) that commits to rewinding
+  const FLICK_PX_MS = 0.6;      // or a fast backward flick (CSS px per ms) past FLICK_MIN_PX
+  const FLICK_MIN_PX = 24;
+  const NUDGE_MAX = 36;         // max elastic offset in CSS px while still live
   let activePointer = null, lastPX = 0;
+  let gesture = null;           // {x0, t0, moved, wasIdle, armed, hist: [[t, x]]}
+  const cssToWorld = () => pxToWorld();
+  function commitRewind() {
+    // Leave live from wherever the nudge left us, then continue as a normal drag.
+    panPos = liveScroll + nudge; nudge = 0; nudgeVel = 0;
+    panMode = "live";
+    enterHistory();
+    panMode = "drag";
+    panVel = 0;
+    samples = [[performance.now(), panPos]];
+  }
   canvas.addEventListener("pointerdown", (ev) => {
     if (activePointer !== null) return;
     activePointer = ev.pointerId;
-    canvas.setPointerCapture(ev.pointerId);
-    enterHistory();
+    try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
+    lastPX = ev.clientX;
+    const armed = panMode === "live";
+    gesture = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), moved: 0, wasIdle: document.body.classList.contains("idle"), armed, hist: [[performance.now(), ev.clientX]] };
+    if (armed) return;
     panPos = shownPan();
     panMode = "drag";
     panVel = 0;
-    lastPX = ev.clientX;
     samples = [[performance.now(), panPos]];
   });
   canvas.addEventListener("pointermove", (ev) => {
-    if (ev.pointerId !== activePointer) return;
+    if (ev.pointerId !== activePointer || !gesture) return;
+    const now = performance.now();
+    gesture.moved = Math.max(gesture.moved, Math.hypot(ev.clientX - gesture.x0, ev.clientY - gesture.y0));
+    gesture.hist.push([now, ev.clientX]);
+    while (gesture.hist.length > 2 && now - gesture.hist[0][0] > 80) gesture.hist.shift();
+    if (gesture.armed) {
+      const back = ev.clientX - gesture.x0;   // dragging right = looking back in time
+      const h0 = gesture.hist[0], v = (ev.clientX - h0[1]) / Math.max(1, now - h0[0]);
+      if (back > LEAVE_PX || (back > FLICK_MIN_PX && v > FLICK_PX_MS)) {
+        gesture.armed = false;
+        commitRewind();
+        lastPX = ev.clientX;
+        return;
+      }
+      // elastic nudge, with resistance; forward is the live edge so it resists harder
+      const d = -back, lim = NUDGE_MAX * cssToWorld();
+      const raw = d * cssToWorld() * (d > 0 ? 0.25 : 0.45);
+      nudge = lim * Math.tanh(raw / lim); nudgeVel = 0;
+      lastPX = ev.clientX;
+      return;
+    }
     const dx = (ev.clientX - lastPX) * pxToWorld();
     lastPX = ev.clientX;
     // Apply drag in "shown" space so overscroll resists the finger.
     const lo = minPan(), hi = maxPan();
     const resist = panPos < lo || panPos > hi ? 0.45 : 1;
     panPos -= dx * resist;
-    const now = performance.now();
     samples.push([now, panPos]);
     while (samples.length > 2 && now - samples[0][0] > 100) samples.shift();
   });
   const endDrag = (ev) => {
     if (ev.pointerId !== activePointer) return;
     activePointer = null;
+    const g = gesture; gesture = null;
+    const isTap = g && g.moved < 8 && performance.now() - g.t0 < 350;
+    if (isTap && ev.type === "pointerup") {
+      // A tap toggles the chrome. (Pointerdown already revealed it if it was hidden.)
+      if (!g.wasIdle) setTimeout(() => document.body.classList.add("idle"), 0);
+    }
+    if (g && g.armed) {
+      // A fast backward flick released before reaching LEAVE_PX still counts.
+      const h = g.hist, a = h[0], b = h[h.length - 1];
+      const back = ev.clientX - g.x0, v = (b[1] - a[1]) / Math.max(1, b[0] - a[0]);
+      if (ev.type === "pointerup" && back > FLICK_MIN_PX && v > FLICK_PX_MS && performance.now() - b[0] < 80) {
+        commitRewind();
+        panVel = Math.min(4000, v * 1000 * pxToWorld()) * -1;   // carry the flick's momentum back in time
+        panMode = "glide";
+      }
+      return;   // otherwise we never left live: the nudge springs back in frame()
+    }
     const now = performance.now();
     const s0 = samples[0], s1 = samples[samples.length - 1];
     const span = (s1[0] - s0[0]) / 1000;
@@ -554,13 +617,35 @@
   };
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
+
+  // Wheel / trackpad: while live, accumulate backward scroll; commit past LEAVE_PX or on a fast flick.
+  let wheelAcc = 0, wheelAccAt = 0;
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
-    enterHistory();
+    const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? innerWidth : 1;
+    const dCss = (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY) * unit;
+    if (panMode === "live") {
+      const now = performance.now();
+      if (now - wheelAccAt > 220) wheelAcc = 0;      // a pause resets the intent
+      wheelAccAt = now;
+      wheelAcc += dCss;
+      const back = -wheelAcc;                          // negative delta = scroll back in time
+      if (back > LEAVE_PX || -dCss > 90) {
+        wheelAcc = 0;
+        commitRewind();
+        panMode = "wheel";
+        wheelIdleAt = now;
+      } else {
+        const lim = NUDGE_MAX * cssToWorld(), raw = -back * cssToWorld() * 0.35;
+        nudge = lim * Math.tanh(raw / lim); nudgeVel = 0;
+        clearTimeout(canvas._wheelRelease);
+        canvas._wheelRelease = setTimeout(() => { if (panMode === "live") wheelAcc = 0; }, 230);
+        return;   // springs back in frame() once wheel events stop feeding it
+      }
+    }
     if (panMode !== "wheel") { panPos = shownPan(); panVel = 0; }
     panMode = "wheel";
-    const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? viewWorld() : 1;
-    const d = (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY) * unit * pxToWorld();
+    const d = dCss * pxToWorld();
     const lo = minPan(), hi = maxPan();
     panPos += d * (panPos < lo || panPos > hi ? 0.35 : 1);
     // Trackpads supply their own momentum; mice get a short glide.
