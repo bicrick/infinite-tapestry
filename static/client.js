@@ -817,10 +817,10 @@
       } else {
         // Friction: firm at normal speeds (~0.4-0.7s glide), loose once in turbo so it hums.
         if (performance.now() - wheelIdleAt > 250) turbo *= Math.exp(-1.2 * dt);
-        panVel *= Math.exp(-(wheelGlide ? 0.85 : 7.5 - 6.3 * turbo) * dt);
+        panVel *= Math.exp(-(wheelGlide ? 2.0 : 7.5 - 6.3 * turbo) * dt);   // wheelGlide ≈ iOS 0.998/ms deceleration
         if (wheelGlide && performance.now() - landAt > 250) {   // prefetch where the coast will land
           landAt = performance.now();
-          const land = (panPos + panVel / 0.85 + viewWorld() / 2) / SW();
+          const land = (panPos + panVel / 2.0 + viewWorld() / 2) / SW();
           const a = Math.max(0, Math.floor(land) - 8), b = Math.min(maxIndex, Math.ceil(land) + 8);
           if (b >= a) requestMissing(a, b);
           for (let L = 1; L <= 2; L++) { const c = Math.floor(land / LOD_N[L]); for (let d = -1; d <= 1; d++) if (c + d >= 0) lodTile(L, c + d); }
@@ -971,7 +971,7 @@
     TV.wheelMove(-dCss);                    // same 1:1 wheel as the phone's haptic dial
     const hw = document.getElementById("hwheel"); if (hw) hw.classList.add("active");
     clearTimeout(mwEndT);
-    mwEndT = setTimeout(() => { if (hw) hw.classList.remove("active"); TV.wheelEnd(); }, 70);
+    mwEndT = setTimeout(() => { if (hw) hw.classList.remove("active"); TV.wheelEnd(true); }, 90);   // 1:1, no extra glide: the OS sends momentum
   }, { passive: false });
   // Haptic wheel (wheel.js): drives the timeline 1:1 in CSS px, then hands off to the same glide/drift.
   let wheelHeld = false;
@@ -989,14 +989,14 @@
       samples.push([now, panPos]);
       while (samples.length > 2 && now - samples[0][0] > 100) samples.shift();
     },
-    wheelEnd() {
+    wheelEnd(noFling) {
       if (!wheelHeld) return;
       wheelHeld = false; tlScrub = false;
       const now = performance.now(), s0 = samples[0], s1 = samples[samples.length - 1];
       const span = (s1[0] - s0[0]) / 1000;
       panVel = now - s1[0] > 80 || span <= 0 ? 0 : (s1[1] - s0[1]) / span;
       const cap = 90000;
-      panVel = Math.max(-cap, Math.min(cap, panVel * 1.5));
+      panVel = noFling ? 0 : Math.max(-cap, Math.min(cap, panVel));   // touch: plain release velocity (iOS-like); wheel: OS momentum already applied
       wheelGlide = Math.abs(panVel) > 40;
       panMode = "glide";
     },
