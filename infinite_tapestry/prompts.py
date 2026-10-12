@@ -66,10 +66,12 @@ class PromptScheduler:
         )
 
 
-MIN_TRANSITION = 2  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
-MAX_TRANSITION = 4
-MAX_HOLD_USER = 4  # user ideas linger a bit longer (~15-20 s)
-MAX_HOLD = 3  # scenes should switch often; long holds read as stalls
+QUALITY_NEGATIVE = ("flat texture, repetitive pattern, wallpaper, tiled, seamless pattern, still life, product shot, "
+                    "empty composition, lifeless, cluttered duplicates")
+MIN_TRANSITION = 4  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
+MAX_TRANSITION = 6
+MAX_HOLD_USER = 10  # user ideas linger a bit longer (~15-20 s)
+MAX_HOLD = 8  # scenes should switch often; long holds read as stalls
 _scene_ids = __import__("itertools").count(1)
 
 
@@ -83,6 +85,7 @@ def make_scene(
     origin: str = "user",
     style: str | None = None,
     lora: str | None = None,
+    beats: list | None = None,
 ) -> dict:
     """A playlist item. `transition`/`hold` are in strips (None = director default)."""
     prompt = str(prompt).strip()[:600]
@@ -97,6 +100,7 @@ def make_scene(
         "origin": origin if origin in ("user", "auto", "seed") else "user",
         "style": _norm_style(lora) if lora else _label(style),
         "lora": _norm_style(lora) if lora else None,
+        "beats": [str(b).strip()[:600] for b in (beats or []) if str(b).strip()][:4],
     }
 
 
@@ -152,7 +156,7 @@ class LiveDirector:
         (no looping). Autopilot fills the queue from there."""
         sched = sorted(schedule, key=lambda x: x[0])
         return cls(sched[0][1], negative_prompt, queue=[p for _, p in sched[1:]],
-                   hold=2, blend=min(blend, MAX_TRANSITION), loop=False)
+                   hold=6, blend=max(MIN_TRANSITION, min(blend, MAX_TRANSITION)), loop=False)
 
     # --- compat properties ---
     @property
@@ -343,6 +347,19 @@ class LiveDirector:
             self._active_since = -10**9  # force advance on next frame
 
     # --- generator side ---
+    def _beat(self, scene: dict | None, k: int, last: bool = False) -> str:
+        """Prompt for the k-th held strip of a scene: scenes unfold as 2-4 sub-beats
+        (approach -> reveal -> climax) with different framing on the same subject."""
+        if not scene:
+            return ""
+        beats = [b for b in (scene.get("beats") or []) if b]
+        if not beats:
+            return scene["prompt"]
+        if last:
+            return beats[-1]
+        n = len(beats)
+        return beats[min(n - 1, max(0, k) * n // max(1, self._hold_len(scene)))]
+
     def frame_for(self, strip_index: int) -> tuple[str, str | None, float]:
         """Return (prompt_a, prompt_b, t) for this strip; t in [0,1]."""
         with self._lock:
@@ -354,7 +371,7 @@ class LiveDirector:
                     self._target = None
                     self._active_since = strip_index
                 else:
-                    return self.current, self.target, max(0.0, t)
+                    return self._beat(self._current, strip_index, last=True), self._beat(self._target, 0), max(0.0, t)
             if self._queue and strip_index - self._active_since >= self._hold_len(self._current):
                 nxt = self._queue.pop(0)
                 if self.loop:
@@ -366,9 +383,9 @@ class LiveDirector:
                     self._promote(nxt)
                     self._target = None
                     self._active_since = strip_index
-                    return self.current, None, 0.0
-                return self.current, self.target, t
-            return self.current, None, 0.0
+                    return self._beat(self._current, 0), None, 0.0
+                return self._beat(self._current, 0, last=True), self._beat(self._target, 0), t
+            return self._beat(self._current, strip_index - self._active_since), None, 0.0
 
     def styles_for(self, t: float) -> tuple[str, str | None]:
         """(style of current scene, style of target scene or None) — call right after frame_for."""
@@ -388,7 +405,7 @@ class LiveDirector:
         with self._lock:
             scene = self._target if (self._target and t >= 0.5) else self._current
             extra = scene.get("negative") or ""
-        return ", ".join(x for x in (self.negative_prompt, extra) if x)
+        return ", ".join(x for x in (self.negative_prompt, extra, QUALITY_NEGATIVE) if x)
 
     def title_for(self, t: float) -> str:
         with self._lock:
@@ -414,13 +431,13 @@ class LiveDirector:
             self._blend_start = int(d.get("blend_start", 0))
             self._active_since = int(d.get("active_since", 0))
             # Clamp persisted timings to the current (shorter) limits.
-            self.hold = min(self.hold, MAX_HOLD, int(d.get("hold", self.hold)))
+            self.hold = max(5, min(MAX_HOLD, int(d.get("hold", self.hold))))
             self.blend = max(MIN_TRANSITION, min(self.blend, MAX_TRANSITION, int(d.get("blend", self.blend))))
             for s in self._queue + ([self._target] if self._target else []):
                 if s.get("transition"):
                     s["transition"] = max(MIN_TRANSITION, min(MAX_TRANSITION, int(s["transition"])))
                 if s.get("hold") is not None:
-                    s["hold"] = max(0, min(MAX_HOLD_USER if s.get("origin") == "user" else MAX_HOLD, int(s["hold"])))
+                    s["hold"] = max(5, min(MAX_HOLD_USER if s.get("origin") == "user" else MAX_HOLD, int(s["hold"])))
             if self._current.get("hold") is not None:
                 self._current["hold"] = max(0, min(MAX_HOLD, int(self._current["hold"])))
             self.loop = bool(d.get("loop", False))
