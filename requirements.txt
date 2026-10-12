@@ -1,0 +1,21 @@
+# Infinite Tapestry — install on the GPU box (or use --mock on CPU).
+#
+# Core server / client delivery
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+websockets>=13.0
+numpy>=1.26.0
+Pillow>=10.0.0
+
+# GPU generation (heavy; not required for --mock)
+torch>=2.1.0
+diffusers>=0.30.0
+transformers>=4.44.0
+accelerate>=0.33.0
+safetensors>=0.4.0
+sentencepiece>=0.2.0
+peft>=0.12.0
+
+# Dev / tests
+pytest>=8.0.0
+httpx>=0.27.0
