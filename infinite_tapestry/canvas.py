@@ -141,8 +141,13 @@ def stitch_generated_window(
     window_width: int,
     strip_width: int,
     overlap: int,
+    crossfade: int | None = None,
 ) -> tuple[Image.Image, Image.Image, int]:
     """Blend the generated window into the canvas.
+
+    crossfade: px of alpha fade at the overlap's left edge (default = overlap). 0 = pixel-exact
+    paste: the generated window already blends into the old pixels itself (klein feather), and a
+    second cross-fade over repainted pixels shows up as a ghosted double exposure.
 
     Returns (new_canvas, emitted_strip, paste_x) where emitted_strip is the
     portion clients should append (overlap + new strip), and paste_x is where
@@ -163,7 +168,16 @@ def stitch_generated_window(
         new_canvas.paste(strip, (canvas.width, 0))
         return new_canvas, strip, canvas.width
 
-    new_canvas = blend_strip(canvas, strip, paste_x, overlap)
+    cf = overlap if crossfade is None else max(0, min(overlap, crossfade))
+    if cf < overlap:
+        new_canvas = canvas.copy()
+        if cf > 0:
+            new_canvas = blend_strip(new_canvas, strip.crop((0, 0, cf, strip.height)), paste_x, cf)
+            new_canvas = blend_strip(new_canvas, strip.crop((cf, 0, strip.width, strip.height)), paste_x + cf, 0)
+        else:
+            new_canvas = blend_strip(new_canvas, strip, paste_x, 0)
+    else:
+        new_canvas = blend_strip(canvas, strip, paste_x, overlap)
     # Emit the *blended* pixels so viewers (which draw strips opaquely over
     # the previous one) see the same feathered seam as the server canvas.
     emitted = new_canvas.crop((paste_x, 0, paste_x + strip.width, new_canvas.height))

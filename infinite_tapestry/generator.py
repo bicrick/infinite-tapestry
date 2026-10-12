@@ -353,6 +353,7 @@ class StripGenerator:
             window_width=cfg.window_width - margin,
             strip_width=cfg.strip_width,
             overlap=cfg.overlap,
+            crossfade=getattr(cfg, "paste_crossfade", None),
         )
 
         # First strip has no prior client pixels to feather over — send only

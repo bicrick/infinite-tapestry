@@ -52,6 +52,7 @@ class Config:
     dup_threshold: float = 0.8
     dup_retries: int = 2
     pan_variations: bool = False  # vary each strip's framing within a scene so subjects don't tile
+    paste_crossfade: int | None = None  # None = cross-fade the whole overlap; 0 = pixel-exact paste
     vision_transitions: bool = False  # Auto looks at the screen and inserts bridge strips before each scene
     context_ref: bool = False  # klein: pass a downscaled view of the visible window as a reference image
     klein_blend: str = "snap"  # klein prompt change: "snap" at t>=0.5 or "slerp" embeddings across the blend
