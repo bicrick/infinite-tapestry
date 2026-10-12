@@ -31,6 +31,15 @@
      "value": "/"
     }
    ]
+  },
+  {
+   "source": "/about-img/(.*)",
+   "headers": [
+    {
+     "key": "Cache-Control",
+     "value": "public, max-age=604800, s-maxage=31536000"
+    }
+   ]
   }
  ],
  "rewrites": [
@@ -68,6 +77,14 @@
   {
    "source": "/m/:range",
    "destination": "/api/share?m=:range"
+  },
+  {
+   "source": "/about",
+   "destination": "/about.html"
+  },
+  {
+   "source": "/time-machine",
+   "destination": "/time-machine.html"
   }
  ]
 }

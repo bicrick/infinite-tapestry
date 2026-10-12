@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Time machine · Infinite Tapestry</title>
+  <meta name="description" content="Everything the tapestry has ever painted, day by day." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Infinite Tapestry" />
+  <meta property="og:description" content="Everything it has ever painted, day by day." />
+  <meta property="og:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/about.css" />
+  <link rel="stylesheet" href="/time-machine.css" />
+</head>
+<body class="tm">
+  <nav class="nav">
+    <a href="/about" aria-label="About Infinite Tapestry"><img class="mark" src="/brand/mark-plain.svg" alt="" />Time machine</a>
+    <div class="readout" id="readout" aria-live="polite"><span id="r-date">—</span><span id="r-time"></span></div>
+    <div class="links"><a href="/">Live →</a></div>
+  </nav>
+  <header class="wrap tm-head">
+    <h2>Everything it has ever painted.</h2>
+    <p>One line per few minutes, oldest at the bottom of each day. Scroll fast to zip, drag the rail on the right, tap any line to look closer.</p>
+  </header>
+  <main id="days" class="wrap"><p class="small" id="loading">Loading history…</p></main>
+  <div class="rail" id="rail" aria-label="Drag to zip through history"><div class="rail-head" id="rail-head"></div></div>
+  <div class="zoom hidden" id="zoom" role="dialog" aria-modal="true" aria-labelledby="z-when">
+    <div class="zoom-card">
+      <div class="zoom-strip" id="z-strip"></div>
+      <div class="zoom-meta">
+        <div><b id="z-when"></b><span class="small" id="z-what"></span></div>
+        <div class="zoom-actions"><button class="cta ghost" id="z-close" type="button">Close</button><a class="cta" id="z-open" href="/">Open in live viewer <span>→</span></a></div>
+      </div>
+    </div>
+  </div>
+  <footer class="wrap foot"><span>Infinite Tapestry</span><span><a href="/about">About</a><a href="/terms">Terms</a><a href="/">Live</a></span></footer>
+  <script src="/time-machine.js" defer></script>
+</body>
+</html>
