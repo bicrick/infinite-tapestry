@@ -64,16 +64,20 @@
 
     g.globalCompositeOperation = "source-over";
     g.clearRect(0, 0, W, H);
-    g.fillStyle = `rgba(5,5,6,${1 - he})`; g.fillRect(0, 0, W, H);
+    // Portrait: everything happens inside the centred band; the surround glow comes in after.
+    const band = v && v.band && v.portrait && v.portrait() ? v.band() : { top: 0, height: H };
+    const bandTop = band.top, bandH = band.height;
+    g.fillStyle = `rgba(5,5,6,${1 - he})`; g.fillRect(0, bandTop, W, bandH);
     const sp = 7;                                             // world px between lattice points
     const i0 = Math.floor(left / sp) - 1, i1 = Math.ceil((left + W / s) / sp) + 1;
-    const rowsN = Math.ceil(H / s / sp) + 1;
+    const rowsN = Math.ceil(bandH / s / sp) + 1;
     const moteA = Math.max(0, 1 - (resolveAt ? (now - resolveAt) / 500 : 0));
     g.globalCompositeOperation = "source-over";
     for (let i = i0; i <= i1; i++) for (let j = 0; j < rowsN; j++) {
       const h1 = hash(i, j), h2 = hash(j, i + 7919);
       const wx = (i + h1) * sp, wy = (j + h2) * sp;
-      const x = (wx - left) * s, y = wy * s;
+      const x = (wx - left) * s, y = wy * s + bandTop;
+      if (y > bandTop + bandH + 4) continue;
       if (x < -20 || x > W + 20) continue;
       if (src && dens > 0 && h1 < dens) {
         const pi = ((Math.min(src.rows - 1, Math.max(0, (y / H * src.rows) | 0)) * src.cols) + Math.min(src.cols - 1, Math.max(0, (x / W * src.cols) | 0))) * 4;
@@ -98,7 +102,14 @@
   }
 
   function startReveal() {
-    // Card → full-bleed and UI fade overlap the resolve.
+    // Card → full-bleed (landscape) or → the centred band (portrait), then the surround glow, then ambient text.
+    const v = V();
+    if (v && v.portrait && v.portrait() && v.setSurround) {
+      v.setSurround(0);
+      const t0 = performance.now() + 700;
+      const step = (t) => { const k = Math.max(0, Math.min(1, (t - t0) / 1100)); v.setSurround(k * k * (3 - 2 * k)); if (k < 1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+    }
     body.classList.add("loaded");
     body.classList.remove("intro");
     setTimeout(() => body.classList.add("settled"), 2400);
