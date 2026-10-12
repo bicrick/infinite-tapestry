@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en" class="page">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Admin · Infinite Tapestry</title>
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .adm { max-width: 980px; margin: 32px auto 80px; padding: 0 24px; font-size: 13px; }
+    .adm h1 { font-weight: 500; font-size: 22px; } .adm h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 28px 0 8px; }
+    .adm table { width: 100%; border-collapse: collapse; } .adm td { padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+    .adm td.m { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .adm button { background: rgba(var(--ink),.08); border: 1px solid var(--line); color: var(--fg); border-radius: 7px; padding: 3px 8px; cursor: pointer; font-size: 12px; margin: 1px; }
+    .adm button.danger { color: #ff8a80; } .adm .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+    .adm input[type=number] { width: 56px; background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 6px; padding: 3px 5px; }
+    .kill { font-size: 14px; padding: 8px 14px !important; }
+  </style>
+</head>
+<body class="page">
+  <main class="adm">
+    <h1>Moderation</h1>
+    <p id="msg" class="fine"></p>
+    <div class="row"><button id="kill" class="kill"></button><span class="fine" id="kill-note"></span></div>
+    <h2>Limits</h2><div class="row" id="limits"></div>
+    <h2>Recent guest ideas</h2><table id="ideas"></table>
+    <h2>Shadow-muted (never painted)</h2><table id="shadow"></table>
+    <h2>Guest sessions</h2><table id="sessions"></table>
+    <h2>Bans</h2><table id="bans"></table>
+  </main>
+  <script src="/config.js"></script>
+  <script type="module" src="/admin.js"></script>
+</body>
+</html>
