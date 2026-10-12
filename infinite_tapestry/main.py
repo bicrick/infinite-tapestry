@@ -54,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="cuda",
         help="torch device for real generation (ignored with --mock)",
     )
+    p.add_argument(
+        "--haiku-model",
+        default=None,
+        help="Anthropic model id for the prompt interpreter "
+        "(default: $TAPESTRY_HAIKU_MODEL or claude-haiku-5-5)",
+    )
     p.add_argument("-v", "--verbose", action="store_true")
     return p
 
@@ -81,7 +87,14 @@ def main(argv: list[str] | None = None) -> int:
     generator = StripGenerator(config, inpainter, buffer)
     generator.start()
 
-    app = create_app(config, buffer, generator)
+    from .interpreter import PromptInterpreter
+
+    interpreter = PromptInterpreter(model=args.haiku_model)
+    logging.info(
+        "Prompt interpreter: %s",
+        f"Claude {interpreter.model}" if interpreter.enabled else "off (no ANTHROPIC_API_KEY)",
+    )
+    app = create_app(config, buffer, generator, interpreter=interpreter)
 
     # ws_ping_interval: uvicorn/websockets protocol ping (in addition to our JSON pings).
     try:

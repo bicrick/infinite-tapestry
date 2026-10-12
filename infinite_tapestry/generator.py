@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING
 
 from PIL import Image
@@ -49,6 +50,10 @@ class StripGenerator:
             config.height, config.context_width, seed=config.seed
         )
         self._strip_index = 0
+        # EMA of seconds spent generating one strip = the GPU's raw capacity
+        # (independent of buffer gating), used by the client's auto speed.
+        self.gen_seconds_ema: float | None = None
+        self._ema_alpha = 0.2
         # Global mean/std matching compounded strip-over-strip and blew out
         # saturation on GPU; off by default.
         self._match_histogram = bool(config.mock)
@@ -131,7 +136,7 @@ class StripGenerator:
             image=window,
             mask=mask,
             prompt=prompt_a,
-            negative_prompt=self.director.negative_prompt,
+            negative_prompt=self.director.negative_for(blend_t),
             seed=seed,
             prompt_b=prompt_b,
             t=blend_t,
@@ -192,6 +197,20 @@ class StripGenerator:
 
         return strip
 
+    def _record_time(self, dt: float) -> None:
+        a = self._ema_alpha
+        self.gen_seconds_ema = dt if self.gen_seconds_ema is None else (1 - a) * self.gen_seconds_ema + a * dt
+
+    def stats(self) -> dict:
+        ema = self.gen_seconds_ema
+        ema = max(ema, 1e-3) if ema is not None else None
+        return {
+            "strip_seconds": round(ema, 3) if ema else None,
+            "strips_per_sec": round(1.0 / ema, 3) if ema else None,
+            "px_per_sec": round(self.config.strip_width / ema, 2) if ema else None,
+            "strip_index": self._strip_index,
+        }
+
     def _run(self) -> None:
         logger.info("Seeding buffer with initial strips…")
         try:
@@ -201,7 +220,9 @@ class StripGenerator:
                         break
                     continue
                 try:
+                    t0 = time.monotonic()
                     strip = self.generate_one()
+                    self._record_time(time.monotonic() - t0)
                 except Exception:
                     logger.exception("Strip generation failed; retrying shortly")
                     if self._stop.wait(1.0):
