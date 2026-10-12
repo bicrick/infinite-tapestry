@@ -59,6 +59,16 @@ def seam_score(img: Image.Image, x0: int, x1: int) -> float:
     return float(score.max())
 
 
+# The panorama travels through one world: each strip gets a different framing so the
+# model doesn't redraw the same focal subject (farmhouse, dog crowd) side by side.
+PAN_CUES = [
+    "The camera pans right to a different part of the same place, new foreground details, varied composition",
+    "Further along: open space and depth, a different landmark of this world, the main subject smaller in the distance",
+    "Panning on: close foreground elements of this world on the right, different arrangement, no repeated objects",
+    "Continuing the journey: a new area of this world with different scale and layout, fresh details",
+]
+
+
 class StripGenerator:
     """Produces strips on a worker thread into a StripBuffer."""
 
@@ -221,6 +231,11 @@ class StripGenerator:
         if hasattr(self.inpainter, "set_styles"):
             self.inpainter.set_styles(ramp(style_a, style_b, blend_t if prompt_b else 0.0))
         seed = cfg.seed + self._strip_index
+        if getattr(cfg, "pan_variations", False) and not cfg.mock:
+            cue = PAN_CUES[self._strip_index % len(PAN_CUES)]
+            prompt_a = f"{prompt_a}. {cue}"
+            if prompt_b:
+                prompt_b = f"{prompt_b}. {cue}"
         if hasattr(self.inpainter, "set_ref") and hasattr(self.director, "ref_ids"):
             from . import refs as _refs
 

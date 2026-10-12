@@ -51,6 +51,7 @@ class Config:
     dup_check: bool = False  # reject strips that clone visible context (klein preset turns it on)
     dup_threshold: float = 0.8
     dup_retries: int = 2
+    pan_variations: bool = False  # vary each strip's framing within a scene so subjects don't tile
     context_mask_px: int = 0  # mask (repaint) this many px of far-left context so the model can't copy it
     seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
     harmonize_seams: bool = True  # remove colour steps at the mask edge
@@ -172,4 +173,5 @@ SDXL_PRESET: dict[str, Any] = {
 # Narrow repaint band + no 70% scene-change repaint: a wide repainted band got cross-faded over
 # the old pixels (ghosting) and let klein redraw whole compositions each strip. Bakeoff: tapestry-samples/blend.
 KLEIN_PRESET: dict[str, Any] = {"steps": 4, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 48,
-                                "scene_change_repaint": 0.0, "dup_check": True}
+                                "scene_change_repaint": 0.0, "dup_check": True,
+                                "seam_retries": 0, "pan_variations": True}
