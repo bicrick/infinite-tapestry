@@ -81,7 +81,15 @@
   const portrait = () => canvas.height > canvas.width * 1.15;
   const BAND_ASPECT = 1.25;   // band width : height
   const scale = () => (portrait() ? Math.min(canvas.height, canvas.width / BAND_ASPECT) : canvas.height) / Math.max(1, config.height);
-  let ambCv = null, ambCtx = null;
+  let ambCv = null, ambCtx = null, surroundA = 1, bandCache = "";
+  function publishBand(top, bh, h) {
+    const k = canvas.clientHeight / Math.max(1, h), t = Math.round(top * k), b = Math.round((top + bh) * k);
+    const key = t + ":" + b;
+    if (key === bandCache) return;
+    bandCache = key;
+    const r = document.documentElement.style;
+    r.setProperty("--band-top", t + "px"); r.setProperty("--band-bot", b + "px");
+  }
   function drawSurround(w, h, yOff, bandH) {
     // Soft extension of the band into the dark space: downsample the band, upscale it (free blur), darken.
     if (yOff < 4) return;
@@ -89,21 +97,23 @@
     ambCtx.drawImage(canvas, 0, yOff, w, bandH, 0, 0, 24, 12);
     ctx.save();
     ctx.imageSmoothingQuality = "high";
-    ctx.globalAlpha = 0.55;
+    ctx.globalAlpha = 0.55 * surroundA;
     ctx.drawImage(ambCv, 0, 0, 24, 3, 0, 0, w, yOff + 2);                  // top edge, stretched up
     ctx.drawImage(ambCv, 0, 9, 24, 3, 0, yOff + bandH - 2, w, h - yOff - bandH + 2);   // bottom edge, stretched down
     ctx.globalAlpha = 1;
     const g1 = ctx.createLinearGradient(0, 0, 0, yOff);
     g1.addColorStop(0, "rgba(5,5,6,.96)"); g1.addColorStop(0.75, "rgba(5,5,6,.72)"); g1.addColorStop(1, "rgba(5,5,6,.35)");
     ctx.fillStyle = g1; ctx.fillRect(0, 0, w, yOff);
+    if (surroundA < 1) { ctx.fillStyle = `rgba(5,5,6,${1 - surroundA})`; ctx.fillRect(0, 0, w, yOff); }
     const y2 = yOff + bandH, g2 = ctx.createLinearGradient(0, y2, 0, h);
     g2.addColorStop(0, "rgba(5,5,6,.35)"); g2.addColorStop(0.25, "rgba(5,5,6,.72)"); g2.addColorStop(1, "rgba(5,5,6,.96)");
     ctx.fillStyle = g2; ctx.fillRect(0, y2, w, h - y2);
+    if (surroundA < 1) { ctx.fillStyle = `rgba(5,5,6,${1 - surroundA})`; ctx.fillRect(0, y2, w, h - y2); }
     ctx.restore();
   }
   const viewWorld = () => canvas.width / scale();
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
-  window.TapestryView = { left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
+  window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(), bh = config.height * s0; return { top: portrait() ? (canvas.height - bh) * 0.45 : 0, height: bh }; }, setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -375,7 +385,9 @@
     const s = s0 * zoom;
     const center = viewLeft() + viewWorld() / 2;
     const left = center - (w / s) / 2;
-    const yOff = (h - config.height * s) / 2;
+    // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
+    const yOff = portrait() ? (h - config.height * s0) * 0.45 + (config.height * s0 - config.height * s) / 2 : (h - config.height * s) / 2;
+    publishBand(yOff, config.height * s, h);
     const firstIdx = Math.max(0, Math.floor(left / SW()) - 1);
     const lastIdx = Math.ceil((left + w / s) / SW()) + 1;
     const fast = Math.abs(velS) > 1600;

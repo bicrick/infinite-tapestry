@@ -33,8 +33,8 @@ const toast = (h, ms) => W().toast(h, ms);
 if (CFG.supabaseUrl && CFG.supabaseAnonKey) boot().catch((e) => console.warn("social disabled", e));
 
 async function boot() {
-  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
-  const sb = createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: true, detectSessionInUrl: true, flowType: "pkce" } });
+  const A = await import("./sb.js");
+  const sb = await A.client();
   S.sb = sb;
   S.enabled = true;
   document.body.classList.add("social");
@@ -43,7 +43,8 @@ async function boot() {
   $("fuel-chip").classList.remove("hidden");
   $("chat").classList.remove("hidden");
   $("cmd-input").placeholder = innerWidth < 480 ? "Where next?" : "Suggest where the tapestry goes next…";
-  if (CFG.google) $("auth-google").classList.remove("hidden");
+  let google = !!CFG.google;
+  A.googleEnabled().then((on) => { google = on; $("auth-google").classList.toggle("hidden", !on || !!S.session); $("auth-or").classList.toggle("hidden", !on || !!S.session); });
 
   // Hoisted above first loadProfile(): loadVotes/renderIdeas run from loadProfile
   // and must not hit TDZ (was: ReferenceError myVotes before initialization).
@@ -81,7 +82,10 @@ async function boot() {
   function openAuth() {
     const signed = !!S.session, needHandle = signed && !(S.profile && S.profile.handle);
     $("auth-form").classList.toggle("hidden", signed);
-    $("auth-google").classList.toggle("hidden", signed || !CFG.google);
+    $("auth-google").classList.toggle("hidden", signed || !google);
+    $("auth-or").classList.toggle("hidden", signed || !google);
+    $("auth-code-form").classList.add("hidden");
+    if (!signed) { $("auth-form").classList.remove("hidden"); if (!$("auth-email").value) $("auth-email").value = A.lastEmail(); }
     $("handle-form").classList.toggle("hidden", !needHandle);
     $("auth-signed").classList.toggle("hidden", !signed || needHandle);
     $("auth-handle").textContent = S.profile && S.profile.handle ? "@" + S.profile.handle : "";
@@ -97,14 +101,42 @@ async function boot() {
   });
   $("auth-pop").addEventListener("click", (e) => { if (e.target === $("auth-pop")) $("auth-pop").classList.add("hidden"); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("auth-pop").classList.add("hidden"); });
-  $("auth-form").addEventListener("submit", async (e) => {
+  // Email: one message with a link (any browser) — and, once the branded template is on, a 6-digit code.
+  let sentTo = "", cooldown = 0, cdTimer = 0;
+  const redirect = location.origin + "/auth/confirm?next=" + encodeURIComponent(location.pathname + location.search);
+  async function sendEmail(email) {
+    if (Date.now() < cooldown) return;
+    const btn = $("auth-send"); btn.disabled = true;
+    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
+    btn.disabled = false;
+    if (error) { $("auth-msg").textContent = A.AUTH_ERR(error.message); return false; }
+    sentTo = email; A.rememberEmail(email);
+    $("auth-form").classList.add("hidden"); $("auth-google").classList.add("hidden"); $("auth-or").classList.add("hidden");
+    $("auth-code-form").classList.remove("hidden");
+    $("auth-sent-to").textContent = email; $("auth-msg").textContent = "";
+    cooldown = Date.now() + 60000; tickResend();
+    setTimeout(() => $("auth-code").focus(), 60);
+    return true;
+  }
+  function tickResend() {
+    clearInterval(cdTimer);
+    const b = $("auth-resend");
+    const step = () => { const s = Math.ceil((cooldown - Date.now()) / 1000); b.disabled = s > 0; b.textContent = s > 0 ? `Resend in ${s}s` : "Resend email"; if (s <= 0) clearInterval(cdTimer); };
+    step(); cdTimer = setInterval(step, 500);
+  }
+  $("auth-form").addEventListener("submit", async (e) => { e.preventDefault(); await sendEmail($("auth-email").value.trim()); });
+  $("auth-resend").addEventListener("click", () => sendEmail(sentTo));
+  $("auth-change").addEventListener("click", () => { $("auth-code-form").classList.add("hidden"); $("auth-form").classList.remove("hidden"); $("auth-google").classList.toggle("hidden", !google); $("auth-or").classList.toggle("hidden", !google); $("auth-email").focus(); });
+  $("auth-code").addEventListener("input", (e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 6); e.target.value = v; if (v.length === 6) $("auth-code-form").requestSubmit(); });
+  $("auth-code-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const email = $("auth-email").value.trim();
-    const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
-    if (error) return toast(esc(error.message));
-    $("auth-form").innerHTML = `<p class="fine">Check <b>${esc(email)}</b> for a sign-in link. You can close this.</p>`;
+    const token = $("auth-code").value.trim(); if (token.length < 6) return;
+    $("auth-msg").textContent = "Checking…";
+    const { error } = await sb.auth.verifyOtp({ email: sentTo, token, type: "email" });
+    if (error) { $("auth-msg").textContent = A.AUTH_ERR(error.message); $("auth-code").select(); return; }
+    $("auth-msg").textContent = ""; $("auth-code").value = "";
   });
-  $("auth-google").addEventListener("click", () => sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname } }));
+  $("auth-google").addEventListener("click", () => sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + location.search } }));
   $("handle-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const { error } = await sb.rpc("set_handle", { p_handle: $("handle-input").value.trim() });

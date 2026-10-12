@@ -467,3 +467,42 @@ body.immersive .veil { opacity: 0; }
 body.immersive .dock { width: min(560px, calc(100vw - 2 * max(16px, env(safe-area-inset-left)))); bottom: calc(14px + env(safe-area-inset-bottom)); }
 body.immersive .top { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
 @media (max-width: 560px) { body.composing .cmd .chips { display: flex !important; flex-wrap: nowrap; } body.composing .cmd .chips button { width: auto; } }
+
+/* ---------- sign-in ---------- */
+button.google { display: flex; align-items: center; justify-content: center; gap: 10px; height: 46px; border-radius: 12px; border: 0; background: #fff; color: #111; font-weight: 500; cursor: pointer; }
+.auth-or { display: flex; align-items: center; gap: 12px; color: rgba(255,255,255,.35); font-size: 11px; text-transform: uppercase; letter-spacing: .1em; margin: 14px 0; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.vibe.code { text-align: center; font-size: 26px; letter-spacing: .4em; font-variant-numeric: tabular-nums; height: 56px; }
+.auth-row { display: flex; justify-content: space-between; margin-top: 10px; }
+button.link { background: none; border: 0; padding: 8px 0; color: var(--muted); cursor: pointer; font-size: 13px; }
+button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { opacity: .5; cursor: default; }
+.auth-msg { min-height: 1em; margin: 10px 0 0; color: rgba(255,200,170,.9); }
+.confirm-page { display: grid; place-items: center; min-height: 100vh; }
+.confirm { width: min(360px, 90vw); text-align: center; padding: 40px 0; }
+.confirm-mark { width: 40px; opacity: .9; margin-bottom: 18px; }
+.confirm h1 { font-size: 24px; font-weight: 500; letter-spacing: -.02em; margin: 0 0 10px; }
+.confirm .vibe { width: 100%; margin: 14px 0 10px; }
+.confirm .primary { width: 100%; }
+
+/* ---------- portrait band: ambient info in the dark space ---------- */
+.amb { display: none; }
+@media (max-width: 560px) and (orientation: portrait) {
+  .amb { display: block; position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+  .amb-top { position: absolute; left: 0; right: 0; top: calc(var(--band-top, 30vh) * .5 + 14px); transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 9px; }
+  .amb-mark { width: 26px; opacity: .55; }
+  #amb-status { font-size: 11px; letter-spacing: .06em; color: rgba(255,255,255,.36); transition: opacity .35s; }
+  .amb-title { position: absolute; left: 24px; right: 24px; top: calc(var(--band-bot, 70vh) + 22px); text-align: center;
+    font-size: 13px; letter-spacing: -.005em; color: rgba(255,255,255,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .35s; }
+  /* the ambient layer replaces the header mark/status and the dock caption */
+  .top .brand, .top .status { display: none !important; }
+  .top { justify-content: flex-end; }
+  .dock .now { display: none !important; }
+  /* load-in: ambient pieces arrive after the surround glow */
+  .amb-mark, #amb-status, .amb-title { transition: opacity .9s var(--ease), transform .9s var(--ease); }
+  body.intro .amb-mark, body.intro #amb-status, body.intro .amb-title { opacity: 0; transform: translateY(4px); }
+  body.loaded .amb-mark { transition-delay: 1.5s; } body.loaded #amb-status { transition-delay: 1.75s; } body.loaded .amb-title { transition-delay: 2s; }
+  body.loaded.settled .amb-mark, body.loaded.settled #amb-status, body.loaded.settled .amb-title { transition-delay: 0s; }
+  /* the inset card is the band itself, not the whole screen */
+  body.intro { background: #050506; }
+}

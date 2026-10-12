@@ -118,3 +118,15 @@
   else check(null);
   if (new URLSearchParams(location.search).has("saver")) set(true);
 })();
+
+// Ambient info for the portrait band layout: mirrors status + current scene, always visible, low contrast.
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const mirror = (from, to, fmt) => {
+    const a = $(from), b = $(to); if (!a || !b) return;
+    const sync = () => { const t = fmt ? fmt(a.textContent) : a.textContent; if (b.textContent !== t) { b.style.opacity = "0"; setTimeout(() => { b.textContent = t; b.style.opacity = ""; }, b.textContent ? 350 : 0); } };
+    new MutationObserver(sync).observe(a, { childList: true, characterData: true, subtree: true }); sync();
+  };
+  mirror("status-text", "amb-status");
+  mirror("now-title", "amb-title", (t) => (t === "—" ? "" : t));
+})();

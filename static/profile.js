@@ -26,8 +26,7 @@ let sb = null, token = null, data = null, filter = "all";
 async function auth() {
   if (!(CFG.supabaseUrl && CFG.supabaseAnonKey)) return;
   try {
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
-    sb = createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: true, flowType: "pkce" } });
+    sb = await (await import("/sb.js")).client();
     const { data: s } = await sb.auth.getSession();
     token = s.session && s.session.access_token;
   } catch (_) {}
