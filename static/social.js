@@ -246,6 +246,7 @@ async function boot() {
     dragDepth = 0; ov.classList.remove("on");
     const f = [...(e.dataTransfer?.files || [])].find((x) => /^image\//.test(x.type));
     if (!f) return;
+    try { window.va && window.va("event", { name: "image_drop" }); } catch (_) {}
     e.preventDefault();
     attachRef(f);
   });
@@ -275,7 +276,8 @@ async function boot() {
       const res = await submitAsGuest(text);
       if (!res.ok) { toast(ERR[res.err] || "Something went wrong. Try again."); if (res.err === "signin_required") openAuth(); return false; }
       addLocal(text, guest.handle);
-      window.dispatchEvent(new CustomEvent("tapestry:submitted"));
+      try { window.va && window.va("event", { name: "idea_submitted", data: { who: "guest" } }); } catch (_) {}
+            window.dispatchEvent(new CustomEvent("tapestry:submitted"));
       toast(`Added to the pool as <b>@${esc(guest.handle || "guest")}</b> <span class="muted">“${esc(text)}”</span><br><span class="muted">Sign in anytime to keep your ideas and add more.</span>`, 4200);
       refreshIdeas();
       if (window.TapestryWS) window.TapestryWS.send({ type: "idea_added" });
@@ -290,6 +292,7 @@ async function boot() {
     }
     const { error } = await sb.rpc("submit_idea", { p_body: text, p_image: image });
     if (error) { toast(friendly(error)); return false; }
+    try { window.va && window.va("event", { name: "idea_submitted", data: { who: "signed_in", image: !!image } }); } catch (_) {}
     clearRef();
     window.dispatchEvent(new CustomEvent("tapestry:submitted"));
     toast(`Added to the pool <span class="muted">“${esc(text)}”</span>`, 3000);
