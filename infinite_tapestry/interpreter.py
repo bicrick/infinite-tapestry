@@ -51,7 +51,7 @@ _STYLE_NOTE = (
 )
 
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide where the journey drifts next, forever.
-Given the recent scenes (oldest first), invent the NEXT 1-3 scenes. Make the chain evolve continuously and keep surprising: dreamlike, absurd, nonsensical and impossible worlds are welcome (any subject, place, scale or art style). Each step should grow plausibly out of the previous one through shared shapes, colors, materials or lighting, then mutate; get gradually wilder over time. Never repeat or closely revisit a recent scene.
+Given the recent scenes (oldest first), invent the NEXT 1-3 scenes. Be genuinely interesting: topical riffs on today's news, funny visual gags, and striking specific cinematic places; never safe screensaver filler (no coral reefs, meadows, generic forests, sunset beaches, nebulae). Follow the THEME given in the request. Never repeat or closely revisit a recent scene. No recognizable real people, nothing sexual, nothing involving minors.
 Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). {_COMPOSITION_NOTE} No text, frames, borders or split images. Never include nudity or sexual content.
 transition = strips to blend in (8-14), hold = strips to stay (5-14). Keep scenes short; the journey should switch often.
 Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":10,"hold":8,"style":"photo"}}],"note":"one short sentence"}}"""
@@ -100,13 +100,15 @@ class PromptInterpreter:
         self.tokens_used += int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
-    def autoplan(self, recent: list[dict], vibe: str = "", count: int = 2) -> dict[str, Any]:
+    def autoplan(self, recent: list[dict], vibe: str = "", count: int = 2, brief: str = "") -> dict[str, Any]:
         """Next autopilot scenes continuing from `recent` (title/prompt dicts).
         Raises on failure so the caller can back off."""
         lines = [f"{i + 1}. {r.get('title', '')}: {r.get('prompt', '')[:200]}" for i, r in enumerate(recent[-8:])]
         user = "Recent scenes, oldest first:\n" + "\n".join(lines)
         if vibe:
             user += f"\nViewer's standing vibe to lean toward (loosely): {vibe[:200]}"
+        if brief:
+            user += "\n" + brief
         user += f"\nGive the next {max(1, min(3, count))} scene(s)."
         last: Exception | None = None
         for model in dict.fromkeys([self.model, FALLBACK_MODEL]):

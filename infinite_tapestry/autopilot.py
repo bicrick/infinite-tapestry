@@ -11,6 +11,7 @@ import time
 from typing import Any, Callable
 
 from .prompts import make_scene
+from .themes import HeadlineCache, ThemeMemory, brief, has_cliche, mentions_minor, pick_mode
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,16 @@ class Autopilot:
         self._failures = 0
         self.busy = False
         self.last_error = ""
+        self.headlines = HeadlineCache()
+        self.memory = ThemeMemory(40)
+        self.last_mode = ""
         self.epoch = 0  # bumped on every user enqueue; stale auto results are discarded
 
     def state(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled, "vibe": self.vibe, "busy": self.busy,
             "error": self.last_error, "tokens": getattr(self.interpreter, "tokens_used", 0),
-            "budget": self.token_budget,
+            "budget": self.token_budget, "mode": self.last_mode,
         }
 
     def configure(self, enabled: bool | None = None, vibe: str | None = None) -> None:
@@ -103,14 +107,23 @@ class Autopilot:
         epoch = self.epoch
         self._calls.append(time.monotonic())
         try:
-            plan = await asyncio.to_thread(self.interpreter.autoplan, d.recent(8), self.vibe, 2)
+            heads = await asyncio.to_thread(self.headlines.sample, 6)
+            mode = pick_mode(have_news=bool(heads))
+            self.last_mode = mode
+            plan = await asyncio.to_thread(self.interpreter.autoplan, d.recent(8), self.vibe, 2,
+                                           brief(mode, heads, self.memory))
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
             from .guard import is_disallowed
 
-            plan["scenes"] = [x for x in plan["scenes"] if not is_disallowed(x["prompt"])]
+            plan["scenes"] = [x for x in plan["scenes"] if not is_disallowed(x["prompt"])
+                              and not has_cliche(x.get("title", "") + " " + x["prompt"])
+                              and not mentions_minor(x.get("title", "") + " " + x["prompt"])
+                              and not self.memory.is_repeat(x.get("title", ""))]
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
+            for s in plan["scenes"]:
+                self.memory.add(s.get("title", ""))
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
                               s.get("hold"), source="", origin="auto", style=s.get("style")) for s in plan["scenes"]])
             self._failures = 0
