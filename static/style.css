@@ -138,7 +138,7 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border: 0; bord
 .item.user .t::after { content: "you"; margin-left: 8px; font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.14); vertical-align: 1px; }
 .tag { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; background: rgba(255,255,255,.1); margin-left: 6px; }
 .tag.auto { background: rgba(170,140,255,.18); color: rgba(225,212,255,.9); }
-.spark { color: rgba(214,196,255,.9); }
+.spark { color: rgba(214,196,255,.9); font-weight: 400; }
 .auto-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
 .auto-status { font-size: 11px; color: rgba(255,255,255,.4); }
 .vibe { width: 100%; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; color: var(--fg); outline: 0; font-size: 12px; }

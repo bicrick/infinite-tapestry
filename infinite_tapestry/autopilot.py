@@ -107,7 +107,7 @@ class Autopilot:
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
-                              s.get("hold"), source=plan.get("note", ""), origin="auto") for s in plan["scenes"]])
+                              s.get("hold"), source="", origin="auto") for s in plan["scenes"]])
             self._failures = 0
             self.last_error = ""
             self._next_allowed = time.monotonic() + self.min_interval
