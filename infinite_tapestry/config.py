@@ -52,6 +52,7 @@ class Config:
     dup_threshold: float = 0.8
     dup_retries: int = 2
     pan_variations: bool = False  # vary each strip's framing within a scene so subjects don't tile
+    vision_transitions: bool = False  # Auto looks at the screen and inserts bridge strips before each scene
     context_ref: bool = False  # klein: pass a downscaled view of the visible window as a reference image
     klein_blend: str = "snap"  # klein prompt change: "snap" at t>=0.5 or "slerp" embeddings across the blend
     context_mask_px: int = 0  # mask (repaint) this many px of far-left context so the model can't copy it
@@ -176,4 +177,5 @@ SDXL_PRESET: dict[str, Any] = {
 # the old pixels (ghosting) and let klein redraw whole compositions each strip. Bakeoff: tapestry-samples/blend.
 KLEIN_PRESET: dict[str, Any] = {"steps": 4, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 48,
                                 "scene_change_repaint": 0.0, "dup_check": True,
-                                "seam_retries": 0, "pan_variations": True}
+                                "seam_retries": 1, "pan_variations": False,
+                                "vision_transitions": True}
