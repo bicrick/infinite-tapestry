@@ -285,7 +285,7 @@ async function boot() {
       addLocal(text, guest.handle, res.id); addMine(res.id);
       try { window.va && window.va("event", { name: "idea_submitted", data: { who: "guest" } }); } catch (_) {}
             window.dispatchEvent(new CustomEvent("tapestry:submitted"));
-      toast(`Added to the pool as <b>@${esc(guest.handle || "guest")}</b> <span class="muted">“${esc(text)}”</span><br><span class="muted">Sign in anytime to keep your ideas and add more.</span>`, 4200);
+      toast(`Added, you're up soon <span class="muted">· @${esc(guest.handle || "guest")}</span>`, 3200);
       refreshIdeas();
       if (window.TapestryWS) window.TapestryWS.send({ type: "idea_added" });
       return true;
@@ -303,7 +303,7 @@ async function boot() {
     try { window.va && window.va("event", { name: "idea_submitted", data: { who: "signed_in", image: !!image } }); } catch (_) {}
     clearRef();
     window.dispatchEvent(new CustomEvent("tapestry:submitted"));
-    toast(`Added to the pool <span class="muted">“${esc(text)}”</span>`, 3000);
+    toast(`Added, you're up soon`, 3000);
     refreshIdeas();
     if (window.TapestryWS) window.TapestryWS.send({ type: "idea_added" });
     return true;

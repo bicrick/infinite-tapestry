@@ -327,7 +327,21 @@
     }
     if (level > 1) for (let k = 0; k < 4; k++) drawLodChunk(level - 1, c * 4 + k, left);   // finer tiles fill the gap
   }
-  let thumbCv = null, thumbCtx = null;
+  let thumbCv = null, thumbCtx = null, zoneCv = null, zoneCtx = null, zoneMask = null;
+  function stripDots(e) {   // dense, resolved dot rendition of a strip, built once
+    if (e.dots !== undefined) return e.dots;
+    const th = stripThumb(e); if (!th) return null;
+    const c = document.createElement("canvas"); c.width = SW(); c.height = config.height; const g = c.getContext("2d");
+    const sp = 6, si = e.idx != null ? e.idx : (Math.random() * 1e6) | 0;
+    for (let a = 0; a < SW() / sp; a++) for (let j = 0; j < config.height / sp; j++) {
+      let hh = ((si * 64 + a) * 374761393 + j * 668265263) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
+      if (r > 0.7) continue;
+      const k = (Math.min(23, (j * sp / config.height * 24) | 0) * 8 + Math.min(7, (a * sp / SW() * 8) | 0)) * 4;
+      g.fillStyle = `rgba(${th[k]},${th[k + 1]},${th[k + 2]},${(0.6 + 0.4 * r).toFixed(2)})`;
+      const rad = sp * (0.5 + 0.5 * r); g.fillRect(a * sp + r * 2, j * sp + (r * 17) % sp, rad, rad);
+    }
+    return (e.dots = c);
+  }
   function stripThumb(e) {   // 8x24 colour sample per strip, computed once (cheap dot colours, no canvas readback per frame)
     if (e.th !== undefined) return e.th;
     if (!e.bitmap) return null;
@@ -620,23 +634,21 @@
       const g = ctx.createLinearGradient(zl - left, 0, zr - left, 0);
       g.addColorStop(0, EMPTY + "00"); g.addColorStop(0.55, EMPTY + "99"); g.addColorStop(1, EMPTY + "f2");
       ctx.fillStyle = g; ctx.fillRect(zl - left, 0, zw + 1, config.height);
-      const sp = 6, i0 = Math.floor(zl / sp), i1 = Math.ceil(zr / sp), rows = Math.ceil(config.height / sp);
-      for (let i = i0; i <= i1; i++) {
-        const e = strips.get(Math.floor(i * sp / SW())), th = e && stripThumb(e);
-        if (!th) continue;
-        const u = Math.min(1, Math.max(0, (i * sp - zl) / zw));                 // 0 = resolved side, 1 = edge
-        const col = Math.min(7, Math.max(0, (((i * sp) % SW()) / SW() * 8) | 0));
-        for (let j = 0; j < rows; j++) {
-          let hh = (i * 374761393 + j * 668265263) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
-          if (r > 0.95 - 0.55 * u) continue;                                        // dense, thinning toward the edge
-          const k = (Math.min(23, (j * sp / config.height * 24) | 0) * 8 + col) * 4;
-          const a = Math.sin(Math.PI * Math.min(1, u * 1.15)) * (0.55 + 0.4 * r);   // fade in from the image, out at the very edge
-          if (a < 0.04) continue;
-          ctx.fillStyle = `rgba(${th[k]},${th[k + 1]},${th[k + 2]},${a.toFixed(2)})`;
-          const rad = sp * (0.9 - 0.45 * u) * (0.6 + 0.5 * r);
-          ctx.fillRect(i * sp - left + r * 3, j * sp + (r * 17) % sp, rad, rad);
-        }
+      // Cached per-strip dot layers composited through one bell-shaped alpha mask (a handful of draw calls per frame).
+      const zW = Math.ceil(zw) + 2, zH = config.height;
+      if (!zoneCv) { zoneCv = document.createElement("canvas"); zoneCtx = zoneCv.getContext("2d"); }
+      if (zoneCv.width !== zW || zoneCv.height !== zH) { zoneCv.width = zW; zoneCv.height = zH; zoneMask = null; }
+      zoneCtx.globalCompositeOperation = "source-over"; zoneCtx.clearRect(0, 0, zW, zH);
+      for (let k = Math.floor(zl / SW()); k <= Math.floor(zr / SW()); k++) {
+        const e = strips.get(k), d = e && stripDots(e);
+        if (d) zoneCtx.drawImage(d, k * SW() - zl, 0);
       }
+      if (!zoneMask) {
+        zoneMask = zoneCtx.createLinearGradient(0, 0, zW, 0);
+        for (let t = 0; t <= 1.0001; t += 0.1) zoneMask.addColorStop(Math.min(1, t), `rgba(0,0,0,${(Math.sin(Math.PI * Math.min(1, t * 1.15)) * 0.9).toFixed(3)})`);
+      }
+      zoneCtx.globalCompositeOperation = "destination-in"; zoneCtx.fillStyle = zoneMask; zoneCtx.fillRect(0, 0, zW, zH);
+      ctx.drawImage(zoneCv, zl - left, 0);
     }
     ctx.restore();
     {   // Past the newest painted strip (only reachable by over-scrolling live): crystallizing dots, never blank.
@@ -1456,7 +1468,7 @@
   const setCompose = (on) => body.classList.toggle("composing", on && phone.matches);
   input.addEventListener("focus", () => { setCompose(true); setMore(false); });
   cmd.addEventListener("focusout", () => setTimeout(() => { if (!cmd.contains(document.activeElement) && !input.value) setCompose(false); }, 120));
-  cmd.addEventListener("submit", () => setTimeout(() => { if (!input.value) { input.blur(); setCompose(false); } }, 50));
+  cmd.addEventListener("submit", () => { input.blur(); setCompose(false); setMore(false); setTimeout(() => { input.blur(); setCompose(false); }, 60); });   // collapse to the pill + dismiss keyboard right away
   document.addEventListener("pointerdown", (e) => {
     if (body.classList.contains("composing") && !cmd.contains(e.target) && !input.value) { input.blur(); setCompose(false); }
     if (body.classList.contains("more-open") && !cmd.contains(e.target)) setMore(false);

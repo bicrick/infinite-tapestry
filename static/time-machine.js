@@ -80,13 +80,7 @@
   }
   addEventListener("scroll", onScroll, { passive: true });
 
-  // Hyperscroll: sustained fast wheeling ramps up to 10x.
-  let boost = 1, lastW = 0;
-  addEventListener("wheel", e => {
-    if (!$("zoom").classList.contains("hidden") || e.ctrlKey) return;
-    const now = performance.now(); boost = now - lastW < 60 ? Math.min(10, boost * 1.12) : 1; lastW = now;
-    if (boost > 1.3) { e.preventDefault(); scrollBy(0, e.deltaY * boost); }
-  }, { passive: false });
+  // Plain native page scroll (no wheel hijacking).
   // Rail: drag anywhere to zip across the whole history.
   const rail = $("rail");
   const go = e => { const r = rail.getBoundingClientRect(); const f = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)); scrollTo(0, f * (document.documentElement.scrollHeight - innerHeight)); };
