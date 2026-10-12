@@ -182,6 +182,112 @@
   }
   let corr = 0, lastClockAt = 0;
 
+  let zoom = 1, velS = 0, prevCenter = null, blurCv = null, blurCtx = null;
+
+  // ---------- LOD tiles (served from the GPU box, mirrored in Storage) ----------
+  const LOD_N = { 1: 16, 2: 64, 3: 256 };
+  const lodCache = new Map();
+  function lodTile(level, c) {
+    const key = level + ":" + c;
+    let t = lodCache.get(key);
+    if (!t) {
+      if ((c + 1) * LOD_N[level] > maxIndex) return null;   // chunk still filling
+      t = { img: new Image(), ok: false, used: 0 };
+      t.img.crossOrigin = "anonymous";
+      t.img.onload = () => { t.ok = true; };
+      t.img.onerror = () => { t.failed = true; };
+      t.img.src = `${httpBase()}/lod/${level}/${c}.jpg`;
+      lodCache.set(key, t);
+      if (lodCache.size > 400) { const oldest = [...lodCache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 100); oldest.forEach(([k]) => lodCache.delete(k)); }
+    }
+    t.used = performance.now();
+    return t.ok ? t.img : null;
+  }
+  function drawLod(left, span, z) {
+    const level = z > 0.55 ? 1 : 2;
+    const tw = LOD_N[level] * SW();
+    const c0 = Math.max(0, Math.floor(left / tw)), c1 = Math.floor((left + span) / tw);
+    for (let c = c0; c <= c1; c++) {
+      let img = lodTile(level, c);
+      if (!img && level === 1) {                 // fall back to the coarser tile
+        const p = lodTile(2, Math.floor(c / 4));
+        if (p) { const part = p.width / 4; ctx.drawImage(p, (c % 4) * part, 0, part, p.height, c * tw - left, 0, tw, config.height); continue; }
+      }
+      if (img) ctx.drawImage(img, c * tw - left, 0, tw, config.height);
+    }
+    // prefetch ahead in the direction of travel
+    const ahead = velS > 0 ? c1 + 1 : c0 - 1;
+    if (ahead >= 0) lodTile(level, ahead);
+  }
+
+  // ---------- timeline scrubber ----------
+  let tlPoints = [], tlScrub = false;
+  async function refreshTimeline() {
+    try { const r = await fetch(httpBase() + "/timeline?points=300"); const j = await r.json(); tlPoints = j.points || []; } catch (_) {}
+    // the whole history at 1/16 is small: prefetch it so flights never hit an empty frame
+    for (let c = 0; (c + 1) * LOD_N[2] <= maxIndex && c < 300; c++) lodTile(2, c);
+  }
+  setTimeout(refreshTimeline, 1500); setInterval(refreshTimeline, 60000);
+  function timeAt(idx) {
+    const P = tlPoints;
+    if (!P.length) return null;
+    if (idx <= P[0][0]) return P[0][1];
+    for (let k = 1; k < P.length; k++) if (P[k][0] >= idx) {
+      const [i0, t0] = P[k - 1], [i1, t1] = P[k];
+      return t0 + (t1 - t0) * ((idx - i0) / Math.max(1, i1 - i0));
+    }
+    const [il, tl] = P[P.length - 1];
+    return tl + (idx - il) * (gpu && gpu.strip_seconds ? gpu.strip_seconds : 2);
+  }
+  function fmtTime(t) {
+    if (t == null) return "";
+    const d = new Date(t * 1000), now = new Date();
+    const hm = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return d.toDateString() === now.toDateString() ? hm : d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + hm;
+  }
+  const tl = $("timeline"), tlHead = $("tl-head"), tlTip = $("tl-tip");
+  function centerIdx() { return (viewLeft() + viewWorld() / 2) / SW(); }
+  function updateTimeline() {
+    if (!tl || maxIndex < 1) return;
+    const f = Math.max(0, Math.min(1, centerIdx() / maxIndex));
+    tlHead.style.left = (f * 100) + "%";
+    tl.classList.toggle("away", !live);
+    $("tl-start").textContent = fmtTime(timeAt(0));
+  }
+  function fracFromEvent(ev) { const r = tl.getBoundingClientRect(); return Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)); }
+  function scrubTo(f) {
+    enterHistory();
+    panMode = "scrub"; panVel = 0;
+    panPos = Math.max(0, Math.min(maxPan(), f * maxIndex * SW() - viewWorld() / 2));
+  }
+  if (tl) {
+    let downX = 0, moved = false;
+    tl.addEventListener("pointermove", (ev) => {
+      const f = fracFromEvent(ev);
+      tlTip.textContent = f > 0.995 ? "Live" : fmtTime(timeAt(f * maxIndex));
+      tlTip.style.left = (f * 100) + "%";
+      if (tlScrub) { if (Math.abs(ev.clientX - downX) > 3) moved = true; if (moved) scrubTo(f); }
+    });
+    tl.addEventListener("pointerdown", (ev) => { tlScrub = true; moved = false; downX = ev.clientX; tl.setPointerCapture(ev.pointerId); tl.classList.add("active"); ev.stopPropagation(); });
+    const end = (ev) => {
+      if (!tlScrub) return;
+      tlScrub = false; tl.classList.remove("active");
+      const f = fracFromEvent(ev);
+      if (f > 0.995) { startReturn(); return; }
+      if (!moved) { const i = Math.round(f * maxIndex); jumpTo(i); }
+      else { panMode = "glide"; panVel = 0; }
+    };
+    tl.addEventListener("pointerup", end);
+    tl.addEventListener("pointercancel", end);
+  }
+  function jumpTo(idx) {
+    enterHistory();
+    const target = Math.max(0, Math.min(maxPan(), idx * SW() - viewWorld() / 2));
+    seek = { from: shownPan(), to: target, t0: performance.now(), dur: Math.min(1600, 500 + Math.sqrt(Math.abs(target - shownPan())) * 6) };
+    panMode = "seek"; panVel = 0;
+  }
+  window.TapestryJump = jumpTo;
+
   function frame(ts) {
     if (!lastTs) lastTs = ts;
     const dt = Math.min(0.1, (ts - lastTs) / 1000);
@@ -195,7 +301,19 @@
       liveScroll = livePos - viewWorld();
     }
     stepPan(dt);
+    {
+      const L = viewLeft() + viewWorld() / 2;
+      if (prevCenter !== null && dt > 0) {
+        const v = (L - prevCenter) / dt;
+        velS += (v - velS) * Math.min(1, dt * 10);
+      }
+      prevCenter = L;
+      const zt = 1 - Math.min(0.62, Math.max(0, (Math.abs(velS) - 500) / 5200));
+      zoom += (zt - zoom) * Math.min(1, dt * (zt < zoom ? 7 : 3.2));   // out fast, back in gently
+      if (Math.abs(zoom - 1) < 0.001) zoom = 1;
+    }
     draw();
+    updateTimeline();
     hudTimer += dt;
     if (hudTimer > 0.5) { hudTimer = 0; updateHud(srvSpeed, livePos === null ? 0 : panoramaWidth() - livePos); }
     requestAnimationFrame(frame);
@@ -217,34 +335,56 @@
       const ps = pendingSeek; pendingSeek = null;
       setTimeout(() => seekTo(ps[0], ps[1]), document.body.classList.contains("intro") ? 2400 : 300);
     }
-    const s = scale();
-    const left = viewLeft();
+    const s0 = scale();
+    const s = s0 * zoom;
+    const center = viewLeft() + viewWorld() / 2;
+    const left = center - (w / s) / 2;
+    const yOff = (h - config.height * s) / 2;
     const firstIdx = Math.max(0, Math.floor(left / SW()) - 1);
-    const lastIdx = Math.ceil((left + viewWorld()) / SW()) + 1;
+    const lastIdx = Math.ceil((left + w / s) / SW()) + 1;
+    const fast = Math.abs(velS) > 1600;
     ctx.save();
+    ctx.translate(0, yOff);
     ctx.scale(s, s);
-    for (let i = firstIdx; i <= Math.min(lastIdx, maxIndex); i++) {
-      const e = strips.get(i);
-      if (!e) continue;
-      ensureDecoded(e);
-      if (!e.bitmap) continue;
-      ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
+    // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet.
+    if (zoom < 0.97 || fast) drawLod(left, w / s, zoom);
+    {
+      for (let i = firstIdx; i <= Math.min(lastIdx, maxIndex); i++) {
+        const e = strips.get(i);
+        if (!e) continue;
+        if (!fast) ensureDecoded(e);
+        if (!e.bitmap) continue;
+        ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
+      }
     }
     if (mark) {
       const age = (performance.now() - mark.t0) / 1000;
       const a = age < 0.6 ? age / 0.6 : age > 5.5 ? Math.max(0, 1 - (age - 5.5) / 1.5) : 1;
       if (a <= 0) mark = null;
       else {
-        const x0 = mark.from * SW() - left, x1 = (mark.to + 1) * SW() - left, H = h / s;
+        const x0 = mark.from * SW() - left, x1 = (mark.to + 1) * SW() - left, H = config.height;
         ctx.fillStyle = `rgba(0,0,0,${0.42 * a})`;
         ctx.fillRect(-10, 0, Math.max(0, x0 + 10), H);
-        ctx.fillRect(x1, 0, Math.max(0, viewWorld() - x1 + 10), H);
+        ctx.fillRect(x1, 0, Math.max(0, w / s - x1 + 10), H);
         ctx.fillStyle = `rgba(255,255,255,${0.75 * a})`;
         ctx.fillRect(x0, 6, x1 - x0, 1.2);
       }
     }
     ctx.restore();
-    requestMissing(firstIdx - 8, lastIdx + 2);
+    // Motion blur that scales with scrub velocity (cheap: smear the frame onto itself).
+    const blur = Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260)) * (window.devicePixelRatio || 1);
+    if (blur > 0.5) {
+      // Smear through a half-res scratch canvas (a canvas can't reliably draw onto itself).
+      if (!blurCv) { blurCv = document.createElement("canvas"); blurCtx = blurCv.getContext("2d"); }
+      const bw = w >> 1, bh = h >> 1;
+      if (blurCv.width !== bw || blurCv.height !== bh) { blurCv.width = bw; blurCv.height = bh; }
+      blurCtx.drawImage(canvas, 0, 0, bw, bh);
+      const dir = velS > 0 ? -1 : 1;
+      ctx.globalAlpha = 0.35; ctx.drawImage(blurCv, dir * blur, 0, w, h);
+      ctx.globalAlpha = 0.22; ctx.drawImage(blurCv, dir * blur * 2.2, 0, w, h);
+      ctx.globalAlpha = 1;
+    }
+    if (!fast && zoom > 0.9) requestMissing(firstIdx - 8, lastIdx + 2);
     evictFar(firstIdx, lastIdx);
   }
 
