@@ -349,7 +349,7 @@
   // The newest 2 strips on screen are staged as round dots: strip nearest the solid edge solidifying (70-100% settled),
   // the next assembling (0-70%), the rest streaming in from a point on the far right through a widening funnel.
   // Purely visual: livePos is never capped, so the scroll stays free-running.
-  const PSP = 9;   // world px between dots
+  const PSP = 8;   // world px between dots
   function stripParticles(e) {
     if (e.pt !== undefined) return e.pt;
     if (!e.bitmap) return null;
@@ -371,54 +371,35 @@
     }
     return (e.dl = c);
   }
-  let zA = null, zAc = null, zB = null, zBc = null, zMaskA = null, zMaskB = null;
   function drawStream(E, left, viewR, t) {
-    const Z = 2 * SW(), ZW = Math.ceil(Z) + 2, H = config.height;
-    if (!zA) { zA = document.createElement("canvas"); zAc = zA.getContext("2d"); zB = document.createElement("canvas"); zBc = zB.getContext("2d"); }
-    if (zA.width !== ZW || zA.height !== H) { zA.width = zB.width = ZW; zA.height = zB.height = H; zMaskA = zMaskB = null; }
-    if (!zMaskA) {
-      zMaskA = zAc.createLinearGradient(0, 0, ZW, 0);   // solid image resolving out of the dots near the edge
-      zMaskA.addColorStop(0, "rgba(0,0,0,1)"); zMaskA.addColorStop(0.28, "rgba(0,0,0,.35)"); zMaskA.addColorStop(0.5, "rgba(0,0,0,0)"); zMaskA.addColorStop(1, "rgba(0,0,0,0)");
-      zMaskB = zBc.createLinearGradient(0, 0, ZW, 0);   // settled dots: dense near the edge, thinning toward the stream
-      zMaskB.addColorStop(0, "rgba(0,0,0,.25)"); zMaskB.addColorStop(0.2, "rgba(0,0,0,1)"); zMaskB.addColorStop(0.5, "rgba(0,0,0,.75)"); zMaskB.addColorStop(1, "rgba(0,0,0,0)");
-    }
-    // Rebuild the composited layers only every ~6 frames (content is world-locked, the masks drift a few px at most).
-    drawStream.n = (drawStream.n || 0) + 1;
-    if (drawStream.Eb !== undefined && drawStream.n % 6 !== 0 && Math.abs(E - drawStream.Eb) < SW() * 0.2) {
-      if (!window.__nz) { ctx.drawImage(zA, drawStream.Eb - left, 0); ctx.drawImage(zB, drawStream.Eb - left, 0); }
-      return drawFlight(E, Z, H, left, viewR, t);
-    }
-    drawStream.Eb = E;
-    zAc.globalCompositeOperation = zBc.globalCompositeOperation = "source-over";
-    zAc.clearRect(0, 0, ZW, H); zBc.clearRect(0, 0, ZW, H);
-    const k0 = Math.floor(E / SW()), k1 = Math.floor((E + Z) / SW());
-    const live = [];
+    // Faithful to the approved prototype: strip 1 past the edge solidifying (70-100% of dots settled, swelling together),
+    // strip 2 assembling (0-70%), the rest streaming in from a point beyond the right through a widening funnel.
+    const Z = 2 * SW(), H = config.height, sx = E + Z + SW() * 0.1, sy = H / 2;
+    const k0 = Math.floor(E / SW()), k1 = Math.floor(Math.min(viewR, E + Z) / SW());
     for (let k = k0; k <= k1; k++) {
-      const e = strips.get(k); if (!e || !e.bitmap) continue;
-      const x = k * SW() - E;
-      if (!e.imgc) { e.imgc = document.createElement("canvas"); e.imgc.width = e.bitmap.width; e.imgc.height = e.bitmap.height; e.imgc.getContext("2d").drawImage(e.bitmap, 0, 0); }
-      zAc.drawImage(e.imgc, x - e.overlap, 0);
-      const dl = stripDotLayer(e); if (dl) zBc.drawImage(dl, x, 0);
-      live.push([k, e]);
-    }
-    zAc.globalCompositeOperation = zBc.globalCompositeOperation = "destination-in";
-    zAc.fillStyle = zMaskA; zAc.fillRect(0, 0, ZW, H); zBc.fillStyle = zMaskB; zBc.fillRect(0, 0, ZW, H);
-    if (!window.__nz) { ctx.drawImage(zA, E - left, 0); ctx.drawImage(zB, E - left, 0); }
-    drawFlight(E, Z, H, left, viewR, t);
-  }
-  function drawFlight(E, Z, H, left, viewR, t) {
-    // in-flight dots: a thin stream from just past the right edge fanning out onto the far half of the zone
-    const sx = viewR + SW() * 0.15, sy = H / 2, N = window.__nf ? 0 : 520;
-    for (let n = 0; n < N; n++) {
-      const h = phash(n, 7), h2 = phash(13, n), wx = E + Z * (0.35 + 0.65 * Math.sqrt(h));
-      const k = Math.floor(wx / SW()), e = strips.get(k), P = e && e.pt; if (!P) continue;
-      const a = Math.min(P.cols - 1, Math.floor((wx - k * SW()) / PSP)), r = Math.floor(h2 * P.rows), ty = r * PSP + PSP / 2;
-      const q = (t * (0.45 + 0.3 * h2) + h) % 1; if (q > 0.985) continue;
-      const ee = 1 - Math.pow(1 - q, 2.4), u = 1 - ee, cx = wx + (sx - wx) * 0.45, cy = sy + (ty - sy) * 0.12;
-      const x = u * u * sx + 2 * u * ee * cx + ee * ee * wx, y = u * u * sy + 2 * u * ee * cy + ee * ee * ty;
-      if (x > viewR + 4) continue;
-      ctx.globalAlpha = 0.2 + 0.6 * ee; ctx.fillStyle = P.col[r * P.cols + a];
-      ctx.beginPath(); ctx.arc(x - left, y, PSP * 0.36 * (0.35 + 0.55 * ee), 0, 6.283); ctx.fill();
+      const e = strips.get(k), P = e && stripParticles(e); if (!P) continue;
+      for (let a = 0; a < P.cols; a++) {
+        const wx = k * SW() + a * PSP + PSP / 2;
+        if (wx < E || wx > E + Z || wx > viewR + PSP) continue;
+        const st = (wx - E) / Z, settled = st < 0.5 ? 1 - 0.6 * st : 1.4 * (1 - st), wc = Math.round(wx / PSP);
+        const grow0 = st < 0.5 ? 1 + 0.9 * (1 - st * 2) : 0.85;
+        for (let r = 0; r < P.rows; r++) {
+          const h = phash(wc, r), ty = r * PSP + PSP / 2, col = P.col[r * P.cols + a];
+          let x = wx, y = ty, grow = grow0, al = 0.9;
+          if (h >= settled) {
+            const h2 = phash(r, wc + 91), q = (t * (0.45 + 0.3 * h2) + h) % 1;
+            if (q > 0.985 || h2 > 0.6) continue;   // thin the in-flight set
+            const ee = 1 - Math.pow(1 - q, 2.4), u = 1 - ee, cx = wx + (sx - wx) * 0.45, cy = sy + (ty - sy) * 0.12;
+            x = u * u * sx + 2 * u * ee * cx + ee * ee * wx; y = u * u * sy + 2 * u * ee * cy + ee * ee * ty;
+            grow = 0.3 + 0.5 * ee; al = 0.2 + 0.6 * ee;
+            if (x > viewR + PSP) continue;
+          }
+          const rad = PSP * 0.45 * grow;
+          ctx.fillStyle = col;
+          if (al < 0.9) { ctx.globalAlpha = al * 0.3; ctx.beginPath(); ctx.arc(x - left, y, rad * 1.9, 0, 6.283); ctx.fill(); ctx.globalAlpha = al; ctx.beginPath(); ctx.arc(x - left, y, rad * 0.8, 0, 6.283); ctx.fill(); }
+          else { ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(x - left, y, rad * 1.05, 0, 6.283); ctx.fill(); }   // settled: one soft-sized disc
+        }
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -651,9 +632,9 @@
     }
     const s0 = scale();
     const s = s0 * zoom * ribbon;
-    const center = viewLeft() + viewWorld() / 2;
+    const center = viewLeft() + viewWorld() / 2 - 2 * SW();   // render offset: the newest 2 strips stay off-screen (staging zone)
     // Never show blank canvas past the painted edge when the ribbon widens the view.
-    const fullRight = viewLeft() + viewWorld();
+    const fullRight = viewLeft() + viewWorld() - 2 * SW();
     const left = Math.max(0, (center - (w / s) / 2) * (1 - ribbonAnchor) + (fullRight - w / s) * ribbonAnchor);
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
     if (window.__probe) window.__probe.push(left);

@@ -407,7 +407,7 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
   body.more-open .cmd #hide-btn { animation-delay: .04s; } body.more-open .cmd #fullscreen-btn { animation-delay: .06s; } body.more-open .cmd #export-btn { animation-delay: .08s; }
 
   /* compose: the pill grows into a sheet with attach / queue·now / send */
-  body.composing .veil { opacity: 1; background: linear-gradient(to bottom, transparent 30%, rgba(var(--shade),.55)); }
+  body.composing .veil { opacity: 1; background: linear-gradient(to bottom, transparent 35%, color-mix(in srgb, var(--bg) 62%, transparent)); transition: opacity .45s var(--ease); }   /* same hue as the page: no tint shift */
   body.composing .dock { bottom: calc(12px + var(--sb)); }
   body.composing .dock .now { display: none; }
   body.composing .cmd { height: auto; flex-wrap: wrap; padding: 14px 10px 10px 18px; border-radius: 24px; background: var(--glass-strong); row-gap: 8px; }
