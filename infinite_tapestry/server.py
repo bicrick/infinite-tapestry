@@ -122,9 +122,22 @@ class RateLimiter:
 
 
 def client_ip(ws: WebSocket) -> str:
-    fwd = ws.headers.get("x-forwarded-for") or ws.headers.get("cf-connecting-ip") or ""
+    """Real client IP from the trusted proxy hop.
+
+    RunPod's proxy sets ``cf-connecting-ip`` (and sometimes ``x-real-ip``). A
+    viewer can spoof ``X-Forwarded-For``'s leftmost value to bypass the
+    per-IP connection cap, so that header is only used as a last resort, and
+    then from the rightmost (proxy-appended) hop.
+    """
+    for h in ("cf-connecting-ip", "true-client-ip", "x-real-ip"):
+        v = (ws.headers.get(h) or "").strip()
+        if v:
+            return v.split(",")[0].strip()
+    fwd = (ws.headers.get("x-forwarded-for") or "").strip()
     if fwd:
-        return fwd.split(",")[0].strip()
+        parts = [p.strip() for p in fwd.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     return ws.client.host if ws.client else "?"
 
 

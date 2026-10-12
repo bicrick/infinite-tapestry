@@ -21,8 +21,21 @@ async function userFromToken(token) {
   return { id: u.id, email: u.email, handle: rows[0] && rows[0].handle, is_admin: !!(rows[0] && rows[0].is_admin) };
 }
 
+/** Client IP from headers the edge sets; never trust a bare spoofable XFF alone. */
+function clientIp(req) {
+  const h = req.headers || {};
+  for (const k of ["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-vercel-forwarded-for"]) {
+    const v = String(h[k] || "").split(",")[0].trim();
+    if (v) return v;
+  }
+  // Vercel (and most edges) put the real client first in x-forwarded-for.
+  const fwd = String(h["x-forwarded-for"] || "").split(",")[0].trim();
+  if (fwd) return fwd;
+  return String(req.socket?.remoteAddress || "").replace(/^::ffff:/, "").trim();
+}
+
 function ipHash(req) {
-  const ip = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim();
+  const ip = clientIp(req);
   return crypto.createHash("sha256").update(ip + "|" + env("IP_HASH_SALT", "tapestry")).digest("hex").slice(0, 32);
 }
 
@@ -112,4 +125,4 @@ function storagePrefixes() {
   return [...new Set([env("TAPESTRY_STORAGE_PREFIX", "live-sdxl"), "live-sdxl", "live"])];
 }
 
-module.exports = { env, rest, userFromToken, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };
+module.exports = { env, rest, userFromToken, clientIp, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };

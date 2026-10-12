@@ -56,7 +56,9 @@ class Config:
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
-    jpeg_quality: int = 85
+    jpeg_quality: int = 85  # used when strip_format == "jpeg"
+    strip_format: str = "webp"  # "webp" (~50% of jpeg q85) or "jpeg"
+    webp_quality: int = 80
 
     # Prompt schedule: (cumulative_strips_at_which_prompt_starts, prompt)
     # Prompt drifts between consecutive entries based on strip index.
@@ -89,6 +91,12 @@ class Config:
         if self.buffer_target < self.buffer_min:
             raise ValueError("buffer_target must be >= buffer_min")
 
+    def strip_ext(self) -> str:
+        return "webp" if (self.strip_format or "").lower() == "webp" else "jpg"
+
+    def strip_mime(self) -> str:
+        return "image/webp" if self.strip_ext() == "webp" else "image/jpeg"
+
     def client_dict(self) -> dict[str, Any]:
         """Subset of config the browser needs."""
         return {
@@ -99,6 +107,8 @@ class Config:
             "scroll_speed_min": self.scroll_speed_min,
             "buffer_target": self.buffer_target,
             "buffer_min": self.buffer_min,
+            "strip_ext": self.strip_ext(),
+            "strip_mime": self.strip_mime(),
         }
 
     def to_dict(self) -> dict[str, Any]:
