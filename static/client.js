@@ -630,9 +630,9 @@
       }
     }
     if (!fast && zoom > 0.9 && left + w / s > panoramaWidth() - SW() * 4) {   // Live right edge: the newest ~strip crystallizes out of dense, resolved dots (never pops in).
-      const zw = SW() * 1.1, zr = left + w / s, zl = zr - zw, ink = lightMq && lightMq.matches;
+      const zw = SW() * 0.8, zr = left + w / s, zl = zr - zw, ink = lightMq && lightMq.matches;
       const g = ctx.createLinearGradient(zl - left, 0, zr - left, 0);
-      g.addColorStop(0, EMPTY + "00"); g.addColorStop(0.55, EMPTY + "99"); g.addColorStop(1, EMPTY + "f2");
+      g.addColorStop(0, EMPTY + "00"); g.addColorStop(0.6, EMPTY + "66"); g.addColorStop(1, EMPTY + "e6");
       ctx.fillStyle = g; ctx.fillRect(zl - left, 0, zw + 1, config.height);
       // Cached per-strip dot layers composited through one bell-shaped alpha mask (a handful of draw calls per frame).
       const zW = Math.ceil(zw) + 2, zH = config.height;
@@ -645,7 +645,7 @@
       }
       if (!zoneMask) {
         zoneMask = zoneCtx.createLinearGradient(0, 0, zW, 0);
-        for (let t = 0; t <= 1.0001; t += 0.1) zoneMask.addColorStop(Math.min(1, t), `rgba(0,0,0,${(Math.sin(Math.PI * Math.min(1, t * 1.15)) * 0.9).toFixed(3)})`);
+        for (let t = 0; t <= 1.0001; t += 0.1) zoneMask.addColorStop(Math.min(1, t), `rgba(0,0,0,${(Math.sin(Math.PI * Math.min(1, t * 1.15)) * 0.6).toFixed(3)})`);
       }
       zoneCtx.globalCompositeOperation = "destination-in"; zoneCtx.fillStyle = zoneMask; zoneCtx.fillRect(0, 0, zW, zH);
       ctx.drawImage(zoneCv, zl - left, 0);
