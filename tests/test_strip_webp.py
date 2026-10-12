@@ -39,7 +39,7 @@ def test_webp_encode_about_half_of_jpeg():
     c_jpg = Config(mock=True, height=im.height, window_width=512, strip_width=128, overlap=32,
                    buffer_target=2, buffer_min=1, strip_format="jpeg", jpeg_quality=85)
     c_web = Config(mock=True, height=im.height, window_width=512, strip_width=128, overlap=32,
-                   buffer_target=2, buffer_min=1, strip_format="webp", webp_quality=80)
+                   buffer_target=2, buffer_min=1, strip_format="webp", webp_quality=65)
     jpg = StripGenerator(c_jpg, MockInpainter(c_jpg), StripBuffer(2, 1))._encode_jpeg(im)
     web = StripGenerator(c_web, MockInpainter(c_web), StripBuffer(2, 1))._encode_jpeg(im)
     assert _strip_ext(web) == "webp" and _strip_ext(jpg) == "jpg"

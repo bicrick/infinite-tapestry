@@ -57,8 +57,8 @@ class Config:
     host: str = "0.0.0.0"
     port: int = 8000
     jpeg_quality: int = 85  # used when strip_format == "jpeg"
-    strip_format: str = "webp"  # "webp" (~50% of jpeg q85) or "jpeg"
-    webp_quality: int = 80
+    strip_format: str = "webp"  # "webp" q65 (~50% of jpeg q85) or "jpeg"
+    webp_quality: int = 65
 
     # Prompt schedule: (cumulative_strips_at_which_prompt_starts, prompt)
     # Prompt drifts between consecutive entries based on strip index.

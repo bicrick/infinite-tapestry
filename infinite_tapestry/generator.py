@@ -148,7 +148,7 @@ class StripGenerator:
         logger.info("Generator thread stopped")
 
     def _encode_jpeg(self, image: Image.Image) -> bytes:
-        """Encode a strip for CDN/disk. Default WebP q80 ≈ half the JPEG q85 bytes."""
+        """Encode a strip for CDN/disk. Default WebP q65 ≈ half the JPEG q85 bytes."""
         buf = io.BytesIO()
         if (self.config.strip_format or "").lower() == "webp":
             image.save(buf, format="WEBP", quality=self.config.webp_quality, method=4)
