@@ -63,8 +63,13 @@ function turnstileToken() {   // invisible Cloudflare Turnstile, only when confi
   tsReady = tsReady || new Promise((ok) => { const sc = document.createElement("script"); sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; sc.onload = ok; sc.onerror = ok; document.head.appendChild(sc); });
   return tsReady.then(() => new Promise((ok) => {
     if (!window.turnstile) return ok(null);
-    const box = document.createElement("div"); box.style.cssText = "position:fixed;bottom:0;left:0;opacity:0;pointer-events:none"; document.body.appendChild(box);
-    window.turnstile.render(box, { sitekey: CFG.turnstileSiteKey, appearance: "interaction-only", callback: (t) => { box.remove(); ok(t); }, "error-callback": () => { box.remove(); ok(null); } });
+    // Invisible by default; if Cloudflare wants a click, show the widget above the composer.
+    const box = document.createElement("div"); box.className = "ts-box"; box.style.cssText = "position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:60;opacity:0;pointer-events:none;transition:opacity .2s"; document.body.appendChild(box);
+    let done = false; const fin = (t) => { if (done) return; done = true; clearTimeout(to); setTimeout(() => box.remove(), 0); ok(t); };
+    const to = setTimeout(() => fin(null), 30000);
+    window.turnstile.render(box, { sitekey: CFG.turnstileSiteKey, appearance: "interaction-only", callback: fin,
+      "before-interactive-callback": () => { clearTimeout(to); box.style.opacity = "1"; box.style.pointerEvents = "auto"; },
+      "error-callback": () => fin(null), "expired-callback": () => fin(null), "timeout-callback": () => fin(null) });
   }));
 }
 async function submitAsGuest(text) {
