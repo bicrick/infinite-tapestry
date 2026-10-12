@@ -78,7 +78,7 @@
 
   const SW = () => config.strip_width;
   // Portrait phones: the tapestry is a centred horizontal band (letterboxed), not a zoomed-in slice.
-  const RIBBON = 0.6; let ribbon = (innerHeight > innerWidth * 1.15 || matchMedia("(max-width: 560px)").matches) ? 1 : RIBBON, ribbonAnchor = 1;
+  const RIBBON = 0.6; let ribbon = innerHeight > innerWidth * 1.15 ? 1 : RIBBON, ribbonAnchor = 1;
   const portrait = () => canvas.height > canvas.width * 1.15;
   const BAND_ASPECT = 1.25;   // band width : height
   const scale = () => (portrait() ? Math.min(canvas.height, canvas.width / BAND_ASPECT) : canvas.height) / Math.max(1, config.height);
@@ -286,7 +286,7 @@
   let corr = 0, lastClockAt = 0;
 
   const COARSE = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
-  const PHONE = matchMedia("(max-width: 560px)");
+  const PHONE = matchMedia("all");   // desktop mirrors the phone experience
   let wheelGlide = false, landAt = 0;    // haptic-wheel flick: long, low-friction coast (iOS picker feel)
   let zoom = 1, zoomVel = 0, velS = 0, prevCenter = null, blurCv = null, blurCtx = null;
 
@@ -515,7 +515,7 @@
       const zt = 1;   // no zoom-out while scrubbing anywhere (blur + wheel label instead)
       // Desktop ribbon: while the chrome is up the band eases down to a ribbon; idle -> full bleed.
       const b = document.body.classList;
-      const rt = !portrait() && !PHONE.matches && !b.contains("idle") && !b.contains("immersive") ? RIBBON : 1;
+      const rt = !portrait() && !document.fullscreenElement && !b.contains("immersive") ? RIBBON : 1;   // ribbon always; full only via the fullscreen button
       ribbon += (rt - ribbon) * (1 - Math.exp(-dt * 4.2));
       if (Math.abs(ribbon - rt) < 0.0008) ribbon = rt;
       ribbonAnchor += ((panMode === "live" || panMode === "return" ? 1 : 0) - ribbonAnchor) * Math.min(1, dt * 5);
@@ -593,6 +593,23 @@
       }
     }
     ctx.restore();
+    {   // Past the newest painted strip (only reachable by over-scrolling live): crystallizing dots, never blank.
+      const edgeX = (panoramaWidth() - left) * s;
+      if (edgeX < w) {
+        const x0 = Math.max(0, edgeX), bh = config.height * s;
+        ctx.fillStyle = EMPTY; ctx.fillRect(x0, yOff, w - x0, bh);
+        const sp = 7 * s, t = performance.now() / 1000, ink = lightMq && lightMq.matches ? "20,20,24" : "255,255,255";
+        const i0 = Math.floor((x0 / s + left) / 7), i1 = Math.ceil((w / s + left) / 7), rows = Math.ceil(config.height / 7);
+        for (let i = i0; i <= i1; i++) for (let j = 0; j < rows; j++) {
+          let hh = (i * 374761393 + j * 668265263) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
+          if (r > 0.16) continue;
+          const x = (i * 7 + r * 40 - left) * s; if (x < x0) continue;
+          const near = Math.max(0, 1 - (x - edgeX) / (60 * s));                 // denser, brighter right at the edge: about to coalesce
+          ctx.fillStyle = `rgba(${ink},${(0.18 + 0.3 * r * 6 + 0.35 * near) * (0.75 + 0.25 * Math.sin(t * 2 + r * 50))})`;
+          ctx.fillRect(x, yOff + (j + r * 6 % 1) * sp, 1.5 * (window.devicePixelRatio || 1), 1.5 * (window.devicePixelRatio || 1));
+        }
+      }
+    }
     if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
     else if (ribbon < 0.999) {   // desktop ribbon: same reflection/glow as the phone band, fading out as it expands
       const sa = surroundA, k = (1 - ribbon) / (1 - RIBBON); surroundA = sa * k * k * (3 - 2 * k);
@@ -771,6 +788,7 @@
         }
         panPos += panVel * dt;
         if (Math.abs(panVel) < 4) { panVel = 0; wheelGlide = false; }
+        if (panPos >= hi - SW() * 0.25) { startReturn(); return; }   // reached the front: snap back into live
         // Drift: once settled and the high-res strips are in, resume the slow forward drift with a
         // gelatinous spring ramp (0 → drift speed over ~1-1.5s, slight overshoot), never a jump.
         if (Math.abs(panVel) < 4 && !gesture && !tlScrub) {
@@ -866,7 +884,7 @@
     const isTap = g && g.moved < 8 && performance.now() - g.t0 < 350;
     if (isTap && ev.type === "pointerup") {
       // A tap toggles the chrome. (Pointerdown already revealed it if it was hidden.)
-      if (!g.wasIdle) setTimeout(() => document.body.classList.add("idle"), 0);
+      if (!g.wasIdle && COARSE) setTimeout(() => document.body.classList.add("idle"), 0);
     }
     if (g && g.touch) return;
     if (g && g.armed) {
@@ -1390,7 +1408,7 @@
 // ---------- phones: slim pill → compose sheet, overflow, sheet drag-to-dismiss, chat in a sheet ----------
 (() => {
   const $ = (id) => document.getElementById(id);
-  const phone = matchMedia("(max-width: 560px)");
+  const phone = matchMedia("all");
   const body = document.body, cmd = $("cmd"), input = $("cmd-input"), more = $("more-btn"), drawer = $("drawer");
   if (!cmd || !more) return;
   // Compose: focusing the pill turns the dock into a sheet with attach + queue/now + send.

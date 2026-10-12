@@ -130,7 +130,7 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border: 0; bord
 .toggle input:checked + span { background: rgba(var(--ink),.45); }
 .toggle input:checked + span::after { transform: translateX(10px); }
 
-@media (max-width: 560px) {
+@media all {
   .seg[role=group] { display: none; }
   .top { padding: 16px 18px; }
   .dock { bottom: 16px; }
@@ -222,7 +222,7 @@ body.is-admin .chat-list li:hover .mod { display: inline; }
 .sleep .tiers { justify-content: center; }
 .sleep .tiers button { flex: 0 0 76px; }
 body.sleeping #view { filter: blur(6px) brightness(.6) saturate(.8); transition: filter 1.2s var(--ease); }
-@media (max-width: 720px) { .chat { display: none; } }
+@media all { .chat { display: none; } }
 /* viewers can't steer the stage directly in production */
 body.social:not(.is-admin) #queue-list .acts,
 body.social:not(.is-admin) .drawer-foot,
@@ -329,7 +329,7 @@ a.p-thumb:hover img { transform: scale(1.04); }
 .p-actions a:hover, .p-actions button:hover { color: var(--fg); }
 .p-empty { color: var(--muted); padding: 60px 0; text-align: center; }
 body.page .toast { position: fixed; }
-@media (max-width: 640px) {
+@media all {
   .profile { padding: 40px 18px 80px; }
   .p-head h1 { font-size: 30px; }
   .p-card { grid-template-columns: 1fr; gap: 12px; }
@@ -342,7 +342,7 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
 
 /* ---------- phones: one-line header, timeline below the dock, safe areas ---------- */
 .top-right > * { white-space: nowrap; }
-@media (max-width: 560px) {
+@media all {
   .top { padding: calc(14px + env(safe-area-inset-top)) 16px 14px; gap: 10px; }
   .brand { font-size: 0; gap: 0; }            /* mark only */
   .brand-mark { width: 22px; height: 22px; }
@@ -364,7 +364,7 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
 #panel-chat .chat-list li { font-size: 14px; text-shadow: none; }
 #panel-chat #chat-form input { width: 100%; height: 44px; font-size: 16px; }
 .grab { display: none; }
-@media (max-width: 560px) {
+@media all {
   :root { --pad: 16px; --sb: env(safe-area-inset-bottom); }
   .phone-only { display: grid; }
   .phone-tab { display: inline-block; }
@@ -454,12 +454,12 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
   .tl-tip { bottom: 34px; font-size: 13px; padding: 6px 10px; }
   .timeline.active .tl-tip { opacity: 1; }
 }
-@media (max-width: 560px) and (pointer: coarse) {
+@media (pointer: coarse) {
   .timeline { bottom: max(0px, calc(var(--sb) - 10px)); }
   .dock { bottom: calc(40px + var(--sb)); }
   body.composing .dock { bottom: calc(12px + var(--sb)); }
 }
-@media (max-width: 560px) {
+@media all {
   body.composing .cmd .send { margin-left: auto; }
   body.more-open .dock .now { visibility: hidden !important; }
 }
@@ -469,20 +469,20 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
 .chips::-webkit-scrollbar { display: none; }
 .chips button { flex: none; height: 32px; padding: 0 13px; border-radius: 16px; border: 1px solid var(--line); background: rgba(var(--ink),.04); color: var(--muted); font-size: 13px; cursor: pointer; transition: background .2s, color .2s, border-color .2s; }
 .chips button.on { background: var(--solid); color: var(--on-solid); border-color: var(--solid); }
-@media (max-width: 560px) {
+@media all {
   body.composing .chips { display: flex; order: 1; flex: 1 0 100%; margin: 0 -10px 0 -2px; padding-right: 10px; }
   body.composing #cmd-input { order: 0; }
   body.composing .dock { bottom: calc(12px + max(var(--sb), var(--kb, 0px))); }
 }
 .me-link { margin-left: 4px; padding: 0 10px; min-height: 44px; display: inline-flex; align-items: center; color: var(--muted); text-decoration: none; font-size: 15px; }
 .me-link:hover { color: var(--fg); }
-@media (min-width: 561px) { .me-link { font-size: 13px; min-height: 0; } }
+
 
 /* landscape phones: immersive full-bleed, chrome only on tap */
 body.immersive .veil { opacity: 0; }
 body.immersive .dock { width: min(560px, calc(100vw - 2 * max(16px, env(safe-area-inset-left)))); bottom: calc(14px + env(safe-area-inset-bottom)); }
 body.immersive .top { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
-@media (max-width: 560px) { body.composing .cmd .chips { display: flex !important; flex-wrap: nowrap; } body.composing .cmd .chips button { width: auto; } }
+@media all { body.composing .cmd .chips { display: flex !important; flex-wrap: nowrap; } body.composing .cmd .chips button { width: auto; } }
 
 /* ---------- sign-in ---------- */
 button.google { display: flex; align-items: center; justify-content: center; gap: 10px; height: 46px; border-radius: 12px; border: 0; background: #fff; color: #111; font-weight: 500; cursor: pointer; }
@@ -502,7 +502,7 @@ button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { op
 
 /* ---------- portrait band: ambient info in the dark space ---------- */
 .amb { display: none; } .status-mini { display: none; }
-@media (max-width: 560px) and (orientation: portrait) {
+@media all {
   .amb { display: block; position: fixed; inset: 0; pointer-events: none; z-index: 1; }
   .amb-top { position: absolute; left: 0; right: 0; top: calc(var(--band-top, 30vh) * .5 + 14px); transform: translateY(-50%);
     display: flex; flex-direction: column; align-items: center; gap: 9px; }
@@ -536,7 +536,7 @@ button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { op
 .now-time:empty { display: none; }
 body.hist-cap .dock .now .bar { visibility: hidden; }
 .amb-time { display: none; }
-@media (max-width: 560px) and (orientation: portrait) {
+@media all {
   .amb-time { display: block; position: absolute; left: 0; right: 0; top: calc(var(--band-bot, 70vh) + 44px); text-align: center;
     font-size: 11px; color: rgba(var(--ink),.32); font-variant-numeric: tabular-nums; letter-spacing: .04em; transition: opacity .35s; }
 }
@@ -618,7 +618,7 @@ body.offline-on #intro, body.offline-on .ui, body.offline-on .amb { opacity: 0 !
 @keyframes kept-in { to { opacity: .9; transform: none; } }
 body.intro .kept, body.ambient .kept { opacity: 0; }
 body.idle .kept { opacity: .45; }
-@media (max-width: 700px) { .kept { top: calc(46px + env(safe-area-inset-top, 0px)); font-size: 11px; } }
+@media all { .kept { top: calc(46px + env(safe-area-inset-top, 0px)); font-size: 11px; } }
 
 .nudge { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; pointer-events: none; }
 .nudge::before { content: ""; position: absolute; inset: 0; background: rgba(5,5,7,.28); opacity: 0; transition: opacity .35s ease; }
@@ -686,7 +686,7 @@ body.idle .kept { opacity: .45; }
 .share-toast .st-btn { background: var(--solid); color: var(--on-solid); border: 0; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer; min-width: 74px; }
 .share-toast .st-btn.ok { background: rgba(var(--ink),.16); color: var(--fg); }
 .share-toast .st-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 6px; }
-@media (pointer: coarse), (max-width: 720px) {
+@media all {
   .react-bar { right: 10px; bottom: calc(150px + env(safe-area-inset-bottom)); opacity: .8; }
   .react-bar button { padding: 6px 7px; font-size: 18px; }
   .react-layer { width: 160px; bottom: 190px; }
@@ -711,7 +711,7 @@ body.idle .kept { opacity: .45; }
 
 /* ---------- haptic wheel (phones) ---------- */
 .hwheel { display: none; }
-@media (max-width: 560px) {
+@media all {
   .hwheel { display: block; position: fixed; left: 0; right: 0; bottom: max(0px, calc(var(--sb) - 6px)); height: 40px; z-index: 22; touch-action: none;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); }
   .hwheel canvas { width: 100%; height: 100%; display: block; }
@@ -736,25 +736,25 @@ body.react-open .react-tray { opacity: 1; transform: none; pointer-events: auto;
 #react-btn svg { fill: none; }
 body.react-open #react-btn { background: rgba(var(--ink),.1); }
 body.react-open .dock .now { visibility: hidden; }
-@media (max-width: 560px) {
+@media all {
   .react-tray { right: 50%; transform: translate(50%, 6px) scale(.98); transform-origin: 50% 100%; }
   body.react-open .react-tray { transform: translate(50%, 0); }
   .react-tray button { padding: 8px 9px; font-size: 22px; }
   body.composing #react-btn { display: none !important; }
   .react-layer { width: 120px; bottom: calc(160px + var(--sb, 0px)); height: 50vh; }
 }
-@media (max-width: 560px) {
+@media all {
   .hwheel { transition: opacity .6s var(--ease); }
   body.idle .hwheel { opacity: .35; }              /* stays grabbable while the chrome rests */
   body.intro .hwheel { opacity: 0; pointer-events: none; }
 }
 body.react-open .cmd-terms { display: none !important; }
-@media (max-width: 560px) {
+@media all {
   /* floats live in the quiet space between the pill and the caption, never over it */
   .react-layer { right: 0; width: 110px; bottom: calc(150px + var(--sb, 0px)); height: 130px; --rise: -120px; }
 }
 .wheel-label { display: none; }
-@media (max-width: 560px) {
+@media all {
   .wheel-label { display: block; position: fixed; left: 50%; bottom: calc(44px + max(0px, var(--sb, 0px) - 6px)); z-index: 23; pointer-events: none;
     transform: translate(-50%, 4px); opacity: 0; transition: opacity .25s var(--ease), transform .3s var(--ease);
     padding: 5px 11px; border-radius: 999px; font-size: 12px; letter-spacing: -.005em; white-space: nowrap; max-width: 78vw; overflow: hidden; text-overflow: ellipsis;
@@ -773,19 +773,19 @@ body.react-open .cmd-terms { display: none !important; }
 .nudge-line button { background: none; border: 0; color: inherit; opacity: .55; cursor: pointer; font-size: 14px; padding: 0 4px; line-height: 1; }
 .nudge-line button:hover { opacity: 1; }
 
-/* desktop: the haptic wheel replaces the scrub bar */
-@media (min-width: 561px) {
-  .hwheel { display: block; position: fixed; left: 50%; transform: translateX(-50%); width: min(720px, 70vw); bottom: 4px; height: 40px; z-index: 22; touch-action: none; cursor: ew-resize;
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-    transition: opacity .6s var(--ease); }
-  .hwheel canvas { width: 100%; height: 100%; display: block; }
-  body.idle .hwheel { opacity: 0; }
-  body.idle .hwheel:hover { opacity: .5; }
-  body.intro .hwheel, body.composing .hwheel { opacity: 0; pointer-events: none; }
-  .wheel-label { display: block; position: fixed; left: 50%; bottom: 48px; z-index: 23; pointer-events: none;
-    transform: translate(-50%, 4px); opacity: 0; transition: opacity .25s var(--ease), transform .3s var(--ease);
-    padding: 5px 11px; border-radius: 999px; font-size: 12px; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
-    background: var(--glass-strong); border: 1px solid var(--line); color: var(--fg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); font-variant-numeric: tabular-nums; }
-  .wheel-label.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* wide screens: same phone UI, centred and sized sensibly */
+@media (min-width: 700px) {
+  .dock { width: min(560px, calc(100vw - 32px)); }
+  .hwheel { left: 50%; right: auto; width: min(720px, 80vw); transform: translateX(-50%); }
+  .wheel-label { max-width: 50vw; }
 }
-@media (min-width: 561px) { .dock { bottom: 50px; } .wheel-label { bottom: 46px; } body:has(.wheel-label.on) .dock { opacity: 0; pointer-events: none; transition: opacity .2s var(--ease); } }
+.fs-btn { display: none; }
+@media (pointer: fine) {
+  .fs-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 999px;
+    background: none; color: rgba(var(--ink),.6); cursor: pointer; transition: color .2s, background .2s; }
+  .fs-btn:hover { color: var(--fg); background: rgba(var(--ink),.08); }
+  .fs-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+  body.idle .top .fs-btn { opacity: 0; pointer-events: none; transition: opacity .6s var(--ease); }
+}
+:fullscreen .ui:not(.top), :fullscreen .amb { opacity: 0 !important; pointer-events: none !important; }

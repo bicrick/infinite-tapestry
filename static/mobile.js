@@ -117,3 +117,6 @@
   const a = document.getElementById("now-time"), b = document.getElementById("amb-time");
   if (a && b) new MutationObserver(() => { b.textContent = a.textContent; }).observe(a, { childList: true, characterData: true, subtree: true });
 })();
+
+// Desktop fullscreen toggle (Esc exits natively).
+(() => { const b = document.getElementById("fs-btn"); if (!b) return; b.addEventListener("click", () => { if (document.fullscreenElement) document.exitFullscreen(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); }); })();
