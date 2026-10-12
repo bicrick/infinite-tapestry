@@ -30,7 +30,7 @@ function settle(a, b) {
 }
 async function health() {
   if (!POD()) return null;
-  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 3000);
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 7000);
   const r = await fetch(`https://${POD()}-8000.proxy.runpod.net/health`, { signal: ctl.signal }).catch(() => null);
   clearTimeout(t);
   return r && r.ok ? r.json().catch(() => null) : null;
