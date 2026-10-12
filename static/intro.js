@@ -56,7 +56,7 @@
       if (readyAt == null) readyAt = now;
       // Resolve once the visible span is (nearly) painted, so points densify everywhere at once, not from the live edge.
       const cov = v.coverage ? v.coverage() : 1;
-      if (!resolveAt && now - t0 > 500 && ((cov >= 0.9 && lum / (d.length / 16) / 3 > 12) || now - readyAt > 2500)) { resolveAt = now; }
+      if (!resolveAt && now - t0 > 500 && ((cov >= 0.75 && lum / (d.length / 16) / 3 > 12) || now - readyAt > 1200)) { resolveAt = now; }
       src = { d, cols, rows };
     }
     const p = resolveAt ? Math.min(1, (now - resolveAt) / RESOLVE) : 0;
