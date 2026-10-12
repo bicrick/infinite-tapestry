@@ -42,3 +42,13 @@ def test_drop_flagged_resumes_auto():
     assert d.state()["target"] == "bad idea"
     d.drop_flagged(1)
     assert d.state()["target"] is None
+
+
+def test_momentum_brief_steps():
+    from infinite_tapestry.autopilot import momentum_brief
+    u = {"origin": "user", "title": "Feces Plains", "source": "feces land"}
+    a = {"origin": "auto", "title": "x"}
+    assert "SAME WORLD" in momentum_brief([a, u])
+    assert "DRIFT" in momentum_brief([u, a, a])
+    assert momentum_brief([u] + [a] * 5) == ""
+    assert momentum_brief([a, a]) == ""
