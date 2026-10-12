@@ -27,6 +27,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def seam_score(img: Image.Image, x0: int, x1: int) -> float:
+    """Worst column-to-column jump in [x0, x1) relative to that region's median
+    gradient. Natural edges are rarely full-height; seams are, so we use the
+    per-column mean over all rows (a full-height edge dominates it)."""
+    import numpy as np
+
+    a = np.asarray(img.convert("RGB"), dtype=np.float32)[:, max(0, x0 - 8):x1]
+    g = np.abs(np.diff(a, axis=1)).mean(axis=(0, 2))
+    if g.size == 0:
+        return 0.0
+    return float(g.max() / (np.median(g) + 1.0))
+
+
 class StripGenerator:
     """Produces strips on a worker thread into a StripBuffer."""
 
@@ -128,19 +141,46 @@ class StripGenerator:
             strip_width=cfg.strip_width + margin,
             height=cfg.height,
         )
+        # Let the model repaint a band of the existing context too, so the new
+        # content grows out of it instead of meeting it at a hard mask edge.
+        band = min(cfg.repaint_band, ctx_w // 2) if self._strip_index > 0 else 0
+        if band:
+            import numpy as np
+
+            m = np.asarray(mask).copy()
+            m[:, ctx_w - band:] = 255
+            mask = Image.fromarray(m, mode="L")
         prompt_a, prompt_b, blend_t = self.director.frame_for(self._strip_index)
         shown_prompt = prompt_b if (prompt_b and blend_t >= 0.5) else prompt_a
         seed = cfg.seed + self._strip_index
 
-        generated = self.inpainter.generate(
-            image=window,
-            mask=mask,
-            prompt=prompt_a,
-            negative_prompt=self.director.negative_for(blend_t),
-            seed=seed,
-            prompt_b=prompt_b,
-            t=blend_t,
-        )
+        # SD sometimes paints a hard vertical "panel" edge instead of growing
+        # out of the context (most often mid-transition). Score each attempt by
+        # its worst column discontinuity in the repainted region and retry with
+        # a new seed if it looks like a cut; keep the best attempt.
+        attempts = 1 if cfg.mock else max(1, cfg.seam_retries + 1)
+        best, best_score = None, None
+        for k in range(attempts):
+            cand = self.inpainter.generate(
+                image=window,
+                mask=mask,
+                prompt=prompt_a,
+                negative_prompt=self.director.negative_for(blend_t),
+                seed=seed + 7919 * k,
+                prompt_b=prompt_b,
+                t=blend_t,
+            )
+            if attempts == 1:
+                best = cand
+                break
+            score = seam_score(cand, ctx_w - band, cfg.window_width - margin)
+            if best is None or score < best_score:
+                best, best_score = cand, score
+            if score < cfg.seam_threshold:
+                break
+            logger.info("Strip %d attempt %d looks seamed (score %.1f); retrying", self._strip_index, k, score)
+        self.last_seam_score = best_score
+        generated = best
 
         if generated.size != window.size:
             generated = generated.resize(window.size, Image.Resampling.LANCZOS)

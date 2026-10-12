@@ -92,3 +92,16 @@ def test_histogram_match_changes_means():
     m = np.asarray(matched).mean(axis=(0, 1))
     r = np.asarray(ref).mean(axis=(0, 1))
     assert abs(m[0] - r[0]) < 5
+
+
+def test_seam_score_flags_hard_vertical_cut():
+    import numpy as np
+    from PIL import Image
+    from infinite_tapestry.generator import seam_score
+
+    rng = np.random.default_rng(0)
+    base = np.clip(rng.normal(120, 6, (64, 128, 3)), 0, 255).astype(np.uint8)
+    smooth = Image.fromarray(base)
+    cut = base.copy()
+    cut[:, 70:] = np.clip(cut[:, 70:].astype(int) + 90, 0, 255).astype(np.uint8)
+    assert seam_score(smooth, 0, 128) < 6 < seam_score(Image.fromarray(cut), 0, 128)

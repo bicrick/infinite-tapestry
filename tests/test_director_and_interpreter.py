@@ -24,7 +24,9 @@ def test_queue_ops_reorder_remove_edit_play():
 
 def test_scene_transition_and_hold_override_defaults():
     d = LiveDirector("a", hold=0, blend=8, loop=False)
-    d.add([make_scene("b", negative="fog", transition=2, hold=50)])
+    sc = make_scene("b", negative="fog", hold=50)
+    sc["transition"] = 2
+    d.add([sc])
     assert d.frame_for(0)[1] == "b"
     assert d.frame_for(1) == ("b", None, 0.0)
     assert "fog" in d.negative_for(0.0)
@@ -42,7 +44,7 @@ def test_skip_finishes_transition_and_advances():
 
 def test_parse_plan_and_fallback():
     p = parse_plan('ok {"scenes":[{"title":"T","prompt":"neon city","transition":99,"hold":"x"}],"note":"n"}')
-    assert p["scenes"][0]["transition"] == 32 and p["scenes"][0]["hold"] == 20
+    assert p["scenes"][0]["transition"] == 40 and p["scenes"][0]["hold"] == 20
     f = fallback_plan("ocean")
     assert f["source"] == "raw" and "ocean" in f["scenes"][0]["prompt"]
     assert PromptInterpreter(api_key="").plan("ocean")["source"] == "raw"
