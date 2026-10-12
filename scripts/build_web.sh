@@ -16,6 +16,7 @@ window.TAPESTRY_CONFIG = {
   supabaseAnonKey: "${SUPABASE_ANON_KEY:-}",
   turnstileSiteKey: "${TURNSTILE_SITE_KEY:-}",
   google: ${TAPESTRY_GOOGLE_LOGIN:-false},
+  cdnBase: "${R2_PUBLIC_URL:-}",
   centsPerHour: ${TAPESTRY_CENTS_PER_HOUR:-89}
 };
 CFG

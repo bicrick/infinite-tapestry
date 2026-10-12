@@ -814,3 +814,17 @@ body.react-open .cmd-terms { display: none !important; }
   .top-clock { margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--line); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-weight: 400; }
   body.idle #account-btn, body.ambient #account-btn { opacity: 1; pointer-events: auto; }   /* @handle / Sign in stays put on desktop */
 }
+
+/* Reflection: soft drifting colour blobs around the band (compositor-only motion, colours ease over 3 s) */
+@property --c { syntax: "<color>"; inherits: false; initial-value: transparent; }
+#amb-blobs { position: fixed; inset: 0; pointer-events: none; opacity: calc(var(--amb-a, 1) * .55); transition: opacity .9s var(--ease); }
+body.intro #amb-blobs { opacity: 0; }
+#amb-blobs .ab { position: absolute; left: 0; right: 0; overflow: hidden; }
+#amb-blobs .ab-top { top: 0; height: var(--band-top, 30vh); -webkit-mask-image: linear-gradient(to top, #000, transparent 85%); mask-image: linear-gradient(to top, #000, transparent 85%); }
+#amb-blobs .ab-bot { top: var(--band-bot, 70vh); bottom: 0; -webkit-mask-image: linear-gradient(to bottom, #000, transparent 85%); mask-image: linear-gradient(to bottom, #000, transparent 85%); }
+#amb-blobs i { position: absolute; width: 55vw; height: 55vw; max-height: 160%; border-radius: 50%; will-change: transform;
+  background: radial-gradient(closest-side, var(--c), transparent); transition: --c 3s ease; animation: ab-drift 38s ease-in-out infinite alternate; }
+#amb-blobs .ab-top i { bottom: -40%; } #amb-blobs .ab-bot i { top: -40%; }
+#amb-blobs i:nth-child(1) { left: -12vw; } #amb-blobs i:nth-child(2) { left: 22vw; animation-duration: 47s; animation-delay: -12s; } #amb-blobs i:nth-child(3) { left: 56vw; animation-duration: 42s; animation-delay: -25s; }
+@keyframes ab-drift { from { transform: translate3d(-4vw, 0, 0) scale(1); } to { transform: translate3d(5vw, 3%, 0) scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { #amb-blobs i { animation: none; } }

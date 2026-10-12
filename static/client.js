@@ -100,29 +100,33 @@
     r.setProperty("--band-top", t + "px"); r.setProperty("--band-bot", b + "px");
   }
   function drawSurround(w, h, yOff, bandH) {
-    // Soft extension of the band into the dark space: downsample the band, upscale it (free blur), darken.
-    if (yOff < 4 || window.__nr) return;
-    if (!ambCv) { ambCv = document.createElement("canvas"); ambCv.width = 24; ambCv.height = 12; ambCtx = ambCv.getContext("2d"); }
-    // Every frame, but from the strip bitmaps (GPU→GPU), not a readback of the main canvas (~7 ms/frame flush).
-    const V = drawSurround.v; ambCtx.clearRect(0, 0, 24, 12);
-    if (V) for (let i = V.fi; i <= V.li; i++) { const e = strips.get(i); if (!e || !e.bitmap) continue;
-      ambCtx.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, (i * SW() - V.left) / V.ww * 24, 0, SW() / V.ww * 24, 12); }
-    ctx.save();
-    ctx.imageSmoothingQuality = "high";
-    ctx.globalAlpha = SURR_GLOW * surroundA;
-    ctx.drawImage(ambCv, 0, 0, 24, 3, 0, 0, w, yOff + 2);                  // top edge, stretched up
-    ctx.drawImage(ambCv, 0, 9, 24, 3, 0, yOff + bandH - 2, w, h - yOff - bandH + 2);   // bottom edge, stretched down
-    ctx.globalAlpha = 1;
-    const g1 = ctx.createLinearGradient(0, 0, 0, yOff);
-    g1.addColorStop(0, `rgba(${SURR},.96)`); g1.addColorStop(0.75, `rgba(${SURR},.72)`); g1.addColorStop(1, `rgba(${SURR},.35)`);
-    ctx.fillStyle = g1; ctx.fillRect(0, 0, w, yOff);
-    if (surroundA < 1) { ctx.fillStyle = `rgba(${SURR},${1 - surroundA})`; ctx.fillRect(0, 0, w, yOff); }
-    const y2 = yOff + bandH, g2 = ctx.createLinearGradient(0, y2, 0, h);
-    g2.addColorStop(0, `rgba(${SURR},.35)`); g2.addColorStop(0.25, `rgba(${SURR},.72)`); g2.addColorStop(1, `rgba(${SURR},.96)`);
-    ctx.fillStyle = g2; ctx.fillRect(0, y2, w, h - y2);
-    if (surroundA < 1) { ctx.fillStyle = `rgba(${SURR},${1 - surroundA})`; ctx.fillRect(0, y2, w, h - y2); }
-    ctx.restore();
+    // Plain field around the band; the colour comes from the drifting blob layer (#amb-blobs), not a per-frame mirror.
+    if (yOff < 1) return;
+    ctx.fillStyle = `rgb(${SURR})`;
+    ctx.fillRect(0, 0, w, yOff); ctx.fillRect(0, yOff + bandH, w, h - yOff - bandH);
+    const a = (Math.round(surroundA * 20) / 20).toFixed(2);
+    if (a !== drawSurround.a) { drawSurround.a = a; document.documentElement.style.setProperty("--amb-a", a); }
   }
+  // Reflection: a few soft colour blobs above/below the band, sampled from the strips on screen every ~2.5 s
+  // (one tiny 6x2 readback), colours eased by CSS, motion by compositor-only transform animations.
+  const ambBlobs = (() => {
+    const root = document.createElement("div"); root.id = "amb-blobs"; root.setAttribute("aria-hidden", "true");
+    root.innerHTML = '<div class="ab ab-top"><i></i><i></i><i></i></div><div class="ab ab-bot"><i></i><i></i><i></i></div>';
+    canvas.after(root);
+    return [...root.querySelectorAll("i")];
+  })();
+  setInterval(() => {
+    const V = drawSurround.v; if (!V || document.hidden) return;
+    if (!ambCv) { ambCv = document.createElement("canvas"); ambCv.width = 6; ambCv.height = 2; ambCtx = ambCv.getContext("2d", { willReadFrequently: true }); }
+    ambCtx.clearRect(0, 0, 6, 2); let any = false;
+    for (let i = V.fi; i <= V.li; i++) { const e = strips.get(i); if (!e || !e.bitmap) continue; any = true;
+      ambCtx.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, (i * SW() - V.left) / V.ww * 6, 0, SW() / V.ww * 6, 2); }
+    if (!any) return;
+    const d = ambCtx.getImageData(0, 0, 6, 2).data;
+    ambBlobs.forEach((el, n) => { const row = n < 3 ? 0 : 1, x = (n % 3) * 2 + 1, o = (row * 6 + x) * 4;
+      el.style.setProperty("--c", `rgb(${d[o]},${d[o + 1]},${d[o + 2]})`); });
+  }, 2500);
+
   const viewWorld = () => canvas.width / scale();
   const ribbonTop = (h, bh) => (h * (1 - 0.06 * (1 - ribbon) / (1 - RIBBON)) - bh) / 2;
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
@@ -628,7 +632,7 @@
     else if (ribbon < 0.999) {   // desktop ribbon: same reflection/glow as the phone band, fading out as it expands
       const sa = surroundA, k = (1 - ribbon) / (1 - RIBBON); surroundA = sa * k * k * (3 - 2 * k);
       drawSurround(w, h, Math.max(0, yOff), config.height * s); surroundA = sa;
-    }
+    } else if (drawSurround.a !== "0.00") { drawSurround.a = "0.00"; document.documentElement.style.setProperty("--amb-a", "0"); }
     // Motion blur that scales with scrub velocity (cheap: smear the frame onto itself).
     const blur = (true ? Math.min(12, Math.max(0, (Math.abs(velS) - 500) / 420))
       : Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260))) * (window.devicePixelRatio || 1);
@@ -1277,6 +1281,11 @@
     if (msg.director) showDirector(msg.director);
     if (msg.type === "config") {
       config = Object.assign(config, msg);
+      {   // R2 serves CORS and holds every strip/tile; if the pod still advertises the Supabase bucket, read R2 instead (no 400s).
+        const cdn = (window.TAPESTRY_CONFIG || {}).cdnBase, re = /^https:\/\/[^/]+supabase\.co\/storage\/v1\/object\/public\/[^/]+\//;
+        if (cdn) for (const k of ["strip_base", "lod_base"]) if (re.test(config[k] || "")) config[k] = config[k].replace(re, cdn.replace(/\/$/, "") + "/");
+        delete config.strip_base_fb; delete config.lod_base_fb;
+      }
       interpreterOn = !!msg.interpreter;
       delete config.type;
       window.dispatchEvent(new CustomEvent("tapestry:config", { detail: msg }));
