@@ -352,14 +352,23 @@
   }
   let liveCapKey = null;
   function srcLabel(by, origin) { return origin === "auto" ? "✦ Auto" : by ? "by " + by : origin === "user" ? "Audience" : "Now"; }
+  function centerScene() {
+    if (!tlScenes.length) return null;
+    const r = sceneAt(Math.max(0, Math.min(maxIndex, Math.round(centerIdx()))));
+    return r ? { index: r[0], title: r[1], by: r[2], style: r[3], origin: r[4] } : null;
+  }
+  function emitCaption(r) {
+    if (!r) return;
+    window.dispatchEvent(new CustomEvent("tapestry:caption", { detail: r }));
+  }
   // Live: caption the strip under the centre of the view (what's actually on screen).
   function liveCaption() {
-    const r = tlScenes.length ? sceneAt(Math.max(0, Math.min(maxIndex, Math.round(centerIdx())))) : null;
-    if (!r) return false;
-    const key = r[0] + "|" + r[1];
+    const r0 = centerScene();
+    if (!r0) return false;
+    const key = r0.index + "|" + r0.title;
     if (key !== liveCapKey) {
       liveCapKey = key;
-      const [, title, by, style, origin] = r;
+      const { title, by, style, origin } = r0;
       $("now-title").textContent = title || "—";
       const src = $("now-src");
       src.textContent = srcLabel(by, origin) + (style && style !== "none" && style !== "photo" ? " · " + style : "");
@@ -371,6 +380,7 @@
         $("now-arrow").classList.toggle("hidden", !nxt);
         $("next-title").textContent = nxt ? nxt.title : "";
       }
+      emitCaption(r0);
     }
     return true;
   }
@@ -1275,7 +1285,8 @@
   window.TapestryWS = { send: (o) => send(o), toast: (h, ms) => toast(h, ms), esc: (x) => esc(x) };
   // Read-only view hooks for reactions/clips (fun.js).
   Object.assign(window.TapestryView, { title: () => ($("now-title").textContent || "").trim(),
-    by: () => ($("now-src").textContent || "").trim() });
+    by: () => ($("now-src").textContent || "").trim(),
+    caption: () => centerScene() });
   function connect() {
     const url = wsUrl();
     ws = new WebSocket(url + (url.includes("?") ? "&" : "?") + "v=2");

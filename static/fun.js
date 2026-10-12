@@ -86,19 +86,66 @@ function notify(body) {
   try { new Notification("Infinite Tapestry", { body, icon: "/brand/icon-512.png", tag: "it-up-next" }); } catch (_) {}
 }
 const quote = (t) => `“${esc(String(t).slice(0, 60))}${String(t).length > 60 ? "…" : ""}”`;
+// Wait until the first strip labeled with the user's idea hits the center of the
+// view (same labels the captions use). Server "playing" / buffering is too early.
+const awaitingOn = new Map();   // id -> idea (mine → share toast when on screen)
+function handleOf(by) {
+  return String(by || "").split(",").map((s) => s.trim().replace(/^@/, "").toLowerCase()).filter(Boolean);
+}
+function matchesCap(cap, it) {
+  if (!cap || cap.origin !== "user" || !it) return false;
+  const h = String(it.handle || "").toLowerCase();
+  if (!h || !handleOf(cap.by).includes(h)) return false;
+  const title = String(cap.title || "").trim();
+  const body = String(it.body || "").trim();
+  if (!title || !body) return true;
+  // direct_plan titles are body[:40]; Haiku titles may differ — handle is enough then.
+  if (body.startsWith(title) || title === body.slice(0, 40)) return true;
+  return awaitingOn.size <= 1;
+}
+function checkViewport() {
+  const cap = V().caption ? V().caption() : null;
+  if (!cap) return;
+  for (const [id, it] of [...awaitingOn]) {
+    if (!matchesCap(cap, it)) continue;
+    awaitingOn.delete(id);
+    if (!said.has("on" + id)) { said.add("on" + id); onNow(it); }
+  }
+}
+window.addEventListener("tapestry:caption", checkViewport);
+let armTimer = 0;
+function armWatch() {
+  if (armTimer || !awaitingOn.size) return;
+  armTimer = setInterval(() => {
+    checkViewport();
+    if (!awaitingOn.size) { clearInterval(armTimer); armTimer = 0; }
+  }, 250);
+}
 window.addEventListener("tapestry:ideas", (ev) => {
   const ideas = ev.detail || [];
   const playing = ideas.filter((i) => i.status === "playing");
+  const playIds = new Set(playing.map((i) => i.id));
+  for (const id of [...awaitingOn.keys()]) if (!playIds.has(id)) awaitingOn.delete(id);
   const next = ideas.find((i) => i.status === "pending");
   playing.forEach((it) => {
     if (said.has("p" + it.id)) return; said.add("p" + it.id);
     if (fun.primed) sysChat(`<b>@${esc(it.handle)}</b>${quote(it.body)} is now painting`);
-    if (S().isMine && S().isMine(it)) onNow(it);
+    if (!(S().isMine && S().isMine(it))) return;
+    const cap = V().caption ? V().caption() : null;
+    const onScreen = matchesCap(cap, it);
+    // Up-next ping: idea just entered the pipeline and isn't on screen yet.
+    // (Not when merely pending in the pool — that was minutes early.)
+    if (!onScreen && !said.has("u" + it.id) && !said.has("on" + it.id)) {
+      said.add("u" + it.id);
+      notify("Your idea is up next");
+    }
+    if (!said.has("on" + it.id) && !onScreen) { awaitingOn.set(it.id, it); armWatch(); }
+    else if (onScreen && !said.has("on" + it.id)) { said.add("on" + it.id); onNow(it); }
   });
   if (next && !said.has("n" + next.id)) {
     said.add("n" + next.id);
     if (fun.primed) sysChat(`<b>@${esc(next.handle)}</b>${quote(next.body)} is up next`);
-    if (S().isMine && S().isMine(next)) notify("Your idea is up next");
+    // No browser ping here — wait until status is playing (above).
   }
   fun.primed = true;   // first snapshot only seeds (no backlog spam on load)
 });
