@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Signing in · Infinite Tapestry</title>
+  <meta name="theme-color" content="#0b0b0d" />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="page confirm-page">
+  <main class="confirm">
+    <img class="confirm-mark" src="/brand/mark-plain.svg" alt="" />
+    <h1 id="c-title">Signing you in…</h1>
+    <p id="c-text" class="fine"></p>
+    <div id="c-retry" class="hidden">
+      <form id="c-form" autocomplete="on">
+        <input id="c-email" type="email" autocomplete="email" class="vibe" placeholder="you@example.com" required />
+        <button id="c-send" class="primary wide" type="submit">Send a new link</button>
+      </form>
+      <form id="c-code-form" class="hidden" autocomplete="off">
+        <input id="c-code" class="vibe code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" aria-label="6-digit code" />
+      </form>
+    </div>
+    <a id="c-home" class="quiet-link hidden" href="/">Go to the tapestry →</a>
+  </main>
+  <script src="/config.js"></script>
+  <script type="module" src="/confirm.js"></script>
+</body>
+</html>
