@@ -1,4 +1,4 @@
-// Phone niceties: immersive landscape, swipe-up sheet, style chips, long-press share,
+// Phone niceties: immersive landscape, swipe-up sheet, long-press share,
 // haptics, PWA + "your idea is live" notifications, battery saver.
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -37,26 +37,9 @@
     tabs.appendChild(a);
   }, 1500);
 
-  // 3) Composer style chips (prefill), only while composing.
-  const STYLES = [["Pixel", "pixel art"], ["Watercolor", "watercolor"], ["Papercut", "papercut"], ["Ink", "ink wash"], ["Oil", "oil painting"], ["Cartoon", "cartoon"]];
+  // 3) Composer is just text (+ image); Claude reads style from the words.
   const cmd = $("cmd"), input = $("cmd-input");
   if (cmd && input) {
-    const row = document.createElement("div");
-    row.className = "chips compose-only";
-    row.innerHTML = STYLES.map(([l, v]) => `<button type="button" data-style="${v}">${l}</button>`).join("");
-    cmd.insertBefore(row, input.nextSibling);
-    row.addEventListener("pointerdown", (e) => e.preventDefault());   // keep the keyboard up
-    row.addEventListener("click", (e) => {
-      const b = e.target.closest("[data-style]"); if (!b) return;
-      const v = b.dataset.style, cur = input.value.replace(/,?\s*in (pixel art|watercolor|papercut|ink wash|oil painting|cartoon) style$/i, "").trim();
-      const on = !b.classList.contains("on");
-      row.querySelectorAll("button").forEach((x) => x.classList.remove("on"));
-      if (on) b.classList.add("on");
-      input.value = on ? (cur ? `${cur}, in ${v} style` : `in ${v} style`) : cur;
-      input.focus(); if (on && !cur) input.setSelectionRange(0, 0);
-      buzz(4);
-    });
-    cmd.addEventListener("submit", () => row.querySelectorAll("button").forEach((x) => x.classList.remove("on")));
     // keep the sheet above the on-screen keyboard
     if (window.visualViewport) {
       const vv = window.visualViewport;
