@@ -127,6 +127,8 @@
   // Live may run right up to the newest strip (the server keeps a buffer ahead). Gating livePos on decode/hold-back
   // made it stop-and-go every strip (the jerk/pop-in reported after 0b04308), so the boundary is the painted edge again.
   const readyEdge = () => panoramaWidth();
+  // Off-screen staging buffer: 2 strips + the inpaint context band, so repaints and arrivals happen out of view.
+  const STAGE = () => 2 * SW() + 128;
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -723,9 +725,9 @@
     }
     const s0 = scale();
     const s = s0 * zoom * ribbon;
-    const center = viewLeft() + viewWorld() / 2 - 2 * SW();   // render offset: the newest 2 strips stay off-screen (staging zone)
+    const center = viewLeft() + viewWorld() / 2 - STAGE();   // render offset: the newest 2 strips + the inpaint band stay off-screen (staging zone)
     // Never show blank canvas past the painted edge when the ribbon widens the view.
-    const fullRight = viewLeft() + viewWorld() - 2 * SW();
+    const fullRight = viewLeft() + viewWorld() - STAGE();
     const left = Math.max(0, (center - (w / s) / 2) * (1 - ribbonAnchor) + (fullRight - w / s) * ribbonAnchor);
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
     if (window.__probe) window.__probe.push(left);
@@ -741,7 +743,7 @@
     if (!window.__nolod && (zoom < 0.97 || fast || coverage < 1)) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
-      const liveB = livePos !== null && !fast ? livePos - 2 * SW() : Infinity;   // solid edge: the newest 2 on-screen strips are staged as particles
+      const liveB = livePos !== null && !fast ? livePos - STAGE() : Infinity;   // solid edge: the newest 2 on-screen strips are staged as particles
       const stripLayer = zoom > 0.3;
       for (let i = Math.max(firstIdx, 0); stripLayer && i <= Math.min(lastIdx, maxIndex); i++) {
         want++;
