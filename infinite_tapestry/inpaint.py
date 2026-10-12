@@ -158,6 +158,16 @@ def create_inpainter(config: "Config") -> Inpainter:
         from .mock_inpaint import MockInpainter
 
         return MockInpainter(config)
+    if getattr(config, "backend", "sd15") == "klein":
+        try:
+            return KleinInpainter(config)
+        except Exception:
+            logger.exception("klein backend failed to load; falling back to SDXL")
+            from .config import SDXL_PRESET
+            for k, v in SDXL_PRESET.items():
+                setattr(config, k, v)
+            config.context_width = config.window_width - config.strip_width
+            config.backend = "sdxl"
     if getattr(config, "backend", "sd15") == "sdxl":
         try:
             return SDXLInpainter(config)
@@ -317,6 +327,98 @@ class SDXLInpainter(Inpainter):
             **ip_kw,
         )
         return out.images[0]
+
+
+class KleinInpainter(Inpainter):
+    """FLUX.2 [klein] 4B (Apache-2.0) inpainting: 4-step distilled, bf16, natural-language prompts.
+
+    No negative prompt / CFG (distilled, guidance 1.0); SDXL style LoRAs don't apply (style comes from
+    the prompt text). Reference images use klein's native image_reference conditioning.
+    Fallback: TAPESTRY_BACKEND=sdxl + restart."""
+
+    MODEL = "black-forest-labs/FLUX.2-klein-4B"
+
+    def __init__(self, config: "Config") -> None:
+        import torch
+        from diffusers import Flux2KleinInpaintPipeline
+
+        self.config = config
+        self._torch = torch
+        logger.info("Loading FLUX.2 klein inpaint model %s …", self.MODEL)
+        pipe = Flux2KleinInpaintPipeline.from_pretrained(self.MODEL, torch_dtype=torch.bfloat16)
+        pipe.to(config.device)  # text encoder stays resident (fits in 24 GB with SDXL unloaded)
+        pipe.set_progress_bar_config(disable=True)
+        self._pipe = pipe
+        self.guidance = 1.0
+        self.loaded: list[str] = []
+        self._enc: dict[str, object] = {}
+        self._ref_id, self._ref_img, self._ref_scale = None, None, 0.0
+        logger.info("klein inpaint ready")
+
+    def set_styles(self, weights) -> None:  # LoRAs are SDXL-only; styles ride in the prompt text
+        pass
+
+    def set_ref(self, ref_id, image, scale: float) -> None:
+        if image is None or scale <= 0.01:
+            self._ref_id, self._ref_img, self._ref_scale = None, None, 0.0
+            return
+        self._ref_id, self._ref_img, self._ref_scale = ref_id, image.convert("RGB"), float(scale)
+
+    def _embed(self, prompt: str):
+        e = self._enc.get(prompt)
+        if e is None:
+            with self._torch.no_grad():
+                out = self._pipe.encode_prompt(prompt, device=self.config.device)
+            e = out[0] if isinstance(out, tuple) else out
+            if len(self._enc) > 32:
+                self._enc.clear()
+            self._enc[prompt] = e
+        return e
+
+    def generate(self, image, mask, prompt, negative_prompt="", seed=None, prompt_b=None, t=0.0):
+        torch = self._torch
+        dev = self.config.device
+        if negative_prompt and "nude" in negative_prompt and "clothed" not in prompt:
+            prompt = prompt + ", everyone fully clothed, safe for work"
+        pe = self._embed(prompt)
+        if prompt_b and t > 0.0:
+            pe_b = self._embed(prompt_b)
+            if pe_b.shape == pe.shape:
+                tt = float(min(1.0, max(0.0, t)))
+                tt = tt * tt * (3 - 2 * tt)
+                pe = pe * (1 - tt) + pe_b * tt
+        gen = torch.Generator(device=dev).manual_seed(seed) if seed is not None else None
+        filled = prefill_masked(image, mask)
+        kw = {}
+        if self._ref_img is not None and self._ref_scale >= 0.3:
+            kw["image_reference"] = self._ref_img
+        with torch.no_grad():
+            out = self._pipe(prompt_embeds=pe, image=filled.convert("RGB"), mask_image=mask.convert("L"),
+                             num_inference_steps=self.config.steps, guidance_scale=1.0, strength=1.0,
+                             width=image.width, height=image.height, generator=gen, **kw).images[0]
+        return feather_composite(image, out, mask, int(getattr(self.config, "seam_feather", 48)))
+
+
+def feather_composite(orig: Image.Image, gen: Image.Image, mask: Image.Image, feather: int) -> Image.Image:
+    """Blend the generated image back over the untouched context with a soft ramp that starts at the
+    mask edge, so the hand-off from kept pixels to new pixels has no hard line."""
+    import numpy as np
+
+    if gen.size != orig.size:
+        gen = gen.resize(orig.size, Image.Resampling.LANCZOS)
+    m = np.asarray(mask.convert("L")) > 127
+    cols = np.where(m.all(axis=0))[0]
+    if feather <= 0 or cols.size == 0:
+        return gen
+    x0 = int(cols.min())
+    w = orig.width
+    ramp = np.zeros(w, np.float32)
+    ramp[x0:] = 1.0
+    ramp[x0:min(w, x0 + feather)] = np.linspace(0.0, 1.0, min(w, x0 + feather) - x0, dtype=np.float32)
+    a = ramp[None, :, None]
+    o = np.asarray(orig.convert("RGB")).astype(np.float32)
+    g = np.asarray(gen.convert("RGB")).astype(np.float32)
+    return Image.fromarray(np.clip(o * (1 - a) + g * a, 0, 255).astype(np.uint8), mode="RGB")
 
 
 def prefill_masked(image: Image.Image, mask: Image.Image, seed: int = 0) -> Image.Image:

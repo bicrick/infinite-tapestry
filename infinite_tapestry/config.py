@@ -48,6 +48,7 @@ class Config:
     style_loras: bool = True  # SDXL only: load style LoRAs (styles.py) and ramp them across transitions
     scene_change_repaint: float = 0.7  # fraction of context repainted while blending into a new scene
     user_cfg_boost: float = 1.5  # extra CFG for user ideas
+    seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
     harmonize_seams: bool = True  # remove colour steps at the mask edge
     taesd_model: str = ""
     dtype: str = "float16"
@@ -143,13 +144,16 @@ def config_from_args(args: Any) -> Config:
         device="cpu" if args.mock else args.device,
         backend=getattr(args, "backend", None) or "sd15",
     )
-    if kw["backend"] == "sdxl":
+    if kw["backend"] in ("sdxl", "klein"):
         base = Config()
         for k, v in SDXL_PRESET.items():
             if k in kw and kw[k] == getattr(base, k):
                 kw[k] = v
             elif k not in kw:
                 kw[k] = v
+    if kw["backend"] == "klein":
+        for k, v in KLEIN_PRESET.items():
+            kw[k] = v
     return Config(**kw)
 
 
@@ -158,3 +162,8 @@ SDXL_PRESET: dict[str, Any] = {
     "height": 1024, "window_width": 1024, "strip_width": 256, "overlap": 192, "repaint_band": 128,
     "steps": 18, "guidance_scale": 6.0, "seam_retries": 1, "scroll_speed": 60.0, "scroll_speed_min": 16.0,
 }
+
+
+# FLUX.2 [klein] 4B (Apache-2.0): SDXL geometry, 4 distilled steps, no CFG.
+# A wider repaint band lets the model blend more of the context; feather_composite softens the edge.
+KLEIN_PRESET: dict[str, Any] = {"steps": 4, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 160}
