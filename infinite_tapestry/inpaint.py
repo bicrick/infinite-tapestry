@@ -385,7 +385,9 @@ class KleinInpainter(Inpainter):
             pe_b = self._embed(prompt_b)
             # Averaged text embeddings render as haze (neither world); switch cleanly and let the
             # spatial outpaint carry the transition.
-            if t >= 0.5:
+            if getattr(self.config, "klein_blend", "snap") == "slerp" and pe_b.shape == pe.shape:
+                pe = slerp(pe, pe_b, float(min(1.0, max(0.0, t))))
+            elif t >= 0.5:
                 pe = pe_b
         gen = torch.Generator(device=dev).manual_seed(seed) if seed is not None else None
         filled = prefill_masked(image, mask)
@@ -397,6 +399,19 @@ class KleinInpainter(Inpainter):
                              num_inference_steps=self.config.steps, guidance_scale=1.0, strength=1.0,
                              width=image.width, height=image.height, generator=gen, **kw).images[0]
         return feather_composite(image, out, mask, int(getattr(self.config, "seam_feather", 48)))
+
+
+def slerp(a, b, t: float):
+    """Per-token spherical interpolation that keeps embedding norms (plain lerp washes out)."""
+    import torch
+
+    an, bn = a.norm(dim=-1, keepdim=True), b.norm(dim=-1, keepdim=True)
+    au, bu = a / an.clamp_min(1e-6), b / bn.clamp_min(1e-6)
+    dot = (au * bu).sum(-1, keepdim=True).clamp(-0.9995, 0.9995)
+    om = torch.acos(dot)
+    so = torch.sin(om)
+    u = (torch.sin((1 - t) * om) / so) * au + (torch.sin(t * om) / so) * bu
+    return u * (an * (1 - t) + bn * t)
 
 
 def feather_composite(orig: Image.Image, gen: Image.Image, mask: Image.Image, feather: int) -> Image.Image:

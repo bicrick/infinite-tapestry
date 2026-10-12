@@ -52,6 +52,8 @@ class Config:
     dup_threshold: float = 0.8
     dup_retries: int = 2
     pan_variations: bool = False  # vary each strip's framing within a scene so subjects don't tile
+    context_ref: bool = False  # klein: pass a downscaled view of the visible window as a reference image
+    klein_blend: str = "snap"  # klein prompt change: "snap" at t>=0.5 or "slerp" embeddings across the blend
     context_mask_px: int = 0  # mask (repaint) this many px of far-left context so the model can't copy it
     seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
     harmonize_seams: bool = True  # remove colour steps at the mask edge
