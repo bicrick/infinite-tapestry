@@ -28,15 +28,6 @@
     if (sy - e.clientY > 48 && Math.abs(e.clientX - sx) < 60) { sy = null; openSheet(); }
   }, true);
   document.addEventListener("pointerup", () => { sy = null; }, true);
-  // Profile link in the sheet once signed in.
-  setInterval(() => {
-    const s = S(), tabs = $("tabs");
-    if (!tabs || !(s.profile && s.profile.handle) || $("me-link")) return;
-    const a = document.createElement("a");
-    a.id = "me-link"; a.className = "me-link"; a.href = "/u/" + encodeURIComponent(s.profile.handle); a.textContent = "You";
-    tabs.appendChild(a);
-  }, 1500);
-
   // 3) Composer is just text (+ image); the director reads style from the words.
   const cmd = $("cmd"), input = $("cmd-input");
   if (cmd && input) {

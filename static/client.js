@@ -124,6 +124,13 @@
   const ribbonTop = (h, bh) => (h * (1 - 0.06 * (1 - ribbon) / (1 - RIBBON)) - bh) / 2;
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
   window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(); if (portrait()) { const bh = config.height * s0; return { top: bandTopFor(canvas.height, bh), height: bh }; } const bh = config.height * s0 * ribbon; return { top: ribbonTop(canvas.height, bh), height: bh }; }, drawScale: () => scale() * (portrait() ? 1 : ribbon), setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, coverage: () => coverage, zoom: () => zoom, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
+  function readyEdge() {   // right edge the live view may reach: 2 strips behind the newest, and only over decoded strips
+    let r = maxIndex - 2;
+    const lim = Math.max(0, r - 12);
+    let k = r; while (k > lim && !(strips.get(k) && strips.get(k).bitmap)) k--;
+    if (k > lim) r = k;
+    return Math.max(0, (r + 1) * SW());
+  }
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -342,6 +349,39 @@
     }
     return (e.dots = c);
   }
+  const PC = 20, PR = 40;   // particle grid per strip
+  function stripParticles(e) {   // targets + colours + scatter offsets, computed once per strip
+    if (e.pt !== undefined) return e.pt;
+    if (!e.bitmap) return null;
+    const c = document.createElement("canvas"); c.width = PC; c.height = PR; const g = c.getContext("2d", { willReadFrequently: true });
+    let d; try { g.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, 0, 0, PC, PR); d = g.getImageData(0, 0, PC, PR).data; } catch (_) { return (e.pt = null); }
+    const n = PC * PR, cw = SW() / PC, ch = config.height / PR, P = { n, cw, ch, tx: new Float32Array(n), ty: new Float32Array(n), ox: new Float32Array(n), oy: new Float32Array(n), j: new Float32Array(n), col: new Array(n) };
+    for (let k = 0; k < n; k++) {
+      const cx = k % PC, cy = (k / PC) | 0;
+      let h = (k * 374761393 + (e.overlap | 0) * 31 + 7) ^ 0x5bf03635; h = Math.imul(h ^ (h >>> 13), 1274126177); const r1 = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+      h = Math.imul(h ^ (h >>> 15), 2246822519); const r2 = ((h ^ (h >>> 13)) >>> 0) / 4294967296;
+      P.tx[k] = cx * cw; P.ty[k] = cy * ch;
+      P.ox[k] = SW() * (0.4 + 2.2 * r1); P.oy[k] = (r2 - 0.5) * config.height * 0.5; P.j[k] = r2;
+      P.col[k] = `rgb(${d[k * 4]},${d[k * 4 + 1]},${d[k * 4 + 2]})`;
+    }
+    return (e.pt = P);
+  }
+  function drawParticles(e, i, left, B) {
+    const P = stripParticles(e); if (!P) return;
+    const base = i * SW(), t = performance.now() / 1000, span = SW() * 2.2;
+    for (let k = 0; k < P.n; k++) {
+      const wx = base + P.tx[k];
+      if (wx < B) continue;                                         // left of the boundary the real image shows
+      let p = 1 - ((wx - B) / span + (P.j[k] - 0.5) * 0.35);
+      if (p <= 0.02) continue;
+      p = p > 1 ? 1 : p; const q = 1 - p, q2 = q * q, wob = q * 4 * Math.sin(t * 1.3 + P.j[k] * 40);
+      ctx.globalAlpha = 0.25 + 0.75 * p;
+      ctx.fillStyle = P.col[k];
+      const sz = P.cw * (0.35 + 0.7 * p);
+      ctx.fillRect(wx - left + P.ox[k] * q2, P.ty[k] + P.oy[k] * q2 + wob, sz, sz * (P.ch / P.cw));
+    }
+    ctx.globalAlpha = 1;
+  }
   function stripThumb(e) {   // 8x24 colour sample per strip, computed once (cheap dot colours, no canvas readback per frame)
     if (e.th !== undefined) return e.th;
     if (!e.bitmap) return null;
@@ -516,7 +556,7 @@
       // and never run past what we've actually received.
       const fix = corr * Math.min(1, dt * 1.5);
       corr -= fix;
-      livePos = Math.min(panoramaWidth(), livePos + srvSpeed * dt + fix);
+      livePos = Math.min(readyEdge(), livePos + srvSpeed * dt + fix);   // 2 real strips always held back off-screen, and never past an undecoded strip
       liveScroll = livePos - viewWorld();
     }
     stepPan(dt);
@@ -589,6 +629,7 @@
     if (!window.__nolod && (zoom < 0.97 || fast || coverage < 1)) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
+      const liveB = readyEdge();
       const stripLayer = zoom > 0.3;
       for (let i = Math.max(firstIdx, 0); stripLayer && i <= Math.min(lastIdx, maxIndex); i++) {
         want++;
@@ -597,22 +638,12 @@
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
-        if (e.shownAt == null) {   // first time on screen: past the live edge it crystallizes out of the dots
-          e.shownAt = performance.now();
-          e.coalesce = panMode !== "live" && i * SW() >= viewLeft() + viewWorld() - SW() * 0.5;
+        const x0 = i * SW() - left;
+        if ((i + 1) * SW() <= liveB) ctx.drawImage(e.bitmap, x0 - e.overlap, 0);
+        else {   // held-back strip past live: the image assembles out of particles toward the boundary
+          if (i * SW() < liveB) { ctx.save(); ctx.beginPath(); ctx.rect(x0 - e.overlap, 0, liveB - i * SW() + e.overlap, config.height); ctx.clip(); ctx.drawImage(e.bitmap, x0 - e.overlap, 0); ctx.restore(); }
+          drawParticles(e, i, left, liveB);
         }
-        const ck = e.coalesce ? Math.min(1, (performance.now() - e.shownAt) / 1100) : 1;
-        if (ck < 1) {
-          const k = ck * ck * (3 - 2 * ck), x0 = i * SW() - left, ink = lightMq && lightMq.matches ? "20,20,24" : "255,255,255";
-          ctx.globalAlpha = k; ctx.drawImage(e.bitmap, x0 - e.overlap, 0); ctx.globalAlpha = 1;
-          for (let a = 0; a < SW() / 7; a++) for (let b = 0; b < config.height / 7; b++) {
-            let hh = ((i * 64 + a) * 374761393 + b * 668265263) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
-            if (r > 0.16 + 0.5 * k) continue;
-            const rad = (0.6 + 2.2 * k) * (0.6 + r);
-            ctx.fillStyle = `rgba(${ink},${(1 - k) * (0.25 + 1.5 * r)})`;
-            ctx.fillRect(x0 + a * 7 + r * 5, b * 7 + r * 31 % 7, rad, rad);
-          }
-        } else ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
       }
       coverage = want ? have / want : 0;
     }
@@ -629,42 +660,25 @@
         ctx.fillRect(x0, 6, x1 - x0, 1.2);
       }
     }
-    if (!fast && zoom > 0.9 && left + w / s > panoramaWidth() - SW() * 4) {   // Live right edge: the newest ~strip crystallizes out of dense, resolved dots (never pops in).
-      const zw = SW() * 0.8, zr = left + w / s, zl = zr - zw, ink = lightMq && lightMq.matches;
-      const g = ctx.createLinearGradient(zl - left, 0, zr - left, 0);
-      g.addColorStop(0, EMPTY + "00"); g.addColorStop(0.6, EMPTY + "66"); g.addColorStop(1, EMPTY + "e6");
-      ctx.fillStyle = g; ctx.fillRect(zl - left, 0, zw + 1, config.height);
-      // Cached per-strip dot layers composited through one bell-shaped alpha mask (a handful of draw calls per frame).
-      const zW = Math.ceil(zw) + 2, zH = config.height;
-      if (!zoneCv) { zoneCv = document.createElement("canvas"); zoneCtx = zoneCv.getContext("2d"); }
-      if (zoneCv.width !== zW || zoneCv.height !== zH) { zoneCv.width = zW; zoneCv.height = zH; zoneMask = null; }
-      zoneCtx.globalCompositeOperation = "source-over"; zoneCtx.clearRect(0, 0, zW, zH);
-      for (let k = Math.floor(zl / SW()); k <= Math.floor(zr / SW()); k++) {
-        const e = strips.get(k), d = e && stripDots(e);
-        if (d) zoneCtx.drawImage(d, k * SW() - zl, 0);
-      }
-      if (!zoneMask) {
-        zoneMask = zoneCtx.createLinearGradient(0, 0, zW, 0);
-        for (let t = 0; t <= 1.0001; t += 0.1) zoneMask.addColorStop(Math.min(1, t), `rgba(0,0,0,${(Math.sin(Math.PI * Math.min(1, t * 1.15)) * 0.6).toFixed(3)})`);
-      }
-      zoneCtx.globalCompositeOperation = "destination-in"; zoneCtx.fillStyle = zoneMask; zoneCtx.fillRect(0, 0, zW, zH);
-      ctx.drawImage(zoneCv, zl - left, 0);
-    }
     ctx.restore();
     {   // Past the newest painted strip (only reachable by over-scrolling live): crystallizing dots, never blank.
       const edgeX = (panoramaWidth() - left) * s;
       if (edgeX < w) {
         const x0 = Math.max(0, edgeX), bh = config.height * s;
         ctx.fillStyle = EMPTY; ctx.fillRect(x0, yOff, w - x0, bh);
-        const sp = 7 * s, t = performance.now() / 1000, ink = lightMq && lightMq.matches ? "20,20,24" : "255,255,255";
-        const i0 = Math.floor((x0 / s + left) / 7), i1 = Math.ceil((w / s + left) / 7), rows = Math.ceil(config.height / 7);
-        for (let i = i0; i <= i1; i++) for (let j = 0; j < rows; j++) {
-          let hh = (i * 374761393 + j * 668265263) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
-          if (r > 0.16) continue;
-          const x = (i * 7 + r * 40 - left) * s; if (x < x0) continue;
-          const near = Math.max(0, 1 - (x - edgeX) / (60 * s));                 // denser, brighter right at the edge: about to coalesce
-          ctx.fillStyle = `rgba(${ink},${(0.18 + 0.3 * r * 6 + 0.35 * near) * (0.75 + 0.25 * Math.sin(t * 2 + r * 50))})`;
-          ctx.fillRect(x, yOff + (j + r * 6 % 1) * sp, 1.5 * (window.devicePixelRatio || 1), 1.5 * (window.devicePixelRatio || 1));
+        const t = performance.now() / 1000, ink = lightMq && lightMq.matches ? "20,20,24" : "255,255,255", dpr = window.devicePixelRatio || 1;
+        const span = w - x0, N = Math.min(900, Math.ceil(span * bh / (3200 * dpr * dpr)));
+        for (let n = 0; n < N; n++) {
+          let hh = (n * 374761393) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r1 = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
+          hh = Math.imul(hh ^ (hh >>> 15), 2246822519); const r2 = ((hh ^ (hh >>> 13)) >>> 0) / 4294967296;
+          // each mote loops from far right toward the data boundary, speeding up as it's pulled in, then crystallizes
+          const ph = (t * (0.08 + 0.12 * r2) + r1) % 1, d = Math.pow(1 - ph, 1.6);
+          const x = edgeX + d * Math.max(span, w * 0.5) * (0.4 + 0.6 * r2);
+          if (x < x0 || x > w) continue;
+          const y = yOff + r2 * bh, near = Math.max(0, 1 - (x - edgeX) / (90 * s));
+          const sz = (1.2 + 1.8 * near) * dpr;
+          ctx.fillStyle = `rgba(${ink},${(0.18 + 0.25 * r1 + 0.45 * near).toFixed(2)})`;
+          ctx.fillRect(x, y, sz, sz);
         }
       }
     }
@@ -680,7 +694,8 @@
       const px = window.__noblur || !COARSE ? 0 : Math.round(Math.min(6, blur / (window.devicePixelRatio || 1) / 2) * 2) / 2;
       if (px !== draw.blurPx) { draw.blurPx = px; canvas.style.transition = px > 0.5 ? "none" : ""; canvas.style.filter = px > 0.5 ? `blur(${px}px)` : ""; }
     }
-    if (!fast && zoom > 0.9) requestMissing(firstIdx - 8, lastIdx + 2);
+    if (!fast && zoom > 0.9) requestMissing(firstIdx - 8, lastIdx + 3);
+    for (let i = lastIdx + 1; i <= Math.min(maxIndex, lastIdx + 3); i++) { const e = strips.get(i); if (e) { ensureDecoded(e); if (e.bitmap) stripParticles(e); } }   // pre-decode + precompute particles for the held-back strips
     evictFar(firstIdx, lastIdx);
   }
 
@@ -977,7 +992,6 @@
     const dx = ev.deltaX || (ev.shiftKey ? ev.deltaY : 0);
     const vert = !dx || (Math.abs(ev.deltaY) > Math.abs(dx) * 1.2 && !ev.shiftKey);
     const dCss = (vert ? -ev.deltaY : dx) * unit;   // + = forward in time
-    if (!wheelHeld && dCss >= 0 && (panMode === "live" || panMode === "return")) return;   // already live
     const TV = window.TapestryView;
     if (!wheelHeld) TV.wheelStart();
     TV.wheelMove(-dCss);                    // same 1:1 wheel as the phone's haptic dial

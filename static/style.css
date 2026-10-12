@@ -425,16 +425,6 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
   .timeline { left: var(--pad); right: var(--pad); bottom: max(2px, calc(var(--sb) - 4px)); }
   body.composing .timeline { opacity: 0; pointer-events: none; }
 
-  /* drawer → bottom sheet with a grab handle */
-  .drawer { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-width: none; height: min(78vh, 680px); border-radius: 22px 22px 0 0;
-    transform: translateY(105%); padding-bottom: var(--sb); }
-  .drawer.open { transform: none; }
-  .grab { display: block; padding: 8px 0 0; cursor: grab; touch-action: none; }
-  .grab span { display: block; width: 38px; height: 5px; border-radius: 3px; background: rgba(var(--ink),.28); margin: 0 auto; }
-  .drawer-head { touch-action: none; padding: 6px 10px 4px 18px; }
-  .drawer-head .tabs button { min-height: 44px; font-size: 15px; }
-  .drawer .list li, .drawer .item { min-height: 44px; }
-
   /* centred sheets (auth, fuel) become bottom sheets too */
   .sheet { place-items: end stretch; }
   .sheet-card { width: auto; border-radius: 22px 22px 0 0; padding: 26px 20px calc(22px + var(--sb)); animation: sheetUp .35s var(--ease); }
@@ -789,3 +779,33 @@ body.react-open .cmd-terms { display: none !important; }
   body.idle .top .fs-btn { opacity: 0; pointer-events: none; transition: opacity .6s var(--ease); }
 }
 :fullscreen .ui:not(.top), :fullscreen .amb { opacity: 0 !important; pointer-events: none !important; }
+
+/* drawer: bottom sheet on phones/touch, a clean right-side panel on wide screens */
+@media (max-width: 700px), (pointer: coarse) {
+  /* drawer → bottom sheet with a grab handle */
+  .drawer { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-width: none; height: min(78vh, 680px); border-radius: 22px 22px 0 0;
+    transform: translateY(105%); padding-bottom: var(--sb); }
+  .drawer.open { transform: none; }
+  .grab { display: block; padding: 8px 0 0; cursor: grab; touch-action: none; }
+  .grab span { display: block; width: 38px; height: 5px; border-radius: 3px; background: rgba(var(--ink),.28); margin: 0 auto; }
+  .drawer-head { touch-action: none; padding: 6px 10px 4px 18px; }
+  .drawer-head .tabs button { min-height: 44px; font-size: 15px; }
+  .drawer .list li, .drawer .item { min-height: 44px; }
+
+  .desk-only { display: none !important; }
+}
+@media (min-width: 701px) and (pointer: fine) {
+  .grab { display: none; }
+  .drawer { top: 0; right: 0; bottom: 0; width: 380px; border-radius: 0; border: 0; border-left: 1px solid var(--line);
+    background: var(--glass-strong); box-shadow: -24px 0 60px rgba(0,0,0,.18); transform: translateX(100%); transition: transform .45s var(--ease); }
+  .drawer.open { transform: none; }
+  .drawer-head { padding: 22px 18px 10px 24px; }
+  .drawer-head .tabs { display: flex; gap: 2px; }
+  .drawer-head .tabs button { font-size: 13px; padding: 6px 10px; border-radius: 999px; }
+  .drawer .panel { padding: 0 6px; }
+  .drawer-theme { display: flex; align-items: center; gap: 4px; margin: 0 24px 8px; font-size: 12px; color: var(--muted); }
+  .drawer-theme span { margin-right: auto; }
+  .drawer-theme button { background: none; border: 1px solid transparent; color: var(--muted); font: inherit; padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+  .drawer-theme button:hover { color: var(--fg); }
+  .drawer-theme button.on { color: var(--fg); border-color: var(--line); background: rgba(var(--ink),.05); }
+}
