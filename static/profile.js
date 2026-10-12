@@ -56,6 +56,7 @@ function render() {
   $("p-filter").classList.toggle("hidden", d.ideas.length < 3);
   document.querySelectorAll(".own-only").forEach((el) => el.classList.toggle("hidden", !d.own));
   $("signout").classList.toggle("hidden", !d.own);
+  renderBanner(d);
   const bg = d.ideas.find((i) => i.start_strip != null);
   if (bg) $("page-bg").style.backgroundImage = `url(/api/og?id=${bg.id}&size=thumb)`;
 
@@ -66,6 +67,34 @@ function render() {
   empty.innerHTML = d.ideas.length ? "Nothing here." : d.own ? `You haven't suggested anything yet. <a href="/">Steer the tapestry</a>` : "No suggestions yet.";
   requestAnimationFrame(() => document.querySelectorAll(".p-card").forEach((el, k) => setTimeout(() => el.classList.add("in"), Math.min(k, 12) * 40)));
 }
+
+const safeHref = (u) => (/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/|$|\?|#)/i.test(u || "") ? u : null);
+const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return ""; } };
+function renderBanner(d) {
+  const b = d.banner, el = $("p-banner");
+  const href = b && safeHref(b.url);
+  el.classList.toggle("hidden", !d.donor);
+  if (d.donor) el.innerHTML = `<span class="pb-heart" aria-hidden="true">✦</span><span class="pb-kept">Keeps the tapestry alive</span>` +
+    (b && b.tagline ? `<span class="pb-tag">“${esc(b.tagline)}”</span>` : "") +
+    (href ? `<a class="pb-link" href="${esc(href)}" target="_blank" rel="nofollow ugc noopener noreferrer">${esc(hostOf(href))} ↗</a>` : "");
+  const ed = $("p-banner-edit");
+  ed.classList.toggle("hidden", !(d.own && d.donor));
+  $("p-donate-hint").classList.toggle("hidden", !(d.own && !d.donor));
+  if (d.own && d.donor && !ed.dataset.init) {
+    ed.dataset.init = 1;
+    $("pbe-tag").value = (b && b.tagline) || ""; $("pbe-url").value = (b && b.url) || "";
+    $("pbe-count").textContent = `${$("pbe-tag").value.length}/60`;
+  }
+}
+const BANNER_ERR = { content_not_allowed: "That line isn't allowed. Keep it friendly.", bad_url: "That link isn't allowed. Use a plain https website.", donors_only: "Banners are for donors.", login_required: "Sign in first." };
+$("pbe-tag").addEventListener("input", () => { $("pbe-count").textContent = `${$("pbe-tag").value.length}/60`; });
+$("p-banner-edit").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!sb) return;
+  const { data: out, error } = await sb.rpc("set_donor_banner", { p_tagline: $("pbe-tag").value, p_url: $("pbe-url").value });
+  if (error) { const k = Object.keys(BANNER_ERR).find((x) => String(error.message).includes(x)); toast(BANNER_ERR[k] || "Couldn't save. Try again."); return; }
+  data.banner = { tagline: out.tagline, url: out.url }; $("pbe-url").value = out.url || ""; renderBanner(data); toast("Saved");
+});
 
 function card(i) {
   const landed = i.start_strip != null;

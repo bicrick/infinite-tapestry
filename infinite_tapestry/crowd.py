@@ -85,7 +85,38 @@ class Crowd:
         self.burn = os.environ.get("TAPESTRY_FUEL_BURN", "0" if mock else "1") == "1"
 
     queue_mode = "fifo"
-    pending: list = []  # cached pool ideas still waiting (for the canonical upcoming list)
+    pending: list = []
+    viewers = staticmethod(lambda: 0)   # set by the server: live viewer count
+    _prio_run = 0                        # priority picks since the last free one (fairness interleave)
+    _limits: dict = {}
+    _limits_at = 0.0
+
+    def _knobs(self) -> dict:
+        """Priority-queue knobs from idea_limits (editable without code), cached for a minute."""
+        if time.monotonic() - self._limits_at > 60:
+            try:
+                rows = self.supa.rest("GET", "idea_limits?id=eq.1&select=prio_viewers,prio_pending,prio_ratio")
+                self._limits = (rows or [{}])[0] or {}
+            except Exception:
+                pass
+            self._limits_at = time.monotonic()
+        return {"viewers": int(self._limits.get("prio_viewers") or 10), "pending": int(self._limits.get("prio_pending") or 6),
+                "ratio": max(1, int(self._limits.get("prio_ratio") or 2))}
+
+    def _pick(self, rows: list, n: int, busy: bool, ratio: int) -> list:
+        """Busy: donor/boosted ideas jump ahead, interleaved `ratio` priority : 1 free so free ideas still play.
+        Rows arrive in the mode's order (FIFO or votes); priority rows keep boost-then-that order."""
+        if not busy:
+            return rows[:n]
+        prio = sorted([r for r in rows if r.get("_prio")], key=lambda r: -(r.get("boost_cents") or 0))
+        free = [r for r in rows if not r.get("_prio")]
+        out = []
+        while len(out) < n and (prio or free):
+            if prio and (self._prio_run < ratio or not free):
+                out.append(prio.pop(0)); self._prio_run += 1
+            else:
+                out.append(free.pop(0)); self._prio_run = 0
+        return out  # cached pool ideas still waiting (for the canonical upcoming list)
 
     def state(self) -> dict:
         hours = None
@@ -116,19 +147,34 @@ class Crowd:
             return
         rows = await asyncio.to_thread(
             self.supa.rest, "GET",
-            "ideas?status=eq.pending&order=created_at.asc&limit=4&select=id")
-        mode = queue_mode(len(rows or []))
+            "ideas?status=eq.pending&order=created_at.asc&limit=40&select=id")
+        n_pending = len(rows or [])
+        mode = queue_mode(n_pending)
+        knobs = await asyncio.to_thread(self._knobs)
+        busy = self.viewers() >= knobs["viewers"] or n_pending >= knobs["pending"]
         if mode != self.queue_mode:
             self.queue_mode = mode
             self.broadcast({"type": "fuel", "fuel": self.state()})
         order = "created_at.asc" if mode == "fifo" else "boost_cents.desc,votes.desc,created_at.asc"
         # FIFO: weave one idea at a time, in arrival order, so each starts right away.
+        want = 1 if mode == 'fifo' else 3
         rows = await asyncio.to_thread(
             self.supa.rest, "GET",
-            f"ideas?status=eq.pending&order={order}&limit={1 if mode == 'fifo' else 3}"
-            "&select=id,handle,body,votes,boost_cents,image_path")
+            f"ideas?status=eq.pending&order={order}&limit={40 if busy else want}"
+            "&select=id,handle,body,votes,boost_cents,image_path,user_id")
         if not rows:
             return
+        donors: set = set()
+        uids = sorted({r["user_id"] for r in rows if r.get("user_id")})
+        if uids:
+            try:
+                d = await asyncio.to_thread(self.supa.rest, "GET", f"donations?user_id=in.({','.join(uids)})&select=user_id")
+                donors = {x["user_id"] for x in (d or [])}
+            except Exception:
+                pass
+        for r in rows:
+            r["_prio"] = bool((r.get("boost_cents") or 0) > 0 or r.get("user_id") in donors)
+        rows = self._pick(rows, want, busy, knobs["ratio"])
         images: list[tuple[bytes, str]] = []
         kept = []
         from .guard import hard_block_reason
@@ -181,9 +227,12 @@ class Crowd:
                                     {"status": "rejected"}, "return=minimal")
             await asyncio.to_thread(self.supa.audit, "director_reject", ids, {"reason": "all_scenes_disallowed"})
             return
+        prio = any(r.get("_prio") for r in rows)
         for sc in scenes:
             sc["by"] = by
             sc["idea_ids"] = [r["id"] for r in rows]
+            if prio:
+                sc["prio"] = True   # donor/boosted: lingers longer on stage (see LiveDirector._hold_len)
         if images:
             # Steer the idea's own scene(s) with the (first) reference image via IP-Adapter.
             for sc in scenes[-2:]:

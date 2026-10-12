@@ -172,6 +172,25 @@ def test_user_idea_preempts_auto_hold_and_timings_halved():
 
 def test_scene_beats_unfold_across_hold():
     d = LiveDirector("a", hold=0, blend=4, loop=False)
-    d._current = make_scene("p0", hold=6, origin="auto", beats=["b1", "b2", "b3"])
+    d._current = make_scene("p0", hold=4, origin="user", beats=["b1", "b2", "b3"])  # user +2 → 6-strip hold
     d._active_since = 0
     assert [d.frame_for(i)[0] for i in range(6)] == ["b1", "b1", "b2", "b2", "b3", "b3"]
+
+
+def test_variable_scene_length_by_weight():
+    d = LiveDirector("a", hold=6, blend=4, loop=False)
+    assert d._hold_len(make_scene("x", hold=6, origin="auto")) == 4          # quiet filler moves on sooner
+    assert d._hold_len(make_scene("x", hold=6, origin="user")) == 8          # ideas linger
+    s = make_scene("x", hold=6, origin="user"); s["prio"] = True
+    assert d._hold_len(s) == 10                                             # donor/boosted linger longest
+
+
+def test_priority_interleave_keeps_free_ideas_moving():
+    from infinite_tapestry.crowd import Crowd
+    c = Crowd.__new__(Crowd); c._prio_run = 0
+    pool = [{"id": i, "_prio": i in (3, 5, 6, 8), "boost_cents": 0} for i in range(1, 10)]
+    order = []
+    while pool:
+        r = c._pick(pool, 1, True, 2)[0]; order.append(r["id"]); pool.remove(r)
+    assert order[:6] == [3, 5, 1, 6, 8, 2]
+    assert c._pick([{"id": 1, "_prio": False}, {"id": 2, "_prio": True}], 1, False, 2)[0]["id"] == 1   # quiet: untouched

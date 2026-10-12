@@ -29,9 +29,15 @@ module.exports = async (req, res) => {
       created_at: r.created_at, played_at: r.played_at, start_strip: r.start_strip, end_strip: r.end_strip,
       image_path: r.image_path, title: (r.plan && Array.isArray(r.plan.titles) && r.plan.titles.length) ? r.plan.titles[r.plan.titles.length - 1] : null,
     }));
+    const [don, ban] = await Promise.all([
+      rest("GET", `donations?user_id=eq.${p.id}&select=amount_cents`).catch(() => []),
+      rest("GET", `donor_banners?user_id=eq.${p.id}&hidden=eq.false&select=tagline,url`).catch(() => []),
+    ]);
+    const donated = don.reduce((a, d) => a + (d.amount_cents || 0), 0);
     res.setHeader("cache-control", own ? "private, no-store" : "public, s-maxage=20, stale-while-revalidate=60");
     res.status(200).json({
       handle: p.handle, joined: p.created_at, own,
+      donor: donated > 0, donated_cents: own ? donated : undefined, banner: donated > 0 ? (ban[0] || null) : null,
       stats: { total: ideas.length, woven: ideas.filter((i) => i.status === "woven").length, votes: ideas.reduce((a, i) => a + (i.votes || 0), 0) },
       ideas,
     });
