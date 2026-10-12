@@ -41,7 +41,7 @@
     const W = view.width || innerWidth, H = view.height || innerHeight;
     if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
     const v = V();
-    const s = v && v.ready() ? v.scale() : H / 512;
+    const s = v && v.drawScale ? (v.ready() ? v.drawScale() : (v.portrait() ? v.drawScale() : H * 0.6 / 512)) : H * 0.6 / 512;
     const left = worldLeft(now);
     lastT = now;
 
@@ -70,19 +70,20 @@
     g.globalCompositeOperation = "source-over";
     g.clearRect(0, 0, W, H);
     // Portrait: everything happens inside the centred band; the surround glow comes in after.
-    const band = v && v.band && v.portrait && v.portrait() ? v.band() : { top: 0, height: H };
+    const band = v && v.band && v.ready() ? v.band() : { top: (H * 0.94 - 512 * s) / 2, height: 512 * s };   // stars live only in the ribbon band
     const bandTop = band.top, bandH = band.height;
     g.fillStyle = `rgba(${CARD},${1 - he})`; g.fillRect(0, 0, W, H);   // full-bleed field, no card
     const sp = 7;                                             // world px between lattice points
     const i0 = Math.floor(left / sp) - 1, i1 = Math.ceil((left + W / s) / sp) + 1;
     const rowsN = Math.ceil(H / s / sp) + 1;
-    const rowOff = Math.floor(bandTop / s / sp) + 1;   // motes fill the whole viewport, above and below the band
+    const rowOff = 0;   // motes fill the whole viewport, above and below the band
     const moteA = Math.max(0, 1 - (resolveAt ? (now - resolveAt) / 500 : 0));
     g.globalCompositeOperation = "source-over";
     for (let i = i0; i <= i1; i++) for (let j = -rowOff; j < rowsN; j++) {
       const h1 = hash(i, j), h2 = hash(j, i + 7919);
       const wx = (i + h1) * sp, wy = (j + h2) * sp;
       const x = (wx - left) * s, y = wy * s + bandTop;
+      if (y > bandTop + bandH) continue;
       if (y > H + 4 || y < -4) continue;
       const inBand = y >= bandTop - 2 && y <= bandTop + bandH + 2;
       if (x < -20 || x > W + 20) continue;

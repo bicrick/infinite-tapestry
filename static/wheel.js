@@ -19,7 +19,8 @@
   let held = false, lastX = 0, lastTick = null, boost = 0;
   function draw() {
     requestAnimationFrame(draw);
-    if (!wrap.clientWidth) return;                 // hidden (desktop / composing)
+    if (!wrap.clientWidth) return;                 // hidden (composing)
+    if (document.body.classList.contains("idle") && !held && !wrap.matches(":hover") && !(V().gliding && V().gliding())) return;   // invisible at rest: skip redraw
     if (wrap.clientWidth !== w || wrap.clientHeight !== h) size();
     const off = V().offsetCss ? V().offsetCss() : 0;
     const R = w / 2 * 0.98;                       // cylinder radius: half the width maps to 90°

@@ -78,6 +78,7 @@
 
   const SW = () => config.strip_width;
   // Portrait phones: the tapestry is a centred horizontal band (letterboxed), not a zoomed-in slice.
+  const RIBBON = 0.6; let ribbon = (innerHeight > innerWidth * 1.15 || matchMedia("(max-width: 560px)").matches) ? 1 : RIBBON, ribbonAnchor = 1;
   const portrait = () => canvas.height > canvas.width * 1.15;
   const BAND_ASPECT = 1.25;   // band width : height
   const scale = () => (portrait() ? Math.min(canvas.height, canvas.width / BAND_ASPECT) : canvas.height) / Math.max(1, config.height);
@@ -102,7 +103,7 @@
     // Soft extension of the band into the dark space: downsample the band, upscale it (free blur), darken.
     if (yOff < 4) return;
     if (!ambCv) { ambCv = document.createElement("canvas"); ambCv.width = 24; ambCv.height = 12; ambCtx = ambCv.getContext("2d"); }
-    ambCtx.drawImage(canvas, 0, yOff, w, bandH, 0, 0, 24, 12);
+    if (!(drawSurround.n = (drawSurround.n || 0) + 1) || drawSurround.n % 8 === 1 || portrait()) ambCtx.drawImage(canvas, 0, yOff, w, bandH, 0, 0, 24, 12);   // desktop: resample every 8th frame
     ctx.save();
     ctx.imageSmoothingQuality = "high";
     ctx.globalAlpha = SURR_GLOW * surroundA;
@@ -120,8 +121,9 @@
     ctx.restore();
   }
   const viewWorld = () => canvas.width / scale();
+  const ribbonTop = (h, bh) => (h * (1 - 0.06 * (1 - ribbon) / (1 - RIBBON)) - bh) / 2;
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
-  window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(), bh = config.height * s0; return { top: portrait() ? bandTopFor(canvas.height, bh) : 0, height: bh }; }, setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, coverage: () => coverage, zoom: () => zoom, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
+  window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(); if (portrait()) { const bh = config.height * s0; return { top: bandTopFor(canvas.height, bh), height: bh }; } const bh = config.height * s0 * ribbon; return { top: ribbonTop(canvas.height, bh), height: bh }; }, drawScale: () => scale() * (portrait() ? 1 : ribbon), setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, coverage: () => coverage, zoom: () => zoom, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -286,7 +288,6 @@
   const COARSE = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
   const PHONE = matchMedia("(max-width: 560px)");
   let wheelGlide = false, landAt = 0;    // haptic-wheel flick: long, low-friction coast (iOS picker feel)
-  const RIBBON = 0.6; let ribbon = 1;
   let zoom = 1, zoomVel = 0, velS = 0, prevCenter = null, blurCv = null, blurCtx = null;
 
   // ---------- LOD tiles (served from the GPU box, mirrored in Storage) ----------
@@ -514,9 +515,10 @@
       const zt = 1;   // no zoom-out while scrubbing anywhere (blur + wheel label instead)
       // Desktop ribbon: while the chrome is up the band eases down to a ribbon; idle -> full bleed.
       const b = document.body.classList;
-      const rt = !portrait() && !PHONE.matches && !b.contains("idle") && !b.contains("intro") && !b.contains("immersive") ? RIBBON : 1;
+      const rt = !portrait() && !PHONE.matches && !b.contains("idle") && !b.contains("immersive") ? RIBBON : 1;
       ribbon += (rt - ribbon) * (1 - Math.exp(-dt * 4.2));
       if (Math.abs(ribbon - rt) < 0.0008) ribbon = rt;
+      ribbonAnchor += ((panMode === "live" || panMode === "return" ? 1 : 0) - ribbonAnchor) * Math.min(1, dt * 5);
       // Spring zoom: out quickly as speed builds, snappy (slightly underdamped) back in on settle.
       if (zt < zoom) { zoom += (zt - zoom) * Math.min(1, dt * 6); zoomVel = 0; }
       else { const k = 90, c = 1.6 * Math.sqrt(k); zoomVel += (k * (zt - zoom) - c * zoomVel) * dt; zoom = Math.min(1.015, zoom + zoomVel * dt); }
@@ -549,9 +551,11 @@
     const s = s0 * zoom * ribbon;
     const center = viewLeft() + viewWorld() / 2;
     // Never show blank canvas past the painted edge when the ribbon widens the view.
-    const left = Math.max(0, Math.min(center - (w / s) / 2, panoramaWidth() - SW() * 2 - w / s));
+    const fullRight = viewLeft() + viewWorld();
+    const left = Math.max(0, (center - (w / s) / 2) * (1 - ribbonAnchor) + (fullRight - w / s) * ribbonAnchor);
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
-    const yOff = portrait() ? bandTopFor(h, config.height * s0) + (config.height * s0 - config.height * s) / 2 : (h * (1 - 0.06 * (1 - ribbon) / (1 - RIBBON)) - config.height * s) / 2;
+    if (window.__probe) window.__probe.push(left);
+    const yOff = portrait() ? bandTopFor(h, config.height * s0) + (config.height * s0 - config.height * s) / 2 : ribbonTop(h, config.height * s);
     publishBand(yOff, config.height * s, h);
     const firstIdx = Math.max(0, Math.floor(left / SW()) - 1);
     const lastIdx = Math.ceil((left + w / s) / SW()) + 1;
