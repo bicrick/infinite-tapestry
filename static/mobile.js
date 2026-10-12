@@ -119,4 +119,5 @@
 })();
 
 // Desktop fullscreen toggle (Esc exits natively).
-(() => { const b = document.getElementById("fs-btn"); if (!b) return; b.addEventListener("click", () => { if (document.fullscreenElement) document.exitFullscreen(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); }); })();
+(() => { const b = document.getElementById("fs-btn"); if (!b) return;
+  if (!document.fullscreenEnabled || !document.documentElement.requestFullscreen || matchMedia("(pointer: coarse)").matches || matchMedia("(hover: none)").matches) { b.remove(); return; } b.addEventListener("click", () => { if (document.fullscreenElement) document.exitFullscreen(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); }); })();

@@ -18,7 +18,7 @@
   --ease: cubic-bezier(.2,.7,.2,1);
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
+html, body { overscroll-behavior-x: none; margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
   font-family: "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; font-size: 13px; letter-spacing: -.005em; }
 button, input { font: inherit; color: inherit; }
@@ -776,8 +776,8 @@ body.react-open .cmd-terms { display: none !important; }
 
 /* wide screens: same phone UI, centred and sized sensibly */
 @media (min-width: 700px) {
-  .dock { width: min(560px, calc(100vw - 32px)); }
-  .hwheel { left: 50%; right: auto; width: min(720px, 80vw); transform: translateX(-50%); }
+  .dock { width: min(560px, calc(100vw - 32px)); bottom: calc(40px + var(--sb)); }   /* same clearance above the wheel as touch */
+  .hwheel { left: 50%; right: auto; width: min(560px, calc(100vw - 32px)); transform: translateX(-50%); }
   .wheel-label { max-width: 50vw; }
 }
 .fs-btn { display: none; }

@@ -327,6 +327,14 @@
     }
     if (level > 1) for (let k = 0; k < 4; k++) drawLodChunk(level - 1, c * 4 + k, left);   // finer tiles fill the gap
   }
+  let thumbCv = null, thumbCtx = null;
+  function stripThumb(e) {   // 8x24 colour sample per strip, computed once (cheap dot colours, no canvas readback per frame)
+    if (e.th !== undefined) return e.th;
+    if (!e.bitmap) return null;
+    if (!thumbCv) { thumbCv = document.createElement("canvas"); thumbCv.width = 8; thumbCv.height = 24; thumbCtx = thumbCv.getContext("2d", { willReadFrequently: true }); }
+    try { thumbCtx.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, 0, 0, 8, 24); e.th = thumbCtx.getImageData(0, 0, 8, 24).data; } catch (_) { e.th = null; }
+    return e.th;
+  }
   function drawLod(left, span, z) {
     const level = z > 0.55 ? 1 : z > 0.14 ? 2 : 3;
     const tw = LOD_N[level] * SW();
@@ -605,6 +613,29 @@
         ctx.fillRect(x1, 0, Math.max(0, w / s - x1 + 10), H);
         ctx.fillStyle = `rgba(255,255,255,${0.75 * a})`;
         ctx.fillRect(x0, 6, x1 - x0, 1.2);
+      }
+    }
+    if (!fast && zoom > 0.9 && left + w / s > panoramaWidth() - SW() * 4) {   // Live right edge: the newest ~strip crystallizes out of dense, resolved dots (never pops in).
+      const zw = SW() * 1.1, zr = left + w / s, zl = zr - zw, ink = lightMq && lightMq.matches;
+      const g = ctx.createLinearGradient(zl - left, 0, zr - left, 0);
+      g.addColorStop(0, EMPTY + "00"); g.addColorStop(0.55, EMPTY + "99"); g.addColorStop(1, EMPTY + "f2");
+      ctx.fillStyle = g; ctx.fillRect(zl - left, 0, zw + 1, config.height);
+      const sp = 6, i0 = Math.floor(zl / sp), i1 = Math.ceil(zr / sp), rows = Math.ceil(config.height / sp);
+      for (let i = i0; i <= i1; i++) {
+        const e = strips.get(Math.floor(i * sp / SW())), th = e && stripThumb(e);
+        if (!th) continue;
+        const u = Math.min(1, Math.max(0, (i * sp - zl) / zw));                 // 0 = resolved side, 1 = edge
+        const col = Math.min(7, Math.max(0, (((i * sp) % SW()) / SW() * 8) | 0));
+        for (let j = 0; j < rows; j++) {
+          let hh = (i * 374761393 + j * 668265263) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
+          if (r > 0.95 - 0.55 * u) continue;                                        // dense, thinning toward the edge
+          const k = (Math.min(23, (j * sp / config.height * 24) | 0) * 8 + col) * 4;
+          const a = Math.sin(Math.PI * Math.min(1, u * 1.15)) * (0.55 + 0.4 * r);   // fade in from the image, out at the very edge
+          if (a < 0.04) continue;
+          ctx.fillStyle = `rgba(${th[k]},${th[k + 1]},${th[k + 2]},${a.toFixed(2)})`;
+          const rad = sp * (0.9 - 0.45 * u) * (0.6 + 0.5 * r);
+          ctx.fillRect(i * sp - left + r * 3, j * sp + (r * 17) % sp, rad, rad);
+        }
       }
     }
     ctx.restore();
@@ -930,8 +961,10 @@
     ev.preventDefault();
     if (ev.ctrlKey) return;      // pinch-zoom gesture: ignore
     const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? innerHeight : 1;
-    const vert = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX);
-    const dCss = (vert ? -ev.deltaY : ev.deltaX) * unit;   // + = forward in time
+    // Horizontal (trackpad swipe / shift+wheel) moves content with the fingers like a sideways page; vertical wheel down = back.
+    const dx = ev.deltaX || (ev.shiftKey ? ev.deltaY : 0);
+    const vert = !dx || (Math.abs(ev.deltaY) > Math.abs(dx) * 1.2 && !ev.shiftKey);
+    const dCss = (vert ? -ev.deltaY : dx) * unit;   // + = forward in time
     if (!wheelHeld && dCss >= 0 && (panMode === "live" || panMode === "return")) return;   // already live
     const TV = window.TapestryView;
     if (!wheelHeld) TV.wheelStart();
