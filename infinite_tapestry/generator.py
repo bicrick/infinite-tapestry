@@ -15,6 +15,7 @@ from .canvas import (
     build_inpaint_inputs,
     histogram_match_strip,
     correct_drift,
+    harmonize_seam,
     make_seed_image,
     stitch_generated_window,
 )
@@ -183,6 +184,14 @@ class StripGenerator:
         if prompt_b and is_disallowed(prompt_b):
             prompt_b = None
         shown_prompt = prompt_b if (prompt_b and blend_t >= 0.5) else prompt_a
+        from .styles import ramp, with_trigger
+
+        style_a, style_b = self.director.styles_for(blend_t) if hasattr(self.director, "styles_for") else ("none", None)
+        prompt_a = with_trigger(prompt_a, style_a)
+        if prompt_b:
+            prompt_b = with_trigger(prompt_b, style_b or style_a)
+        if hasattr(self.inpainter, "set_styles"):
+            self.inpainter.set_styles(ramp(style_a, style_b, blend_t if prompt_b else 0.0))
         seed = cfg.seed + self._strip_index
 
         # SD sometimes paints a hard vertical "panel" edge instead of growing
@@ -241,6 +250,8 @@ class StripGenerator:
 
         if not cfg.mock:
             generated = correct_drift(generated, window, ctx_w)
+            if cfg.harmonize_seams and band:
+                generated = harmonize_seam(generated, ctx_w - band, cfg.strip_width)
 
         if self._match_histogram:
             # Match colors to the unmasked context region.

@@ -26,14 +26,22 @@ Each scene prompt: a concrete SD 1.5 prompt (under 60 words) of comma-separated 
 Content line: preserve the user's intent faithfully, including dark, gory, violent, horror, disturbing, grotesque and surreal themes; don't soften or sanitize those. The ONE exception is sexual content: never include nudity, sexual acts, erotic or suggestive content; if an intention asks for it, keep only its non-sexual elements (setting, mood, palette).
 Continuity: continue the existing composition, perspective and lighting; change subject, palette and style gradually. For big jumps, invent bridging scenes that morph one into the other. transition = strips used to blend into that scene (12-40; prefer 16-24, larger for big changes). hold = strips to stay on it before the next queued scene (8-60).
 Reply with ONLY a JSON object, no prose:
-{"scenes":[{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":18,"hold":20}],"note":"one short sentence"}"""
+{"scenes":[{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":18,"hold":20,"style":"none"}],"note":"one short sentence"}"""
 
+
+_STYLE_NOTE = ("\nstyle = one of: none, pixel art, watercolor, cartoon, papercut, ink, oil. It selects a rendering style "
+               "(LoRA) that fades in across the transition. Use \"none\" most of the time; pick a style only when the "
+               "user asks for one or a scene clearly calls for it, and keep the same style across consecutive scenes "
+               "unless deliberately changing it.")
 
 AUTO_SYSTEM = """You are the autopilot of an endless, horizontally scrolling image painted strip by strip by Stable Diffusion 1.5 inpainting (512px tall, 128px strips, ~2-3 s each). Nobody is steering right now, so you decide where the journey drifts next, forever.
 Given the recent scenes (oldest first), invent the NEXT 1-3 scenes. Make the chain evolve continuously and keep surprising: dreamlike, absurd, nonsensical and impossible worlds are welcome (any subject, place, scale or art style). Each step should grow plausibly out of the previous one through shared shapes, colors, materials or lighting, then mutate; get gradually wilder over time. Never repeat or closely revisit a recent scene.
 Each prompt: a concrete SD 1.5 prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). No text, frames, borders or split images. Never include nudity or sexual content.
 transition = strips to blend in (16-32), hold = strips to stay (10-30).
-Reply with ONLY JSON: {"scenes":[{"title":"2-4 word name","prompt":"...","negative":"","transition":20,"hold":16}],"note":"one short sentence"}"""
+Reply with ONLY JSON: {"scenes":[{"title":"2-4 word name","prompt":"...","negative":"","transition":20,"hold":16,"style":"none"}],"note":"one short sentence"}"""
+SYSTEM += _STYLE_NOTE
+AUTO_SYSTEM += _STYLE_NOTE
+
 
 
 class PromptInterpreter:
@@ -160,6 +168,7 @@ def parse_plan(text: str) -> dict[str, Any]:
                 "title": str(s.get("title", ""))[:80],
                 "prompt": prompt[:600],
                 "negative": str(s.get("negative", "") or "")[:400],
+                "style": __import__("infinite_tapestry.styles", fromlist=["normalize"]).normalize(s.get("style")),
                 "transition": _clamp(s.get("transition"), 12, 40, 18),
                 "hold": _clamp(s.get("hold"), 0, 120, 20),
             }

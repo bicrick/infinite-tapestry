@@ -40,6 +40,11 @@ class Config:
     # LCM-LoRA + TAESD is ~3x faster but smeared/seamed badly in testing;
     # opt in with --lcm-lora latent-consistency/lcm-lora-sdv1-5 --taesd-model madebyollin/taesd
     lcm_lora: str = ""
+    # Backend: "sd15" (default, cheap GPUs) or "sdxl" (24 GB-class GPUs; see SDXL_PRESET)
+    backend: str = "sd15"
+    sdxl_model: str = "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
+    style_loras: bool = True  # SDXL only: load style LoRAs (styles.py) and ramp them across transitions
+    harmonize_seams: bool = True  # remove colour steps at the mask edge
     taesd_model: str = ""
     dtype: str = "float16"
     device: str = "cuda"
@@ -99,7 +104,7 @@ def config_from_args(args: Any) -> Config:
     if getattr(args, "prompt", None):
         prompts = [(0, args.prompt)]
 
-    return Config(
+    kw = dict(
         height=args.height,
         window_width=args.window_width,
         strip_width=args.strip_width,
@@ -119,4 +124,20 @@ def config_from_args(args: Any) -> Config:
         port=args.port,
         prompts=prompts,
         device="cpu" if args.mock else args.device,
+        backend=getattr(args, "backend", None) or "sd15",
     )
+    if kw["backend"] == "sdxl":
+        base = Config()
+        for k, v in SDXL_PRESET.items():
+            if k in kw and kw[k] == getattr(base, k):
+                kw[k] = v
+            elif k not in kw:
+                kw[k] = v
+    return Config(**kw)
+
+
+# 1024-class geometry for SDXL: same proportions as SD1.5 (window 1:1, strip 1/4, overlap 3/4 strip).
+SDXL_PRESET: dict[str, Any] = {
+    "height": 1024, "window_width": 1024, "strip_width": 256, "overlap": 192, "repaint_band": 128,
+    "steps": 18, "guidance_scale": 6.0, "seam_retries": 1, "scroll_speed": 60.0, "scroll_speed_min": 16.0,
+}

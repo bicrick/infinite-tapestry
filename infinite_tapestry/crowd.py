@@ -124,7 +124,7 @@ class Crowd:
         from .guard import is_disallowed
 
         scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"), s.get("hold"),
-                             source=" · ".join(r["body"] for r in rows)[:200], origin="user")
+                             source=" · ".join(r["body"] for r in rows)[:200], origin="user", style=s.get("style"))
                   for s in plan["scenes"] if not is_disallowed(s["prompt"])]
         for sc in scenes:
             sc["by"] = by

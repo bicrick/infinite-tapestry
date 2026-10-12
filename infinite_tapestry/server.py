@@ -378,7 +378,7 @@ def create_app(
                     plan = await asyncio.to_thread(interpreter.plan, text, prev, None)
                 scenes = [
                     make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""),
-                               s.get("transition"), s.get("hold"), source=text, origin="user")
+                               s.get("transition"), s.get("hold"), source=text, origin="user", style=s.get("style"))
                     for s in plan["scenes"]
                     if not is_blocked(s["prompt"], text) and not is_sexual(s["prompt"])
                 ]

@@ -21,7 +21,8 @@
   const t0 = performance.now();
   let synth = 0, lastT = t0, offsetFix = null;   // synthetic world scroll until the real one exists
   let resolveAt = 0, finished = false;
-  const RESOLVE = 1700;
+  const RESOLVE = 2600;
+  let revealed = false;
 
   function worldLeft(now) {
     const v = V();
@@ -50,45 +51,48 @@
       pg.drawImage(view, 0, 0, cols, rows);
       const d = pg.getImageData(0, 0, cols, rows).data;
       let lum = 0; for (let i = 0; i < d.length; i += 16) lum += d[i] + d[i + 1] + d[i + 2];
-      if (!resolveAt && lum / (d.length / 16) / 3 > 12 && now - t0 > 500) { resolveAt = now; startReveal(); }
+      if (!resolveAt && lum / (d.length / 16) / 3 > 12 && now - t0 > 500) { resolveAt = now; }
       src = { d, cols, rows };
     }
     const p = resolveAt ? Math.min(1, (now - resolveAt) / RESOLVE) : 0;
-    const e = p * p * (3 - 2 * p);
+    // v4: density fills in (v2 look: dark card, bright saturated points), then the moving image takes over.
+    const fill = Math.min(1, p / 0.72);                       // fraction of points present
+    const dens = fill * fill * (3 - 2 * fill);
+    const hand = Math.max(0, (p - 0.6) / 0.4);              // final hand-over to the real canvas
+    const he = hand * hand * (3 - 2 * hand);
+    if (resolveAt && !revealed && p > 0.55) { revealed = true; startReveal(); }
 
+    g.globalCompositeOperation = "source-over";
     g.clearRect(0, 0, W, H);
-    if (!resolveAt) { g.fillStyle = "#050506"; g.fillRect(0, 0, W, H); }
-    // World-anchored lattice of points (jittered), spacing in world px.
-    const sp = 9, rWorld = sp * (0.24 + 0.55 * e);
+    g.fillStyle = `rgba(5,5,6,${1 - he})`; g.fillRect(0, 0, W, H);
+    const sp = 7;                                             // world px between lattice points
     const i0 = Math.floor(left / sp) - 1, i1 = Math.ceil((left + W / s) / sp) + 1;
-    const rowsN = Math.ceil(512 / sp) + 1;
-    const alpha = resolveAt ? (1 - e) * 0.95 : 0;
-    const moteA = Math.max(0, 1 - (resolveAt ? (now - resolveAt) / 400 : 0));
+    const rowsN = Math.ceil(H / s / sp) + 1;
+    const moteA = Math.max(0, 1 - (resolveAt ? (now - resolveAt) / 500 : 0));
     g.globalCompositeOperation = "source-over";
     for (let i = i0; i <= i1; i++) for (let j = 0; j < rowsN; j++) {
       const h1 = hash(i, j), h2 = hash(j, i + 7919);
       const wx = (i + h1) * sp, wy = (j + h2) * sp;
       const x = (wx - left) * s, y = wy * s;
       if (x < -20 || x > W + 20) continue;
-      if (src && alpha > 0.01) {
+      if (src && dens > 0 && h1 < dens) {
         const pi = ((Math.min(src.rows - 1, Math.max(0, (y / H * src.rows) | 0)) * src.cols) + Math.min(src.cols - 1, Math.max(0, (x / W * src.cols) | 0))) * 4;
         let r = src.d[pi], gg = src.d[pi + 1], b = src.d[pi + 2];
         if (r + gg + b < 24) continue;
-        const m = (r + gg + b) / 3, k = 1.5 - 0.5 * e;      // saturated at first, true colour by the end
-        r = clamp(m + (r - m) * k + 10); gg = clamp(m + (gg - m) * k + 10); b = clamp(m + (b - m) * k + 10);
-        // points arrive in a soft random order during the first third, then swell into the image
-        const arrive = Math.min(1, Math.max(0, (e * 3 - h1 * 0.9)));
-        if (arrive <= 0) continue;
-        g.fillStyle = `rgba(${r},${gg},${b},${alpha * arrive})`;
-        g.beginPath(); g.arc(x, y, rWorld * s * (0.5 + 0.5 * h2) * (0.6 + 0.4 * arrive), 0, 6.283); g.fill();
+        const m = (r + gg + b) / 3, k = 1.55 - 0.5 * he;
+        r = clamp(m + (r - m) * k + 12); gg = clamp(m + (gg - m) * k + 12); b = clamp(m + (b - m) * k + 12);
+        const age = Math.min(1, (dens - h1) * 6);             // each point blooms in over a moment
+        const rad = sp * s * (0.34 + 0.4 * h2) * (0.6 + 0.4 * age);
+        g.fillStyle = `rgba(${r},${gg},${b},${(0.35 + 0.6 * age) * (1 - he)})`;
+        g.beginPath(); g.arc(x, y, rad, 0, 6.283); g.fill();
       }
-      if (moteA > 0.01 && h1 < 0.22) {                       // waiting motes (also fade out as colour arrives)
-        g.fillStyle = `rgba(255,255,255,${moteA * (0.18 + 0.3 * h2)})`;
+      if (moteA > 0.01 && h1 < 0.12) {
+        g.fillStyle = `rgba(255,255,255,${moteA * (0.14 + 0.25 * h2)})`;
         g.fillRect(x, y, 1.5 * devicePixelRatio, 1.5 * devicePixelRatio);
       }
     }
-    // The real canvas fades in underneath, already moving.
-    if (resolveAt) view.style.opacity = String(Math.min(1, e * 1.15));
+    g.globalCompositeOperation = "source-over";
+    if (resolveAt) view.style.opacity = String(he);
     if (p >= 1) return finish();
     requestAnimationFrame(frame);
   }

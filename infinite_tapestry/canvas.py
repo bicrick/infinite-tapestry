@@ -208,3 +208,32 @@ def correct_drift(
         scale = float(np.clip(ws / gs, 0.7, 1.3))
         out[:, :, c] = (g[:, :, c] - gc[:, :, c].mean()) * scale + wc[:, :, c].mean()
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def harmonize_seam(generated: Image.Image, x0: int, fade: int, probe: int = 6, sigma_rows: float = 24.0) -> Image.Image:
+    """Remove colour *steps* at the mask edge x0 (the 'hard vertical colour-block' seam).
+
+    Measures, per row, the colour jump between the columns just left and right of x0 (smoothed
+    vertically so detail is untouched), and adds the opposite offset to the new region, fading
+    to zero over `fade` px. Edges that exist in the content (texture) survive because only the
+    low-frequency difference is corrected and the correction is capped.
+    """
+    g = np.asarray(generated.convert("RGB")).astype(np.float32)
+    h, w, _ = g.shape
+    if x0 - probe < 0 or x0 + probe >= w:
+        return generated
+    left = g[:, x0 - probe:x0].mean(axis=1)
+    right = g[:, x0:x0 + probe].mean(axis=1)
+    d = left - right                                   # (h, 3)
+    k = int(sigma_rows * 3)
+    ys = np.arange(-k, k + 1, dtype=np.float32)
+    ker = np.exp(-0.5 * (ys / sigma_rows) ** 2); ker /= ker.sum()
+    pad = np.pad(d, ((k, k), (0, 0)), mode="edge")
+    d = np.stack([np.convolve(pad[:, c], ker, mode="valid") for c in range(3)], axis=1)
+    d = np.clip(d, -90, 90)
+    n = min(fade, w - x0)
+    xs = np.arange(n, dtype=np.float32) / max(1, n)
+    wgt = 0.5 * (1 + np.cos(np.pi * xs))              # 1 → 0, smooth
+    out = g.copy()
+    out[:, x0:x0 + n] += d[:, None, :] * wgt[None, :, None]
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")

@@ -78,6 +78,7 @@ def make_scene(
     hold: int | None = None,
     source: str = "",
     origin: str = "user",
+    style: str | None = None,
 ) -> dict:
     """A playlist item. `transition`/`hold` are in strips (None = director default)."""
     prompt = str(prompt).strip()[:600]
@@ -90,7 +91,13 @@ def make_scene(
         "hold": None if hold is None else max(0, min(500, int(hold))),
         "source": source[:200],
         "origin": origin if origin in ("user", "auto", "seed") else "user",
+        "style": _norm_style(style),
     }
+
+
+def _norm_style(style):
+    from .styles import normalize
+    return normalize(style)
 
 
 class LiveDirector:
@@ -330,6 +337,13 @@ class LiveDirector:
                     return self.current, None, 0.0
                 return self.current, self.target, t
             return self.current, None, 0.0
+
+    def styles_for(self, t: float) -> tuple[str, str | None]:
+        """(style of current scene, style of target scene or None) — call right after frame_for."""
+        with self._lock:
+            a = (self._current or {}).get("style") or "none"
+            b = (self._target or {}).get("style") if self._target else None
+            return a, (b or "none") if self._target else None
 
     def negative_for(self, t: float) -> str:
         with self._lock:
