@@ -43,8 +43,8 @@ module.exports = async (req, res) => {
         const to = Number.isFinite(b) && b >= a ? Math.min(b, a + 63) : a + 7;
         const idea = (await rest("GET", `ideas?status=in.(playing,played)&start_strip=lte.${a + 3}&order=start_strip.desc&limit=1&select=handle,body,start_strip,end_strip,status`).catch(() => []))[0];
         const by = idea && (idea.end_strip != null ? a <= idea.end_strip : idea.status === "playing" && a <= idea.start_strip + 16) ? idea : null;
-        m = { title: by ? `“${clip(by.body, 70)}”` : "A moment from the Infinite Tapestry",
-              desc: by ? `@${by.handle} steered the Infinite Tapestry here.` : "An endless painting, steered by everyone watching.",
+        m = { title: by ? clip(String(by.body).replace(/\s+/g, " ").trim(), 70) : "A moment from the Infinite Tapestry",
+              desc: by ? `by @${by.handle} · Infinite Tapestry` : "An endless painting, steered by everyone watching.",
               img: `${host}/api/og?card=at&a=${a}&b=${to}`, url: `${host}/?at=${a}&to=${to}` };
       }
     }

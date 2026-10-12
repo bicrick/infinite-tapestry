@@ -34,8 +34,9 @@ module.exports = async (req, res) => {
   if (!idea) { res.setHeader("location", "/"); return res.status(302).end(); }
   const landed = idea.start_strip != null;
   const target = landed ? `/?at=${idea.start_strip}&to=${idea.end_strip ?? idea.start_strip + 12}` : `/u/${encodeURIComponent(idea.handle)}`;
-  const title = `“${idea.body.length > 70 ? idea.body.slice(0, 68) + "…" : idea.body}”`;
-  const desc = landed ? `@${idea.handle} steered the Infinite Tapestry here.` : `@${idea.handle}'s idea is waiting to be woven into the Infinite Tapestry.`;
+  const body = String(idea.body || "").replace(/\s+/g, " ").trim();
+  const title = body.length > 70 ? body.slice(0, 68) + "…" : body;
+  const desc = `by @${idea.handle} · Infinite Tapestry`;
   const img = landed ? `${host}/api/og?card=idea&id=${idea.id}` : `${host}/brand/og/og-3-close.jpg`;
   res.setHeader("content-type", "text/html; charset=utf-8");
   res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=600");
