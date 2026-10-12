@@ -757,17 +757,20 @@
   // ---------- auto-hide chrome ----------
   let idleTimer = 0;
   const drawer = $("drawer");
-  function poke() {
+  function poke(ms) {
     document.body.classList.remove("idle");
     clearTimeout(idleTimer);
+    // Don't count down during the load-in: the chrome hasn't even appeared yet.
+    if (document.body.classList.contains("intro")) { idleTimer = setTimeout(poke, 400); return; }
     idleTimer = setTimeout(() => {
       const busy = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
       if (busy || drawer.classList.contains("open") || !$("speed-pop").classList.contains("hidden") || !$("export-pop").classList.contains("hidden")) return poke();
       document.body.classList.add("idle");
-    }, 3500);
+    }, typeof ms === "number" ? ms : 3500);
   }
+  window.addEventListener("tapestry:revealed", () => poke(6000));
   ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"].forEach((e) =>
-    window.addEventListener(e, poke, { passive: true }));
+    window.addEventListener(e, () => poke(), { passive: true }));
   poke();
 
   // ---------- toast ----------

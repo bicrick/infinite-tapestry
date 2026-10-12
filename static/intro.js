@@ -117,6 +117,7 @@
     }
     body.classList.add("loaded");
     body.classList.remove("intro");
+    window.dispatchEvent(new Event("tapestry:revealed"));
     setTimeout(() => body.classList.add("settled"), 2400);
   }
   function finish() {
