@@ -42,8 +42,10 @@ def momentum_brief(recent: list[dict]) -> str:
             steps.append(f"scene {n} after the idea: STAY IN THE SAME WORLD as the idea (same theme, materials and tone), "
                          "a neighboring place or different part of it, new camera angle and moment")
         elif n <= MOMENTUM_STEPS:
-            steps.append(f"scene {n} after the idea: DRIFT one step, keeping ONE clear element (material, creature, "
-                         "color, setting or joke) from the previous scene while changing the rest")
+            away = {3: "the idea's world is now only a minority of the scene; a NEW main subject/place takes over",
+                    4: "the idea's material/theme is GONE; keep only one small element (color, creature, prop or joke) from scene 3",
+                    5: "a fresh scene that shares just one element with scene 4"}.get(n, "")
+            steps.append(f"scene {n} after the idea: DRIFT AWAY one step: {away}")
         else:
             steps.append(f"scene {n}: free choice, loosely linked to the previous scene")
     return ("THEME MOMENTUM: a viewer just played the idea \"" + idea + "\" (scene \"" + str(u.get("title", "")) + "\"). "
