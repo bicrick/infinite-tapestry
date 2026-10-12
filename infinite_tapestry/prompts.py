@@ -77,6 +77,7 @@ def make_scene(
     transition: int | None = None,
     hold: int | None = None,
     source: str = "",
+    origin: str = "user",
 ) -> dict:
     """A playlist item. `transition`/`hold` are in strips (None = director default)."""
     prompt = str(prompt).strip()[:600]
@@ -88,6 +89,7 @@ def make_scene(
         "transition": None if transition is None else max(MIN_TRANSITION, min(64, int(transition))),
         "hold": None if hold is None else max(0, min(500, int(hold))),
         "source": source[:200],
+        "origin": origin if origin in ("user", "auto", "seed") else "user",
     }
 
 
@@ -107,13 +109,14 @@ class LiveDirector:
         queue: list[str] | None = None,
         hold: int = 24,
         blend: int = 8,
-        loop: bool = True,
+        loop: bool = False,
     ) -> None:
         import threading
 
         self._lock = threading.Lock()
         self.negative_prompt = negative_prompt
-        self._current = make_scene(initial)
+        self._current = make_scene(initial, origin="seed")
+        self.history: list[dict] = [dict(self._current)]
         self._target: dict | None = None
         self.blend = max(1, int(blend))
         self.hold = max(0, int(hold))
@@ -127,17 +130,11 @@ class LiveDirector:
     def from_schedule(
         cls, schedule: list[tuple[int, str]], negative_prompt: str = "", blend: int = 8
     ) -> "LiveDirector":
+        """Start from the first scheduled prompt; any others are queued once
+        (no looping). Autopilot fills the queue from there."""
         sched = sorted(schedule, key=lambda x: x[0])
-        hold = 24
-        if len(sched) > 1:
-            hold = max(1, sched[1][0] - sched[0][0] - blend)
-        return cls(
-            sched[0][1],
-            negative_prompt,
-            queue=[p for _, p in sched[1:]] + [sched[0][1]],
-            hold=hold,
-            blend=blend,
-        )
+        return cls(sched[0][1], negative_prompt, queue=[p for _, p in sched[1:]],
+                   hold=16, blend=blend, loop=False)
 
     # --- compat properties ---
     @property
@@ -163,9 +160,45 @@ class LiveDirector:
 
     def _begin(self, scene: dict, at: int) -> None:
         if self._target is not None:
-            self._current = self._target
+            self._promote(self._target)
         self._target = scene
         self._blend_start = at
+
+    def _promote(self, scene: dict) -> None:
+        self._current = scene
+        self.history.append(dict(scene))
+        del self.history[:-30]
+
+    def add_user(self, scenes: list[dict], position: str = "end") -> int:
+        """Queue user scenes ahead of every pending auto scene. Pending auto
+        scenes are dropped (autopilot regenerates them to bridge from the
+        user's destination). Returns how many auto items were dropped."""
+        with self._lock:
+            users = [s for s in self._queue if s.get("origin") != "auto"]
+            dropped = len(self._queue) - len(users)
+            if position == "next":
+                users[0:0] = scenes
+            else:
+                users.extend(scenes)
+            self._queue = users[:100]
+            return dropped
+
+    def drop_auto(self) -> None:
+        with self._lock:
+            self._queue = [s for s in self._queue if s.get("origin") != "auto"]
+
+    def upcoming_count(self) -> int:
+        with self._lock:
+            return len(self._queue) + (1 if self._target else 0)
+
+    def recent(self, n: int = 8) -> list[dict]:
+        """Recent played scenes plus anything in flight/queued, oldest first."""
+        with self._lock:
+            out = [dict(s) for s in self.history[-n:]]
+            if self._target:
+                out.append(dict(self._target))
+            out.extend(dict(s) for s in self._queue)
+            return out
 
     # --- control ---
     def set_prompt(self, prompt: str, blend: int | None = None, at: int = 0) -> None:
@@ -266,7 +299,8 @@ class LiveDirector:
         with self._lock:
             if self._target is not None:
                 # Already transitioning: finish it now and move on.
-                self._current, self._target = self._target, None
+                self._promote(self._target)
+                self._target = None
             self._active_since = -10**9  # force advance on next frame
 
     # --- generator side ---
@@ -277,7 +311,7 @@ class LiveDirector:
             if self._target is not None:
                 t = (strip_index - self._blend_start + 1) / self._blend_len(self._target)
                 if t >= 1.0:
-                    self._current = self._target
+                    self._promote(self._target)
                     self._target = None
                     self._active_since = strip_index
                 else:
@@ -290,7 +324,8 @@ class LiveDirector:
                 self._blend_start = strip_index
                 t = 1.0 / self._blend_len(nxt)
                 if t >= 1.0:
-                    self._current, self._target = nxt, None
+                    self._promote(nxt)
+                    self._target = None
                     self._active_since = strip_index
                     return self.current, None, 0.0
                 return self.current, self.target, t
@@ -327,4 +362,5 @@ class LiveDirector:
                 "hold": self.hold,
                 "blend": self.blend,
                 "loop": self.loop,
+                "history": [{"title": h["title"], "origin": h.get("origin")} for h in self.history[-8:]],
             }

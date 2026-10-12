@@ -22,7 +22,7 @@
 
   <div class="dock ui">
     <div class="now">
-      <span class="now-label">Now</span>
+      <span id="now-src" class="src"></span>
       <span id="now-title">—</span>
       <span id="now-arrow" class="hidden">→</span>
       <span id="next-title"></span>
@@ -89,7 +89,11 @@
     <ol id="queue-list" class="list"></ol>
     <div id="queue-empty" class="empty hidden">Nothing queued. Type a destination below.</div>
     <div class="drawer-foot">
-      <label class="toggle"><input id="loop" type="checkbox" checked /><span></span>Loop playlist</label>
+      <div class="auto-row">
+        <label class="toggle"><input id="autopilot" type="checkbox" checked /><span></span><span class="spark">✦</span> Autopilot</label>
+        <span id="auto-status" class="auto-status"></span>
+      </div>
+      <input id="vibe" class="vibe" type="text" placeholder="Steer the autopilot (optional vibe)…" maxlength="200" autocomplete="off" />
       <label class="num-field">Hold <input id="hold" type="number" min="0" max="500" value="16" /></label>
       <label class="num-field">Blend <input id="blend" type="number" min="1" max="64" value="8" /></label>
       <button id="clear" type="button" class="ghost">Clear</button>

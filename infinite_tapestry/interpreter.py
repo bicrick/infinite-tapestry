@@ -28,22 +28,32 @@ Reply with ONLY a JSON object, no prose:
 {"scenes":[{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":18,"hold":20}],"note":"one short sentence"}"""
 
 
+AUTO_SYSTEM = """You are the autopilot of an endless, horizontally scrolling image painted strip by strip by Stable Diffusion 1.5 inpainting (512px tall, 128px strips, ~2-3 s each). Nobody is steering right now, so you decide where the journey drifts next, forever.
+Given the recent scenes (oldest first), invent the NEXT 1-3 scenes. Make the chain evolve continuously and keep surprising: dreamlike, absurd, nonsensical and impossible worlds are welcome (any subject, place, scale or art style). Each step should grow plausibly out of the previous one through shared shapes, colors, materials or lighting, then mutate; get gradually wilder over time. Never repeat or closely revisit a recent scene.
+Each prompt: a concrete SD 1.5 prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). No text, frames, borders or split images.
+transition = strips to blend in (16-32), hold = strips to stay (10-30).
+Reply with ONLY JSON: {"scenes":[{"title":"2-4 word name","prompt":"...","negative":"","transition":20,"hold":16}],"note":"one short sentence"}"""
+
+
 class PromptInterpreter:
     def __init__(self, api_key: str | None = None, model: str | None = None, timeout: float = 20.0) -> None:
         self.api_key = api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY", "")
         self.model = model or DEFAULT_MODEL
         self.timeout = timeout
+        self.tokens_used = 0
 
     @property
     def enabled(self) -> bool:
         return bool(self.api_key)
 
-    def _call(self, model: str, user: str) -> str:
+    def _call(self, model: str, user: str, system: str = SYSTEM, max_tokens: int = 1200) -> str:
+        if not self.api_key:
+            raise RuntimeError("no API key")
         body = json.dumps(
             {
                 "model": model,
-                "max_tokens": 1200,
-                "system": SYSTEM,
+                "max_tokens": max_tokens,
+                "system": system,
                 "messages": [{"role": "user", "content": user}],
             }
         ).encode()
@@ -58,7 +68,32 @@ class PromptInterpreter:
         )
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             data = json.loads(resp.read())
+        usage = data.get("usage") or {}
+        self.tokens_used += int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+
+    def autoplan(self, recent: list[dict], vibe: str = "", count: int = 2) -> dict[str, Any]:
+        """Next autopilot scenes continuing from `recent` (title/prompt dicts).
+        Raises on failure so the caller can back off."""
+        lines = [f"{i + 1}. {r.get('title', '')}: {r.get('prompt', '')[:200]}" for i, r in enumerate(recent[-8:])]
+        user = "Recent scenes, oldest first:\n" + "\n".join(lines)
+        if vibe:
+            user += f"\nViewer's standing vibe to lean toward (loosely): {vibe[:200]}"
+        user += f"\nGive the next {max(1, min(3, count))} scene(s)."
+        last: Exception | None = None
+        for model in dict.fromkeys([self.model, FALLBACK_MODEL]):
+            try:
+                plan = parse_plan(self._call(model, user, system=AUTO_SYSTEM, max_tokens=700))
+                plan["source"], plan["model"] = "haiku", model
+                return plan
+            except urllib.error.HTTPError as e:
+                last = e
+                if e.code not in (400, 404):
+                    break
+            except Exception as e:
+                last = e
+                break
+        raise RuntimeError(f"autoplan failed: {type(last).__name__ if last else 'unknown'}")
 
     def plan(self, intent: str, current: str = "", upcoming: list[str] | None = None) -> dict[str, Any]:
         """Return {"scenes": [...], "note": str, "source": "haiku"|"raw", "model": str|None}."""
