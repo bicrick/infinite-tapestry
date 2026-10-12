@@ -549,7 +549,7 @@
     const s = s0 * zoom * ribbon;
     const center = viewLeft() + viewWorld() / 2;
     // Never show blank canvas past the painted edge when the ribbon widens the view.
-    const left = Math.max(0, Math.min(center - (w / s) / 2, panoramaWidth() - w / s));
+    const left = Math.max(0, Math.min(center - (w / s) / 2, panoramaWidth() - SW() * 2 - w / s));
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
     const yOff = portrait() ? bandTopFor(h, config.height * s0) + (config.height * s0 - config.height * s) / 2 : (h * (1 - 0.06 * (1 - ribbon) / (1 - RIBBON)) - config.height * s) / 2;
     publishBand(yOff, config.height * s, h);
@@ -589,7 +589,11 @@
       }
     }
     ctx.restore();
-    if (portrait() || ribbon < 0.999) drawSurround(w, h, Math.max(0, yOff), config.height * s);
+    if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
+    else if (ribbon < 0.999) {   // desktop ribbon: same reflection/glow as the phone band, fading out as it expands
+      const sa = surroundA, k = (1 - ribbon) / (1 - RIBBON); surroundA = sa * k * k * (3 - 2 * k);
+      drawSurround(w, h, Math.max(0, yOff), config.height * s); surroundA = sa;
+    }
     // Motion blur that scales with scrub velocity (cheap: smear the frame onto itself).
     const blur = (true ? Math.min(12, Math.max(0, (Math.abs(velS) - 500) / 420))
       : Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260))) * (window.devicePixelRatio || 1);
