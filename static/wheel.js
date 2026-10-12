@@ -67,3 +67,27 @@
   wrap.addEventListener("pointerup", end); wrap.addEventListener("pointercancel", end); wrap.addEventListener("lostpointercapture", end);
   size(); requestAnimationFrame(draw);
 })();
+// Floating time · scene label above the wheel while scrubbing / coasting.
+(() => {
+  const V = () => window.TapestryView || {};
+  const lab = document.createElement("div"); lab.className = "wheel-label"; lab.setAttribute("aria-live", "polite");
+  document.body.appendChild(lab);
+  let on = false, offAt = 0, last = "", lastOff = null;
+  function tick() {
+    requestAnimationFrame(tick);
+    const wh = document.getElementById("hwheel");
+    if (!wh || !wh.clientWidth) { if (on) { on = false; lab.classList.remove("on"); } return; }
+    const off = V().offsetCss ? V().offsetCss() : 0;
+    const moving = wh.classList.contains("active") || (V().speedCss && V().speedCss() > 140 && !(V().isLive && V().isLive()));
+    lastOff = off;
+    const now = performance.now();
+    if (moving) offAt = now + 700;
+    const show = now < offAt;
+    if (show) {
+      const t = V().scrubLabel ? V().scrubLabel() : "";
+      if (t && t !== last) { last = t; lab.textContent = t; }
+    }
+    if (show !== on) { on = show; lab.classList.toggle("on", show && !!last); }
+  }
+  requestAnimationFrame(tick);
+})();

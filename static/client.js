@@ -274,6 +274,8 @@
   let corr = 0, lastClockAt = 0;
 
   const COARSE = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+  const PHONE = matchMedia("(max-width: 560px)");
+  let wheelGlide = false, landAt = 0;    // haptic-wheel flick: long, low-friction coast (iOS picker feel)
   let zoom = 1, zoomVel = 0, velS = 0, prevCenter = null, blurCv = null, blurCtx = null;
 
   // ---------- LOD tiles (served from the GPU box, mirrored in Storage) ----------
@@ -484,7 +486,8 @@
       }
       prevCenter = L;
       // Zoom out with speed: ~0.5x at 3k world px/s, ~0.05x when humming through hours.
-      const zt = COARSE ? 1 - Math.min(0.62, Math.max(0, (Math.abs(velS) - 500) / 5200))   // touch: unchanged
+      const zt = PHONE.matches ? 1   // phones: no zoom-out while scrubbing (blur + label instead)
+        : COARSE ? 1 - Math.min(0.62, Math.max(0, (Math.abs(velS) - 500) / 5200))   // touch: unchanged
         : Math.max(0.05, 1 / (1 + Math.max(0, Math.abs(velS) - 2500) / 4000));   // deep zoom only at turbo speeds
       // Spring zoom: out quickly as speed builds, snappy (slightly underdamped) back in on settle.
       if (zt < zoom) { zoom += (zt - zoom) * Math.min(1, dt * 6); zoomVel = 0; }
@@ -559,7 +562,8 @@
     ctx.restore();
     if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
     // Motion blur that scales with scrub velocity (cheap: smear the frame onto itself).
-    const blur = Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260)) * (window.devicePixelRatio || 1);
+    const blur = (PHONE.matches ? Math.min(12, Math.max(0, (Math.abs(velS) - 500) / 420))
+      : Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260))) * (window.devicePixelRatio || 1);
     if (blur > 0.5) {
       // Smear through a half-res scratch canvas (a canvas can't reliably draw onto itself).
       if (!blurCv) { blurCv = document.createElement("canvas"); blurCtx = blurCv.getContext("2d"); }
@@ -657,6 +661,7 @@
   // ---------- permalinks: ?at=<strip>[&to=<strip>] ----------
   let mark = null, seek = null;
   function seekTo(from, to) {
+    wheelGlide = false;
     if (maxIndex < 0) { pendingSeek = [from, to]; return; }
     from = Math.max(0, Math.min(from, maxIndex)); to = Math.max(from, Math.min(to ?? from + 8, maxIndex));
     enterHistory();
@@ -674,6 +679,7 @@
   }
 
   function startReturn() {
+    wheelGlide = false;
     enterHistory();
     const dist = Math.abs(maxPan() - shownPan());
     ret = { from: shownPan(), t0: performance.now(), dur: Math.min(1100, 420 + Math.sqrt(dist) * 9) };
@@ -718,9 +724,16 @@
       } else {
         // Friction: firm at normal speeds (~0.4-0.7s glide), loose once in turbo so it hums.
         if (performance.now() - wheelIdleAt > 250) turbo *= Math.exp(-1.2 * dt);
-        panVel *= Math.exp(-(7.5 - 6.3 * turbo) * dt);
+        panVel *= Math.exp(-(wheelGlide ? 0.85 : 7.5 - 6.3 * turbo) * dt);
+        if (wheelGlide && performance.now() - landAt > 250) {   // prefetch where the coast will land
+          landAt = performance.now();
+          const land = (panPos + panVel / 0.85 + viewWorld() / 2) / SW();
+          const a = Math.max(0, Math.floor(land) - 8), b = Math.min(maxIndex, Math.ceil(land) + 8);
+          if (b >= a) requestMissing(a, b);
+          for (let L = 1; L <= 2; L++) { const c = Math.floor(land / LOD_N[L]); for (let d = -1; d <= 1; d++) if (c + d >= 0) lodTile(L, c + d); }
+        }
         panPos += panVel * dt;
-        if (Math.abs(panVel) < 4) panVel = 0;
+        if (Math.abs(panVel) < 4) { panVel = 0; wheelGlide = false; }
         // Drift: once settled and the high-res strips are in, resume the slow forward drift with a
         // gelatinous spring ramp (0 → drift speed over ~1-1.5s, slight overshoot), never a jump.
         if (Math.abs(panVel) < 4 && !gesture && !tlScrub) {
@@ -760,6 +773,7 @@
   }
   canvas.addEventListener("pointerdown", (ev) => {
     if (activePointer !== null) return;
+    wheelGlide = false;
     activePointer = ev.pointerId;
     try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
     lastPX = ev.clientX;
@@ -850,6 +864,7 @@
   const wheelHist = [];
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
+    wheelGlide = false;
     if (ev.ctrlKey) return;      // pinch-zoom gesture: ignore
     const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? innerHeight : 1;
     const vert = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX);
@@ -887,7 +902,7 @@
     wheelStart() {
       if (panMode === "live" || panMode === "return") { panPos = panMode === "return" ? shownPan() : liveScroll + nudge; nudge = 0; nudgeVel = 0; panMode = "live"; enterHistory(); }
       else panPos = shownPan();
-      wheelHeld = true; tlScrub = true; panMode = "drag"; panVel = 0; turbo = 0; samples = [[performance.now(), panPos]];
+      wheelHeld = true; wheelGlide = false; tlScrub = true; panMode = "drag"; panVel = 0; turbo = 0; samples = [[performance.now(), panPos]];
     },
     wheelMove(dxCss) {
       const lo = minPan(), hi = maxPan(), resist = panPos < lo || panPos > hi ? 0.45 : 1;
@@ -902,9 +917,18 @@
       const now = performance.now(), s0 = samples[0], s1 = samples[samples.length - 1];
       const span = (s1[0] - s0[0]) / 1000;
       panVel = now - s1[0] > 80 || span <= 0 ? 0 : (s1[1] - s0[1]) / span;
-      panVel = Math.max(-8000, Math.min(8000, panVel));
+      const cap = 90000;
+      panVel = Math.max(-cap, Math.min(cap, panVel * 1.5));
+      wheelGlide = Math.abs(panVel) > 40;
       panMode = "glide";
     },
+    scrubLabel() {
+      const idx = Math.max(0, Math.min(maxIndex, Math.round(centerIdx())));
+      const r = sceneAt(idx), t = fmtTime(timeAt(idx));
+      return [t, r && r[1]].filter(Boolean).join(" · ");
+    },
+    speedCss: () => Math.abs(velS) / Math.max(1e-6, pxToWorld()),
+    isLive: () => panMode === "live",
     gliding: () => panMode === "glide" && Math.abs(panVel) > 4,
   });
   function goLive() { if (!live || panMode !== "live") startReturn(); }

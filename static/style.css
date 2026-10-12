@@ -753,3 +753,13 @@ body.react-open .cmd-terms { display: none !important; }
   /* floats live in the quiet space between the pill and the caption, never over it */
   .react-layer { right: 0; width: 110px; bottom: calc(150px + var(--sb, 0px)); height: 130px; --rise: -120px; }
 }
+.wheel-label { display: none; }
+@media (max-width: 560px) {
+  .wheel-label { display: block; position: fixed; left: 50%; bottom: calc(44px + max(0px, var(--sb, 0px) - 6px)); z-index: 23; pointer-events: none;
+    transform: translate(-50%, 4px); opacity: 0; transition: opacity .25s var(--ease), transform .3s var(--ease);
+    padding: 5px 11px; border-radius: 999px; font-size: 12px; letter-spacing: -.005em; white-space: nowrap; max-width: 78vw; overflow: hidden; text-overflow: ellipsis;
+    color: var(--fg); background: var(--glass-strong); border: 1px solid var(--line); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    font-variant-numeric: tabular-nums; }
+  .wheel-label.on { opacity: 1; transform: translate(-50%, 0); }
+  body:has(.wheel-label.on) .dock { opacity: 0; pointer-events: none; transition: opacity .2s var(--ease); }
+}
