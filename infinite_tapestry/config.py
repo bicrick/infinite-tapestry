@@ -48,6 +48,10 @@ class Config:
     style_loras: bool = True  # SDXL only: load style LoRAs (styles.py) and ramp them across transitions
     scene_change_repaint: float = 0.7  # fraction of context repainted while blending into a new scene
     user_cfg_boost: float = 1.5  # extra CFG for user ideas
+    dup_check: bool = False  # reject strips that clone visible context (klein preset turns it on)
+    dup_threshold: float = 0.8
+    dup_retries: int = 2
+    context_mask_px: int = 0  # mask (repaint) this many px of far-left context so the model can't copy it
     seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
     harmonize_seams: bool = True  # remove colour steps at the mask edge
     taesd_model: str = ""
