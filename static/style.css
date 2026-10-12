@@ -240,3 +240,4 @@ body.intro .dock { transform: translate(-50%, 10px); }
 body.loaded.settled .ui, body.loaded.settled .veil { transition-delay: 0s !important; }
 body.intro #view { opacity: 0; }
 #view { transition: transform 1.1s var(--ease), border-radius 1.1s var(--ease), filter 1.2s var(--ease), opacity .9s var(--ease); }
+.audit .meta, .audit .p { word-break: break-all; }

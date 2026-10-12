@@ -11,6 +11,7 @@
   const ctx = canvas.getContext("2d", { alpha: false });
   const statusEl = $("status");
   const statusText = $("status-text");
+  const DEBUG = /[?&]debug/.test(location.search);
   const liveBtn = $("live-btn");
 
   const MAGIC = "ITAP";
@@ -232,8 +233,17 @@
     const aheadStrips = Math.max(0, ahead / SW());
     statusEl.classList.toggle("off", !connected);
     statusEl.classList.toggle("warn", connected && live && aheadStrips < 1);
-    if (!connected) { statusText.textContent = "offline · reconnecting"; return; }
+    if (!connected) { statusText.textContent = "reconnecting"; return; }
     const parts = [];
+    const S = window.TapestrySocial;
+    if (!DEBUG && !(S && S.isAdmin())) {
+      parts.push(live ? "live" : "rewound");
+      if (speedMult > 1) parts.push(speedMult + "×");
+      parts.push(viewers + " watching");
+      statusText.textContent = parts.join("  ·  ");
+      syncSpeedUi();
+      return;
+    }
     if (!live) parts.push("history · strip " + Math.floor(viewLeft() / SW()) + "/" + maxIndex);
     if (gpu && gpu.strip_seconds) parts.push(gpu.strip_seconds.toFixed(1) + "s/strip");
     parts.push(aheadStrips.toFixed(1) + " ahead");
