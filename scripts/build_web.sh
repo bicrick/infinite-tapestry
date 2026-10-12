@@ -13,6 +13,7 @@ window.TAPESTRY_CONFIG = {
   wsUrl: "${WS_URL:-}",
   supabaseUrl: "${SUPABASE_URL:-}",
   supabaseAnonKey: "${SUPABASE_ANON_KEY:-}",
+  turnstileSiteKey: "${TURNSTILE_SITE_KEY:-}",
   google: ${TAPESTRY_GOOGLE_LOGIN:-false},
   centsPerHour: ${TAPESTRY_CENTS_PER_HOUR:-89}
 };

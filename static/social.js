@@ -64,7 +64,7 @@ function turnstileToken() {   // invisible Cloudflare Turnstile, only when confi
   return tsReady.then(() => new Promise((ok) => {
     if (!window.turnstile) return ok(null);
     const box = document.createElement("div"); box.style.cssText = "position:fixed;bottom:0;left:0;opacity:0;pointer-events:none"; document.body.appendChild(box);
-    window.turnstile.render(box, { sitekey: CFG.turnstileSiteKey, size: "invisible", callback: (t) => { box.remove(); ok(t); }, "error-callback": () => { box.remove(); ok(null); } });
+    window.turnstile.render(box, { sitekey: CFG.turnstileSiteKey, appearance: "interaction-only", callback: (t) => { box.remove(); ok(t); }, "error-callback": () => { box.remove(); ok(null); } });
   }));
 }
 async function submitAsGuest(text) {
