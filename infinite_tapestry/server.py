@@ -46,6 +46,46 @@ def strip_scene_message(strip: "Strip") -> dict | None:
             "s": [sc.get("title") or "", sc.get("by") or "", sc.get("style") or "", sc.get("origin") or ""]}
 
 
+def strip_ref(strip: Any) -> dict:
+    """Small JSON reference to a strip; the image itself comes from the public CDN."""
+    g = (lambda k, d=None: strip.get(k, d)) if isinstance(strip, dict) else (lambda k, d=None: getattr(strip, k, d))
+    sc = g("scene") or {}
+    ref = {"i": int(g("index")), "w": int(g("width", 0) or 0), "h": int(g("height", 0) or 0),
+           "o": int(g("overlap", 0) or 0), "p": (g("prompt", "") or "")[:160]}
+    if sc.get("title"):
+        ref["s"] = [sc.get("title") or "", sc.get("by") or "", sc.get("style") or "", sc.get("origin") or ""]
+    return ref
+
+
+def _on_loop(loop: asyncio.AbstractEventLoop) -> bool:
+    try:
+        return asyncio.get_running_loop() is loop
+    except RuntimeError:
+        return False
+
+
+class Viewer:
+    """One connected viewer: bounded queue of outbound messages."""
+
+    __slots__ = ("q", "v2", "task", "kicked")
+
+    def __init__(self, v2: bool) -> None:
+        self.q: asyncio.Queue[Any] = asyncio.Queue(maxsize=CLIENT_QUEUE_MAX)
+        self.v2 = v2
+        self.task: asyncio.Task | None = None
+        self.kicked = False
+
+    def offer(self, item: Any) -> None:
+        if self.kicked:
+            return
+        try:
+            self.q.put_nowait(item)
+        except asyncio.QueueFull:
+            self.kicked = True  # too slow: drop it, it will reconnect and resync
+            if self.task:
+                self.task.cancel()
+
+
 def encode_strip_message(strip: "Strip") -> bytes:
     prompt_bytes = strip.prompt.encode("utf-8")
     if len(prompt_bytes) > 65535:
@@ -91,7 +131,12 @@ def client_ip(ws: WebSocket) -> str:
 MAX_INTENT_CHARS = 300
 MAX_MESSAGE_BYTES = 4096
 MAX_CONN_PER_IP = int(os.environ.get("TAPESTRY_MAX_CONN_PER_IP", "8"))
-MAX_CONNECTIONS = int(os.environ.get("TAPESTRY_MAX_CONNECTIONS", "500"))
+MAX_CONNECTIONS = int(os.environ.get("TAPESTRY_MAX_CONNECTIONS", "5000"))
+# Per-viewer outbound queue (pre-serialized JSON). A viewer that falls this far
+# behind is disconnected (it reconnects and resyncs) so memory stays bounded.
+CLIENT_QUEUE_MAX = int(os.environ.get("TAPESTRY_CLIENT_QUEUE", "256"))
+SEND_TIMEOUT_S = 15.0
+DIRECTOR_MIN_INTERVAL_S = 0.5
 CONTROL_TYPES = {"intent", "autopilot", "speed", "skip", "remove", "move", "edit", "play", "clear",
                  "configure", "set_prompt", "queue"}
 MAX_QUEUE = 30
@@ -129,7 +174,9 @@ def create_app(
     base_target = buffer.target
     timeline = Timeline(config.strip_width, default_speed=config.scroll_speed)
     app.state.timeline = timeline
-    clients: set[asyncio.Queue] = set()
+    clients: set[Viewer] = set()
+    hub: dict[str, Any] = {"loop": None, "meta": None, "dir_json": None, "dir_at": 0.0, "dir_timer": None,
+                           "public_base": None}
     conn_per_ip: dict[str, int] = {}
     intent_limit = RateLimiter(intent_cooldown)
     control_limit = RateLimiter(control_cooldown)
@@ -212,14 +259,80 @@ def create_app(
         return {"type": "clock", **timeline.state(), "now": time.time(), "viewers": len(clients)}
 
     def broadcast(msg: Any) -> None:
-        for q in list(clients):
-            try:
-                q.put_nowait(msg)
-            except asyncio.QueueFull:
-                pass  # slow client; it will resync from history/clock
+        """Serialize once, enqueue the same string for every viewer (never blocks)."""
+        text = msg if isinstance(msg, str) else json.dumps(msg)
+        loop = hub["loop"]
+        if loop is not None and not _on_loop(loop):
+            loop.call_soon_threadsafe(broadcast, text)
+            return
+        for c in list(clients):
+            c.offer(text)
 
-    def broadcast_director() -> None:
-        broadcast({"type": "director", "director": director_state()})
+    def director_json(max_age: float = 1.0) -> str:
+        """Cached serialized director state (shared by every viewer)."""
+        now = time.monotonic()
+        if hub["dir_json"] is None or now - hub["dir_at"] > max_age:
+            hub["dir_json"], hub["dir_at"] = json.dumps(director_state()), now
+        return hub["dir_json"]
+
+    def _flush_director() -> None:
+        hub["dir_timer"] = None
+        cur = director_json(0.0)
+        hub["last_dir_sent"] = time.monotonic()
+        if cur != hub.get("dir_broadcast"):
+            hub["dir_broadcast"] = cur
+            broadcast('{"type": "director", "director": ' + cur + "}")
+
+    def broadcast_director(immediate: bool = False) -> None:
+        """Debounced: at most one director broadcast per DIRECTOR_MIN_INTERVAL_S, only when it changed."""
+        loop = hub["loop"]
+        if loop is None:
+            try:
+                loop = hub["loop"] = asyncio.get_running_loop()
+            except RuntimeError:
+                return
+        if not _on_loop(loop):
+            loop.call_soon_threadsafe(broadcast_director, immediate)
+            return
+        if immediate:
+            if hub["dir_timer"] is not None:
+                hub["dir_timer"].cancel()
+            _flush_director()
+            return
+        if hub["dir_timer"] is not None:
+            return
+        wait = DIRECTOR_MIN_INTERVAL_S - (time.monotonic() - hub.get("last_dir_sent", 0.0))
+        if wait <= 0:
+            _flush_director()  # leading edge: immediate when idle
+        else:
+            hub["dir_timer"] = loop.call_later(wait, _flush_director)  # trailing edge
+
+    def public_base() -> str | None:
+        if hub["public_base"] is None:
+            mirror = getattr(getattr(generator, "store", None), "mirror", None)
+            hub["public_base"] = mirror.public_base() if mirror and hasattr(mirror, "public_base") else ""
+        return hub["public_base"] or None
+
+    def strip_meta() -> dict[int, dict]:
+        """Strip metadata index, loaded once and extended as strips arrive (no per-request file scans)."""
+        if hub["meta"] is None:
+            store = getattr(generator, "store", None)
+            hub["meta"] = store.load_meta() if store is not None else {}
+        return hub["meta"]
+
+    def on_hub_strip(strip: "Strip") -> None:
+        """Runs on the event loop once per new strip: one tiny JSON for all v2 viewers."""
+        m = hub["meta"]
+        if m is not None:
+            m[int(strip.index)] = {"index": strip.index, "width": strip.width, "height": strip.height,
+                                   "overlap": strip.overlap, "prompt": strip.prompt, "scene": strip.scene}
+        ref = json.dumps({"type": "strip", **strip_ref(strip)})
+        status = json.dumps({"type": "status", "buffer": buffer.peek_depth(), "last_index": int(strip.index),
+                             "gpu": gpu_stats()})
+        for c in list(clients):
+            if c.v2:
+                c.offer(ref)
+                c.offer(status)
 
     async def clock_loop() -> None:
         """Advance the shared timeline; ack the buffer from the shared position."""
@@ -277,6 +390,10 @@ def create_app(
         # Fuel burn + idea pull must run with 0 viewers (pod is still billing).
         # Clock/timeline stays viewer-driven via ensure_clock on WS connect.
         ensure_crowd()
+        loop = hub["loop"] = asyncio.get_running_loop()
+        buffer.subscribe(lambda st: loop.call_soon_threadsafe(on_hub_strip, st))
+        if generator is not None and getattr(generator, "store", None) is not None:
+            await asyncio.to_thread(strip_meta)
 
     @app.on_event("shutdown")
     async def _shutdown_persist() -> None:
@@ -446,23 +563,39 @@ def create_app(
         conn_per_ip[ip] = conn_per_ip.get(ip, 0) + 1
         ensure_clock()
         user: dict | None = None
-        logger.info("WebSocket client connected from %s", ip)
+        logger.debug("WebSocket client connected from %s", ip)
         loop = asyncio.get_running_loop()
-        queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=512)
-        clients.add(queue)
+        # v2 viewers get small JSON strip refs and load images from the CDN;
+        # legacy (cached old JS) viewers still get binary strips.
+        v2 = ws.query_params.get("v") == "2" and public_base() is not None
+        viewer = Viewer(v2)
+        queue = viewer.q
+        clients.add(viewer)
         intent_tasks: set[asyncio.Task] = set()
 
-        def on_strip(strip: "Strip") -> None:
-            try:
-                loop.call_soon_threadsafe(queue.put_nowait, strip)
-            except Exception:
-                pass
+        unsubscribe = lambda: None  # noqa: E731
+        if not v2:
+            def on_strip(strip: "Strip") -> None:
+                loop.call_soon_threadsafe(viewer.offer, strip)
 
-        unsubscribe = buffer.subscribe(on_strip)
+            unsubscribe = buffer.subscribe(on_strip)
         last_index = -1
+
+        async def send_text(text: str) -> None:
+            await asyncio.wait_for(ws.send_text(text), SEND_TIMEOUT_S)
 
         async def notice(text: str, **extra: Any) -> None:
             await ws.send_json({"type": "notice", "text": text, **extra})
+
+        def refs_between(start: int, end: int) -> list[dict]:
+            meta = strip_meta()
+            have = {s.index: s for s in buffer.strips_between(start, end)}
+            out = []
+            for i in range(start, end + 1):
+                s = have.get(i) or meta.get(i)
+                if s is not None:
+                    out.append(strip_ref(s))
+            return out
 
         try:
             from .crowd import GPU_CENTS_PER_HOUR
@@ -470,17 +603,23 @@ def create_app(
             await ws.send_json(
                 {"type": "config", **config.client_dict(), "interpreter": bool(interpreter.enabled),
                  "limits": {"intent_chars": MAX_INTENT_CHARS, "intent_cooldown": intent_cooldown},
-                 "gpu_cents_per_hour": GPU_CENTS_PER_HOUR}
+                 "gpu_cents_per_hour": GPU_CENTS_PER_HOUR, **({"strip_base": public_base(), "lod_base": public_base()[:-len("strips/")] + "lod/"} if v2 else {})}
             )
             await ws.send_json(clock_msg())
-            for strip in buffer.snapshot()[-RECENT_ON_CONNECT:]:
+            if v2:
+                recent = buffer.snapshot()[-RECENT_ON_CONNECT:]
+                await send_text(json.dumps({"type": "strips", "items": [strip_ref(s) for s in recent]}))
+                await send_text('{"type": "status", "buffer": ' + json.dumps(buffer.peek_depth()) +
+                                ', "gpu": ' + json.dumps(gpu_stats()) + ', "director": ' + director_json() + "}")
+            for strip in ([] if v2 else buffer.snapshot()[-RECENT_ON_CONNECT:]):
                 await ws.send_bytes(encode_strip_message(strip))
                 if (_sm := strip_scene_message(strip)):
                     await ws.send_json(_sm)
                 last_index = max(last_index, strip.index)
-            await ws.send_json(
-                {"type": "status", "buffer": buffer.peek_depth(), "director": director_state(), "gpu": gpu_stats()}
-            )
+            if not v2:
+                await ws.send_json(
+                    {"type": "status", "buffer": buffer.peek_depth(), "director": director_state(), "gpu": gpu_stats()}
+                )
 
             async def push() -> None:
                 nonlocal last_index
@@ -489,11 +628,16 @@ def create_app(
                         item = await asyncio.wait_for(queue.get(), timeout=PING_INTERVAL_S)
                     except asyncio.TimeoutError:
                         await ws.send_json({"type": "ping", "buffer": buffer.peek_depth(), "gpu": gpu_stats()})
+                        if v2:
+                            continue
                         for strip in buffer.strips_after(last_index):
                             await ws.send_bytes(encode_strip_message(strip))
                             if (_sm := strip_scene_message(strip)):
                                 await ws.send_json(_sm)
                             last_index = strip.index
+                        continue
+                    if isinstance(item, str):
+                        await send_text(item)
                         continue
                     if isinstance(item, dict):
                         await ws.send_json(item)
@@ -505,10 +649,9 @@ def create_app(
                     if (_sm := strip_scene_message(strip)):
                         await ws.send_json(_sm)
                     last_index = strip.index
-                    await ws.send_json(
-                        {"type": "status", "buffer": buffer.peek_depth(), "last_index": last_index,
-                         "director": director_state(), "gpu": gpu_stats()}
-                    )
+                    await send_text('{"type": "status", "buffer": ' + json.dumps(buffer.peek_depth()) +
+                                    ', "last_index": ' + str(last_index) + ', "gpu": ' + json.dumps(gpu_stats()) +
+                                    ', "director": ' + director_json() + "}")
 
             async def handle_intent(data: dict) -> None:
                 text = str(data.get("text", "")).strip()
@@ -571,7 +714,7 @@ def create_app(
                      "plan": {k: plan.get(k) for k in ("note", "source", "model")}, "scenes": scenes}
                 )
                 broadcast({"type": "activity", "text": text, "titles": [s["title"] for s in scenes], "when": when})
-                broadcast_director()
+                broadcast_director(True)
 
             msg_count = [0, time.monotonic()]
 
@@ -623,14 +766,19 @@ def create_app(
                                 await crowd.refresh_pending()
                             except Exception:
                                 logger.exception("refresh_pending failed")
-                        await ws.send_json({"type": "director", "director": director_state()})
+                        await send_text('{"type": "director", "director": ' +
+                                        director_json(0.0 if t == "idea_added" else 1.0) + "}")
                     elif t == "status_request":
-                        await ws.send_json({"type": "status", "buffer": buffer.peek_depth(),
-                                            "director": director_state(), "gpu": gpu_stats()})
+                        await send_text('{"type": "status", "buffer": ' + json.dumps(buffer.peek_depth()) +
+                                        ', "gpu": ' + json.dumps(gpu_stats()) + ', "director": ' + director_json() + "}")
                         await ws.send_json(clock_msg())
                     elif t == "history":
                         start = max(0, int(data.get("start", 0)))
                         end = min(int(data.get("end", start)), start + 64)
+                        if v2 and not data.get("bytes"):
+                            await send_text(json.dumps({"type": "strips", "items": refs_between(start, end)}))
+                            continue
+                        end = min(end, start + 8) if v2 else end  # bytes fallback for strips missing on the CDN
                         found = buffer.strips_between(start, end)
                         have = {st.index for st in found}
                         store = getattr(generator, "store", None)
@@ -649,7 +797,7 @@ def create_app(
                         task.add_done_callback(intent_tasks.discard)
                     elif t == "autopilot" and autopilot:
                         autopilot.configure(data.get("enabled"), data.get("vibe"))
-                        broadcast_director()
+                        broadcast_director(True)
                     elif t in ("speed", "skip", "remove", "move", "edit", "play", "clear",
                                "configure", "set_prompt", "queue") and generator:
                         wait = control_limit.check(ip)
@@ -692,23 +840,25 @@ def create_app(
                         elif t == "queue":
                             d.set_queue([str(p)[:500] for p in data.get("prompts", [])][:MAX_QUEUE],
                                         hold=data.get("hold"), blend=data.get("blend"), loop=data.get("loop"))
-                        broadcast_director()
+                        broadcast_director(True)
 
-            tasks = {asyncio.create_task(push()), asyncio.create_task(recv())}
+            push_task = asyncio.create_task(push())
+            viewer.task = push_task
+            tasks = {push_task, asyncio.create_task(recv())}
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in pending:
                 task.cancel()
             for task in done:
-                exc = task.exception()
+                exc = None if task.cancelled() else task.exception()
                 if exc and not isinstance(exc, (WebSocketDisconnect, asyncio.CancelledError)):
                     raise exc
-        except WebSocketDisconnect:
-            logger.info("WebSocket client disconnected")
+        except (WebSocketDisconnect, asyncio.CancelledError, asyncio.TimeoutError):
+            logger.debug("WebSocket client disconnected")
         except Exception:
             logger.exception("WebSocket handler error")
         finally:
             conn_per_ip[ip] = max(0, conn_per_ip.get(ip, 1) - 1)
-            clients.discard(queue)
+            clients.discard(viewer)
             reactions.forget(str(id(queue)))
             unsubscribe()
             try:

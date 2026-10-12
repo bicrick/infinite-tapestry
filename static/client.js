@@ -142,7 +142,8 @@
   function onStripBinary(buf) {
     const m = decodeStrip(buf);
     if (!m) return;
-    if (strips.has(m.index)) return;
+    const prev = strips.get(m.index);
+    if (prev && (prev.blob || !prev.url)) return;   // bytes only fill a CDN miss
     const entry = {
       index: m.index, overlap: m.overlap, prompt: m.prompt,
       blob: new Blob([m.jpeg], { type: "image/jpeg" }), bitmap: null, decoding: false,
@@ -159,8 +160,43 @@
     }
   }
 
+  // v2 stream: the server sends small JSON refs; the JPEG comes from the public CDN.
+  function onStripRef(r, live) {
+    if (!r || typeof r.i !== "number") return;
+    if (Array.isArray(r.s)) addStripScene(r.i, r.s);
+    const base = config.strip_base;
+    if (strips.has(r.i) || !base) return;
+    strips.set(r.i, { index: r.i, overlap: r.o || 0, prompt: r.p || "",
+      url: base + String(r.i).padStart(8, "0") + ".jpg", blob: null, bitmap: null, decoding: false, tries: 0 });
+    requested.delete(r.i);
+    // Live strips arrive ahead of the view: prefetch once the CDN upload has landed.
+    const e = strips.get(r.i);
+    setTimeout(() => ensureDecoded(e), live ? 2500 : 0);
+    if (r.i > maxIndex) {
+      maxIndex = r.i;
+      if (!liveInitialized) {
+        liveInitialized = true;
+        liveScroll = Math.max(0, panoramaWidth() - viewWorld() - SW() * 2);
+      }
+    }
+  }
+
   function ensureDecoded(e) {
     if (e.bitmap || e.decoding) return;
+    if (!e.blob) {
+      if (!e.url || e.retryAt > performance.now()) return;
+      e.decoding = true;
+      fetch(e.url, { mode: "cors" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+        .then((b) => { e.blob = b; e.decoding = false; ensureDecoded(e); })
+        .catch(() => {
+          e.decoding = false;
+          e.tries = (e.tries || 0) + 1;
+          e.retryAt = performance.now() + Math.min(8000, 700 * e.tries);
+          // Not on the CDN yet (just painted) or an old strip never mirrored: ask the pod for bytes.
+          if (e.tries === 3) send({ type: "history", start: e.index, end: e.index, bytes: true });
+        });
+      return;
+    }
     e.decoding = true;
     createImageBitmap(e.blob).then((bm) => { e.bitmap = bm; e.decoding = false; },
       () => { e.decoding = false; });
@@ -241,8 +277,10 @@
       t = { img: new Image(), ok: false, used: 0 };
       t.img.crossOrigin = "anonymous";
       t.img.onload = () => { t.ok = true; };
-      t.img.onerror = () => { t.failed = true; };
-      t.img.src = `${httpBase()}/lod/${level}/${c}.jpg`;
+      const pod = `${httpBase()}/lod/${level}/${c}.jpg`;
+      // CDN first; a tile not mirrored yet falls back to the pod once (which builds and mirrors it).
+      t.img.onerror = () => { if (t.img.src !== pod && !t.podTried) { t.podTried = true; t.img.src = pod; } else t.failed = true; };
+      t.img.src = config.lod_base ? `${config.lod_base}${level}/${String(c).padStart(6, "0")}.jpg` : pod;
       lodCache.set(key, t);
       if (lodCache.size > 400) { const oldest = [...lodCache.entries()].sort((a, b) => a[1].used - b[1].used).slice(0, 100); oldest.forEach(([k]) => lodCache.delete(k)); }
     }
@@ -1111,6 +1149,8 @@
     }
     if (msg.gpu) gpu = msg.gpu;
     if (msg.type === "strip_scene" && Array.isArray(msg.s)) { addStripScene(msg.i, msg.s); return; }
+    if (msg.type === "strip") { onStripRef(msg, true); return; }
+    if (msg.type === "strips") { (msg.items || []).forEach((r) => onStripRef(r, false)); return; }
     if (msg.director) showDirector(msg.director);
     if (msg.type === "config") {
       config = Object.assign(config, msg);
@@ -1147,7 +1187,7 @@
     by: () => ($("now-src").textContent || "").trim() };
   function connect() {
     const url = wsUrl();
-    ws = new WebSocket(url);
+    ws = new WebSocket(url + (url.includes("?") ? "&" : "?") + "v=2");
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       connected = true;
