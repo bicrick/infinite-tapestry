@@ -41,3 +41,13 @@ def test_sdxl_preset_and_style_on_scenes():
     for i in range(30):
         d.frame_for(i)
     assert d.styles_for(1.0)[0] in ("pixel art", "none")
+
+
+def test_prefill_masked_is_not_black():
+    from infinite_tapestry.inpaint import prefill_masked
+    img = Image.new("RGB", (64, 32), (120, 60, 200))
+    img.paste((0, 0, 0), (40, 0, 64, 32))
+    mask = Image.new("L", (64, 32), 0)
+    mask.paste(255, (40, 0, 64, 32))
+    out = np.asarray(prefill_masked(img, mask)).astype(float)
+    assert out[:, 40:].mean(axis=(0, 1))[2] > 150 and (out[:, :40] == np.asarray(img)[:, :40]).all()

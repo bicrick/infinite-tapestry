@@ -10,7 +10,7 @@ STYLES: dict[str, dict] = {
     "none": {"lora": None, "trigger": "", "weight": 0.0},
     "pixel art": {"lora": ("nerijs/pixel-art-xl", "pixel-art-xl.safetensors"), "trigger": "pixel art", "weight": 0.9},
     "watercolor": {"lora": ("ostris/watercolor_style_lora_sdxl", "watercolor_v1_sdxl.safetensors"), "trigger": "watercolor painting", "weight": 0.85},
-    "cartoon": {"lora": ("Linaqruf/sdxl-cartoon-lora", None), "trigger": "cartoon illustration, flat colors, bold outlines", "weight": 0.8},
+    "cartoon": {"lora": None, "trigger": "cartoon illustration, flat colors, bold clean outlines", "weight": 0.0},
     "papercut": {"lora": ("TheLastBen/Papercut_SDXL", "papercut.safetensors"), "trigger": "papercut", "weight": 0.85},
     "ink": {"lora": None, "trigger": "ink wash drawing, sumi-e", "weight": 0.0},
     "oil": {"lora": None, "trigger": "impasto oil painting, visible brushstrokes", "weight": 0.0},

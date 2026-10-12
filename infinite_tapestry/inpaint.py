@@ -254,6 +254,7 @@ class SDXLInpainter(Inpainter):
                 tt = tt * tt * (3 - 2 * tt)          # smoothstep: gentle start and landing
                 pe = pe * (1 - tt) + pe_b * tt
                 pp = pp * (1 - tt) + pp_b * tt
+        image = prefill_masked(image, mask)
         out = self._pipe(
             prompt_embeds=pe, negative_prompt_embeds=ne, pooled_prompt_embeds=pp, negative_pooled_prompt_embeds=npp,
             image=image.convert("RGB"), mask_image=mask.convert("L"),
@@ -261,3 +262,22 @@ class SDXLInpainter(Inpainter):
             width=image.width, height=image.height, generator=gen, strength=0.999,
         )
         return out.images[0]
+
+
+def prefill_masked(image: Image.Image, mask: Image.Image, seed: int = 0) -> Image.Image:
+    """SDXL-inpaint keeps some of what's under the mask (strength < 1), so a black hole paints dark.
+    Fill the masked area with the context's per-row colour plus soft noise instead."""
+    import numpy as np
+
+    a = np.asarray(image.convert("RGB")).astype(np.float32)
+    m = np.asarray(mask.convert("L")) > 127
+    cols = np.where(~m.all(axis=0))[0]
+    if not m.any() or cols.size == 0:
+        return image
+    x_edge = int(cols.max()) + 1                       # first fully-masked column (masks are right-side)
+    ref = a[:, max(0, x_edge - 48):x_edge].mean(axis=1, keepdims=True)  # per-row colour
+    rng = np.random.default_rng(seed)
+    noise = rng.normal(0, 28, a.shape).astype(np.float32)
+    fill = np.repeat(ref, a.shape[1], axis=1) + noise
+    out = np.where(m[..., None], fill, a)
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")
