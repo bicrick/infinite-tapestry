@@ -4,6 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Infinite Tapestry</title>
+  <meta name="description" content="An endless painting that never stops, steered by everyone watching." />
+  <meta name="theme-color" content="#0b0b0d" />
+  <link rel="icon" href="brand/mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="brand/favicon.ico" sizes="any" />
+  <link rel="icon" href="brand/icon-32.png" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="brand/apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Infinite Tapestry" />
+  <meta property="og:description" content="An endless painting that never stops, steered by everyone watching." />
+  <meta property="og:image" content="/brand/og.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Infinite Tapestry" />
+  <meta name="twitter:description" content="An endless painting that never stops, steered by everyone watching." />
+  <meta name="twitter:image" content="/brand/og.jpg" />
   <link rel="preconnect" href="https://rsms.me/" />
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
   <link rel="stylesheet" href="style.css" />
@@ -13,7 +30,7 @@
   <div class="veil"></div>
 
   <header class="top ui">
-    <div class="brand">Infinite Tapestry</div>
+    <div class="brand"><img class="brand-mark" src="brand/mark-plain.svg" alt="" />Infinite Tapestry</div>
     <div class="top-right">
       <button id="fuel-chip" class="fuel-chip hidden" type="button" title="Fuel keeps the GPU painting">
         <span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span>
@@ -69,7 +86,12 @@
       <span class="bar"><span id="now-bar"></span></span>
     </div>
     <form id="cmd" class="cmd" autocomplete="off">
+      <span id="ref-chip" class="ref-chip hidden"><img id="ref-thumb" alt="" /><button type="button" id="ref-clear" title="Remove image">×</button></span>
       <input id="cmd-input" type="text" placeholder="Where should the world go next?" spellcheck="false" />
+      <label id="ref-btn" class="icon social-only hidden" title="Add a reference image (optional)">
+        <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9.5" cy="10" r="1.6"/><path d="M5 17l4.5-4.5 3 3L15 13l4 4"/></svg>
+        <input id="ref-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+      </label>
       <div class="seg" role="group" aria-label="When">
         <button type="button" data-when="end" class="on">Queue</button>
         <button type="button" data-when="now">Now</button>
@@ -155,6 +177,8 @@
       <p class="fine pad">Ideas from everyone. The most-loved (and boosted) are woven in by Claude next.</p>
       <ol id="idea-list" class="list"></ol>
       <div id="idea-empty" class="empty hidden">The pool is empty. Claude is improvising.</div>
+      <div class="drawer-sub">Woven in</div>
+      <ol id="woven-list" class="list woven"></ol>
     </section>
     <section class="panel hidden" id="panel-fuel">
       <div class="fuel-big"><div class="fuel-line big"><span id="fuel-fill-big"></span></div>

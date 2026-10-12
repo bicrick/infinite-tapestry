@@ -241,3 +241,18 @@ body.loaded.settled .ui, body.loaded.settled .veil { transition-delay: 0s !impor
 body.intro #view { opacity: 0; }
 #view { transition: transform 1.1s var(--ease), border-radius 1.1s var(--ease), filter 1.2s var(--ease), opacity .9s var(--ease); }
 .audit .meta, .audit .p { word-break: break-all; }
+
+/* reference images + permalinks */
+.ref-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+.ref-chip img { width: 26px; height: 26px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); }
+.ref-chip button { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px; }
+#ref-btn { cursor: pointer; display: inline-grid; place-items: center; }
+#ref-btn.hidden { display: none; }
+#ref-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.idea .thumb, .woven .thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); float: right; margin-left: 8px; }
+.woven .item { grid-template-columns: 1fr; cursor: pointer; transition: background .2s; }
+.woven .item:hover { background: rgba(255,255,255,.04); }
+.woven .links { margin-top: 4px; display: flex; gap: 12px; font-size: 11px; }
+.woven .links a { color: var(--muted); text-decoration: none; cursor: pointer; }
+.woven .links a:hover { color: var(--fg); }
+.brand { display: inline-flex; align-items: center; gap: 9px; } .brand-mark { width: 22px; height: 13px; opacity: .9; }

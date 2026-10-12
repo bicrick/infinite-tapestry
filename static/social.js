@@ -16,6 +16,7 @@ const ERR = {
   banned: "This account is suspended.",
   muted: "You're muted for a little while.",
   handle_taken: "That handle is taken.",
+  bad_image: "That image could not be attached. Try another.",
   bad_handle: "Handles are 2–20 letters, numbers or underscores.",
 };
 function friendly(e) {
@@ -110,10 +111,43 @@ async function boot() {
   }
 
   // ---------- ideas ----------
+  // ---------- optional reference image ----------
+  let refFile = null;
+  $("ref-file").addEventListener("change", async () => {
+    const f = $("ref-file").files[0];
+    $("ref-file").value = "";
+    if (!f) return;
+    if (needLogin()) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return toast("JPEG, PNG or WebP only.");
+    if (f.size > 15e6) return toast("That image is too large.");
+    refFile = await shrink(f);
+    $("ref-thumb").src = URL.createObjectURL(refFile);
+    $("ref-chip").classList.remove("hidden");
+    $("cmd-input").placeholder = "Describe where to take it…";
+    $("cmd-input").focus();
+  });
+  $("ref-clear").addEventListener("click", () => { refFile = null; $("ref-chip").classList.add("hidden"); });
+  async function shrink(file) {  // downscale to <=1280px JPEG so uploads stay well under 2 MB
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    return await new Promise((r) => c.toBlob(r, "image/jpeg", 0.86));
+  }
+  const refUrl = (p) => `${CFG.supabaseUrl}/storage/v1/object/public/idea-refs/${p}`;
+
   S.submitIdea = async (text) => {
     if (needLogin()) return false;
-    const { error } = await sb.rpc("submit_idea", { p_body: text });
+    let image = null;
+    if (refFile) {
+      image = `${S.session.user.id}/${Date.now().toString(36)}.jpg`;
+      const up = await sb.storage.from("idea-refs").upload(image, refFile, { contentType: "image/jpeg", upsert: false });
+      if (up.error) { toast("Couldn't upload the image. " + esc(up.error.message || "")); return false; }
+    }
+    const { error } = await sb.rpc("submit_idea", { p_body: text, p_image: image });
     if (error) { toast(friendly(error)); return false; }
+    refFile = null; $("ref-chip").classList.add("hidden");
     toast(`Added to the pool <span class="muted">“${esc(text)}”</span>`, 3000);
     refreshIdeas();
     return true;
@@ -129,7 +163,9 @@ async function boot() {
   }
   let ideas = [];
   async function refreshIdeas() {
-    const { data } = await sb.from("ideas").select("id,handle,body,votes,boost_cents,status,user_id,created_at")
+    sb.from("ideas").select("id,handle,body,image_path,start_strip,end_strip,played_at").eq("status", "played")
+      .not("start_strip", "is", null).order("played_at", { ascending: false }).limit(20).then(({ data }) => renderWoven(data || []));
+    const { data } = await sb.from("ideas").select("id,handle,body,votes,boost_cents,status,user_id,created_at,image_path")
       .in("status", ["pending", "playing"]).order("status", { ascending: false }).order("boost_cents", { ascending: false })
       .order("votes", { ascending: false }).order("created_at").limit(60);
     ideas = data || [];
@@ -147,7 +183,7 @@ async function boot() {
       const mine = S.session && it.user_id === S.session.user.id;
       li.innerHTML =
         `<button class="votes${myVotes.has(it.id) ? " on" : ""}" title="Vote">${UP}<span>${it.votes}</span></button>` +
-        `<div><div class="t">${esc(it.body)}</div><div class="who">@${esc(it.handle)}${it.status === "playing" ? " · weaving in now" : ""}` +
+        `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}<div class="t">${esc(it.body)}</div><div class="who">@${esc(it.handle)}${it.status === "playing" ? " · weaving in now" : ""}` +
         `${it.boost_cents ? ` · <span class="boosted">boosted $${(it.boost_cents / 100).toFixed(0)}</span>` : ""}</div></div>` +
         `<div class="acts">` +
         (it.status === "pending" ? `<button class="icon" data-a="boost" title="Boost with fuel">⚡︎</button>` : "") +
@@ -171,6 +207,33 @@ async function boot() {
       }));
       list.appendChild(li);
     });
+  }
+  function permalink(it) {
+    const u = new URL(location.origin + location.pathname);
+    u.searchParams.set("at", it.start_strip);
+    if (it.end_strip != null) u.searchParams.set("to", it.end_strip);
+    return u.toString();
+  }
+  function renderWoven(rows) {
+    $("woven-list").innerHTML = "";
+    rows.forEach((it) => {
+      const li = document.createElement("li");
+      li.className = "item";
+      li.innerHTML = `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}` +
+        `<div class="t">${esc(it.body)}</div><div class="who">@${esc(it.handle)} · strip ${it.start_strip}</div>` +
+        `<div class="links"><a data-a="view">View where it landed</a><a data-a="copy">Copy link</a></div></div>`;
+      li.addEventListener("click", async (e) => {
+        if (e.target.dataset.a === "copy") {
+          e.stopPropagation();
+          try { await navigator.clipboard.writeText(permalink(it)); toast("Link copied"); } catch (_) { toast(esc(permalink(it))); }
+          return;
+        }
+        $("drawer").classList.remove("open");
+        window.TapestrySeek && window.TapestrySeek(it.start_strip, it.end_strip);
+      });
+      $("woven-list").appendChild(li);
+    });
+    if (!rows.length) $("woven-list").innerHTML = '<li class="empty">Ideas appear here once they are painted.</li>';
   }
   refreshIdeas();
   sb.channel("ideas").on("postgres_changes", { event: "*", schema: "public", table: "ideas" }, () => refreshIdeas()).subscribe();
