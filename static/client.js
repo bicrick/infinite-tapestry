@@ -175,7 +175,7 @@
     if (strips.has(r.i) || !base) return;
     const ext = config.strip_ext || "jpg";
     strips.set(r.i, { index: r.i, overlap: r.o || 0, prompt: r.p || "",
-      url: base + String(r.i).padStart(8, "0") + "." + ext, blob: null, bitmap: null, decoding: false, tries: 0 });
+      url: base + String(r.i).padStart(8, "0") + "." + ext, blob: null, bitmap: null, decoding: false, tries: 0, fresh: !!live });
     requested.delete(r.i);
     // Live strips arrive ahead of the view: prefetch once the CDN upload has landed.
     const e = strips.get(r.i);
@@ -197,6 +197,13 @@
       fetch(e.url, { mode: "cors" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
         .then((b) => { e.blob = b; e.decoding = false; ensureDecoded(e); })
         .catch(() => {
+          // Fresh live strips are always .webp on R2 and may simply not have landed yet: retry R2 only (no .jpg / Supabase probes).
+          if (e.fresh) {
+            e.decoding = false; e.tries = (e.tries || 0) + 1;
+            e.retryAt = performance.now() + Math.min(4000, 600 * e.tries);
+            if (e.tries === 6) send({ type: "history", start: e.index, end: e.index, bytes: true });
+            return;
+          }
           // New uploads are .webp; pre-switch history is still .jpg on the CDN.
           if (e.url && e.url.endsWith(".webp") && !e.triedJpg) {
             e.triedJpg = true;
