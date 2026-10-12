@@ -81,6 +81,7 @@ def make_scene(
     source: str = "",
     origin: str = "user",
     style: str | None = None,
+    lora: str | None = None,
 ) -> dict:
     """A playlist item. `transition`/`hold` are in strips (None = director default)."""
     prompt = str(prompt).strip()[:600]
@@ -93,8 +94,15 @@ def make_scene(
         "hold": None if hold is None else max(0, min(MAX_HOLD, int(hold))),
         "source": source[:200],
         "origin": origin if origin in ("user", "auto", "seed") else "user",
-        "style": _norm_style(style),
+        "style": _norm_style(lora) if lora else _label(style),
+        "lora": _norm_style(lora) if lora else None,
     }
+
+
+def _label(style) -> str:
+    """Free-form style label for captions (the look itself lives in the prompt)."""
+    s = str(style or "none").strip().lower()[:24]
+    return s or "none"
 
 
 def _norm_style(style):
@@ -347,8 +355,10 @@ class LiveDirector:
     def styles_for(self, t: float) -> tuple[str, str | None]:
         """(style of current scene, style of target scene or None) — call right after frame_for."""
         with self._lock:
-            a = (self._current or {}).get("style") or "none"
-            b = (self._target or {}).get("style") if self._target else None
+            def lora(sc):  # only explicitly requested user styles drive LoRAs/triggers
+                return (sc or {}).get("lora") or "none"
+            a = lora(self._current)
+            b = lora(self._target) if self._target else None
             return a, (b or "none") if self._target else None
 
     def negative_for(self, t: float) -> str:

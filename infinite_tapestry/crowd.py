@@ -144,7 +144,8 @@ class Crowd:
         from .guard import is_disallowed
 
         scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"), s.get("hold"),
-                             source=" · ".join(r["body"] for r in rows)[:200], origin="user", style=s.get("style"))
+                             source=" · ".join(r["body"] for r in rows)[:200], origin="user", style=s.get("style"),
+                             lora=__import__("infinite_tapestry.styles", fromlist=["x"]).explicit_lora(" ".join(r["body"] for r in rows)))
                   for s in plan["scenes"] if not is_disallowed(s["prompt"])]
         if not scenes:
             # Nothing survived the guard — don't leave ideas stuck as playing.

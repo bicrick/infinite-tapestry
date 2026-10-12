@@ -42,7 +42,8 @@ class Config:
     lcm_lora: str = ""
     # Backend: "sd15" (default, cheap GPUs) or "sdxl" (24 GB-class GPUs; see SDXL_PRESET)
     backend: str = "sd15"
-    sdxl_model: str = "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
+    sdxl_model: str = "OzzyGT/RealVisXL_V4.0_inpainting"  # photoreal SDXL inpaint (9-ch UNet, fp16)
+    sdxl_fallback_model: str = "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
     style_loras: bool = True  # SDXL only: load style LoRAs (styles.py) and ramp them across transitions
     harmonize_seams: bool = True  # remove colour steps at the mask edge
     taesd_model: str = ""
