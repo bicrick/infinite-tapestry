@@ -15,13 +15,22 @@ document.body.appendChild(layer);
 const bar = document.createElement("div"); bar.className = "react-bar ui"; bar.setAttribute("role", "group"); bar.setAttribute("aria-label", "React");
 bar.innerHTML = R.map(([k, e]) => `<button type="button" data-k="${k}" aria-label="React ${e}">${e}</button>`).join("") +
   `<span class="react-sep"></span><button type="button" id="clip-btn" class="clip-btn" title="Share the last 10 seconds">Clip</button>`;
-document.body.appendChild(bar);
+bar.className = "react-tray"; bar.id = "react-tray";
+(document.querySelector(".dock") || document.body).appendChild(bar);
+const rbtn = document.getElementById("react-btn");
+const setTray = (on) => { document.body.classList.toggle("react-open", on); rbtn && rbtn.setAttribute("aria-expanded", on ? "true" : "false"); };
+let trayTimer = 0;
+const armTray = () => { clearTimeout(trayTimer); trayTimer = setTimeout(() => setTray(false), 6000); };
+rbtn && rbtn.addEventListener("click", (e) => { e.preventDefault(); const on = !document.body.classList.contains("react-open"); setTray(on); if (on) armTray(); });
+bar.addEventListener("click", armTray);
+document.addEventListener("pointerdown", (e) => { if (!bar.contains(e.target) && !(rbtn && rbtn.contains(e.target))) setTray(false); });
 let live = 0;
 function floatUp(e, own) {
   if (live >= (own ? 30 : 22) || document.hidden) return;
   live++;
   const el = document.createElement("span"); el.className = "react-float" + (own ? " own" : ""); el.textContent = e;
-  const right = own ? 40 + Math.random() * 60 : 20 + Math.random() * 180;
+  const lw = Math.max(60, layer.clientWidth - 34);
+  const right = 6 + Math.random() * (own ? lw * 0.6 : lw);
   el.style.right = right + "px";
   el.style.setProperty("--dx", (Math.random() * 40 - 20).toFixed(0) + "px");
   el.style.animationDuration = (2.6 + Math.random() * 1.4).toFixed(2) + "s";

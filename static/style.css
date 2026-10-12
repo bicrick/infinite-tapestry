@@ -665,7 +665,7 @@ body.idle .kept { opacity: .45; }
 .react-float { position: absolute; bottom: 0; font-size: 20px; opacity: 0; animation: react-up 3s var(--ease) forwards; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
 .react-float.own { font-size: 24px; }
 @keyframes react-up { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 12% { opacity: .9; transform: translate(0, -30px) scale(1); }
-  100% { transform: translate(var(--dx, 0), -52vh) scale(.9); opacity: 0; } }
+  100% { transform: translate(var(--dx, 0), var(--rise, -52vh)) scale(.9); opacity: 0; } }
 .react-bar { position: fixed; right: 24px; bottom: 132px; display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
   background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); z-index: 31; opacity: .55; transition: opacity .25s var(--ease); }
 .react-bar:hover, .react-bar:focus-within { opacity: 1; }
@@ -708,3 +708,48 @@ body.idle .kept { opacity: .45; }
 .odo-d.enter { opacity: 0; transform: translateY(40%); }
 .odo-d.leave { opacity: 0; transform: translateY(-40%); }
 @media (prefers-reduced-motion: reduce) { .odo, .odo-d { transition: none !important; } .odo-d.rolling .odo-s { filter: none; } }
+
+/* ---------- haptic wheel (phones) ---------- */
+.hwheel { display: none; }
+@media (max-width: 560px) {
+  .hwheel { display: block; position: fixed; left: 0; right: 0; bottom: max(0px, calc(var(--sb) - 6px)); height: 40px; z-index: 22; touch-action: none;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); }
+  .hwheel canvas { width: 100%; height: 100%; display: block; }
+  .timeline { display: none !important; }
+  body.composing .hwheel { opacity: 0; pointer-events: none; }
+  #more-btn { display: none !important; }            /* desktop controls stay off phones */
+  body.more-open .cmd .sec { display: none !important; }
+}
+
+/* ---------- reactions behind one button ---------- */
+.react-bar { display: none !important; }
+.react-tray { position: absolute; right: 0; bottom: calc(100% + 10px); display: flex; align-items: center; gap: 2px; padding: 4px;
+  border-radius: 999px; background: var(--glass-strong); border: 1px solid var(--line);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); z-index: 40;
+  opacity: 0; transform: translateY(6px) scale(.98); transform-origin: 90% 100%; pointer-events: none; transition: opacity .2s var(--ease), transform .25s var(--ease); }
+body.react-open .react-tray { opacity: 1; transform: none; pointer-events: auto; }
+.react-tray button { background: none; border: 0; padding: 6px 7px; font-size: 18px; line-height: 1; border-radius: 999px; cursor: pointer; transition: transform .15s var(--ease); }
+.react-tray button:active { transform: scale(1.25); }
+.react-tray button.cool { opacity: .35; }
+.react-tray .react-sep { width: 1px; height: 18px; background: var(--line); margin: 0 4px; }
+.react-tray .clip-btn { font-size: 12px; color: var(--muted); padding: 6px 11px; }
+#react-btn svg { fill: none; }
+body.react-open #react-btn { background: rgba(var(--ink),.1); }
+body.react-open .dock .now { visibility: hidden; }
+@media (max-width: 560px) {
+  .react-tray { right: 50%; transform: translate(50%, 6px) scale(.98); transform-origin: 50% 100%; }
+  body.react-open .react-tray { transform: translate(50%, 0); }
+  .react-tray button { padding: 8px 9px; font-size: 22px; }
+  body.composing #react-btn { display: none !important; }
+  .react-layer { width: 120px; bottom: calc(160px + var(--sb, 0px)); height: 50vh; }
+}
+@media (max-width: 560px) {
+  .hwheel { transition: opacity .6s var(--ease); }
+  body.idle .hwheel { opacity: .35; }              /* stays grabbable while the chrome rests */
+  body.intro .hwheel { opacity: 0; pointer-events: none; }
+}
+body.react-open .cmd-terms { display: none !important; }
+@media (max-width: 560px) {
+  /* floats live in the quiet space between the pill and the caption, never over it */
+  .react-layer { right: 0; width: 110px; bottom: calc(150px + var(--sb, 0px)); height: 130px; --rise: -120px; }
+}
