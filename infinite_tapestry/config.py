@@ -16,7 +16,7 @@ class Config:
     strip_width: int = 128
     overlap: int = 96  # feather blend into prior context (smoothstep)
     seam_retries: int = 2  # regenerate a strip that shows a hard vertical cut
-    seam_threshold: float = 6.0  # max col-gradient / median above this = cut
+    seam_threshold: float = 12.0  # real cuts score 20+; shelves/pillars stay below ~10
     repaint_band: int = 64  # px of context the model repaints at the seam
     context_width: int = 384  # window_width - strip_width
 
