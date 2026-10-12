@@ -131,7 +131,11 @@
   // made it stop-and-go every strip (the jerk/pop-in reported after 0b04308), so the boundary is the painted edge again.
   const readyEdge = () => panoramaWidth();
   // Off-screen staging buffer: 2 strips + the inpaint context band, so repaints and arrivals happen out of view.
-  const STAGE = () => 3 * SW() + 128;   // 3 full strips + the inpaint band
+  // Calibrated hold-back: one full strip (the next arrival) + the inpaint band it repaints over its predecessor (+32px margin).
+  // Together with the decode-aware limit below, the visible right edge only ever shows final pixels.
+  let maxOv = 128;
+  const BAND = () => maxOv + 32;
+  const STAGE = () => SW() + BAND();
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -177,6 +181,7 @@
     const base = config.strip_base;
     if (strips.has(r.i) || !base) return;
     const ext = config.strip_ext || "jpg";
+    if (r.o > maxOv) maxOv = r.o;
     strips.set(r.i, { index: r.i, overlap: r.o || 0, prompt: r.p || "",
       url: base + String(r.i).padStart(8, "0") + "." + ext, blob: null, bitmap: null, decoding: false, tries: 0, fresh: !!live });
     requested.delete(r.i);
@@ -211,16 +216,6 @@
           if (e.url && e.url.endsWith(".webp") && !e.triedJpg) {
             e.triedJpg = true;
             e.url = e.url.slice(0, -5) + ".jpg";
-            e.decoding = false;
-            e.retryAt = 0;
-            ensureDecoded(e);
-            return;
-          }
-          // R2 miss (not yet copied) → Supabase public bucket → pod bytes below.
-          const fb = config.strip_base_fb;
-          if (fb && !e.triedFb && e.url && !e.url.startsWith(fb)) {
-            e.triedFb = true; e.triedJpg = false;
-            e.url = fb + String(e.index).padStart(8, "0") + "." + (config.strip_ext || "jpg");
             e.decoding = false;
             e.retryAt = 0;
             ensureDecoded(e);
@@ -318,7 +313,7 @@
       t.img.onload = () => { t.ok = true; };
       const pod = `${httpBase()}/lod/${level}/${c}.jpg`;
       // CDN first; a tile not mirrored yet falls back to the pod once (which builds and mirrors it).
-      const fbTile = config.lod_base_fb ? `${config.lod_base_fb}${level}/${String(c).padStart(6, "0")}.jpg` : null;
+      const fbTile = null;   // R2 only: no Supabase fallback (it 400s for anything not mirrored there)
       t.img.onerror = () => {
         if (fbTile && !t.fbTried && t.img.src !== pod) { t.fbTried = true; t.img.src = fbTile; }
         else if (t.img.src !== pod && !t.podTried) { t.podTried = true; t.img.src = pod; } else t.failed = true;
@@ -343,169 +338,6 @@
     if (level > 1) for (let k = 0; k < 4; k++) drawLodChunk(level - 1, c * 4 + k, left);   // finer tiles fill the gap
   }
   let thumbCv = null, thumbCtx = null, zoneCv = null, zoneCtx = null, zoneMask = null;
-  function stripDots(e) {   // dense, resolved dot rendition of a strip, built once
-    if (e.dots !== undefined) return e.dots;
-    const th = stripThumb(e); if (!th) return null;
-    const c = document.createElement("canvas"); c.width = SW(); c.height = config.height; const g = c.getContext("2d");
-    const sp = 6, si = e.idx != null ? e.idx : (Math.random() * 1e6) | 0;
-    for (let a = 0; a < SW() / sp; a++) for (let j = 0; j < config.height / sp; j++) {
-      let hh = ((si * 64 + a) * 374761393 + j * 668265263) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
-      if (r > 0.7) continue;
-      const k = (Math.min(23, (j * sp / config.height * 24) | 0) * 8 + Math.min(7, (a * sp / SW() * 8) | 0)) * 4;
-      g.fillStyle = `rgba(${th[k]},${th[k + 1]},${th[k + 2]},${(0.6 + 0.4 * r).toFixed(2)})`;
-      const rad = sp * (0.5 + 0.5 * r); g.fillRect(a * sp + r * 2, j * sp + (r * 17) % sp, rad, rad);
-    }
-    return (e.dots = c);
-  }
-  // ---------- live-edge particle stream (approved prototype) ----------
-  // The newest 2 strips on screen are staged as round dots: strip nearest the solid edge solidifying (70-100% settled),
-  // the next assembling (0-70%), the rest streaming in from a point on the far right through a widening funnel.
-  // Purely visual: livePos is never capped, so the scroll stays free-running.
-  const PSP = 6;   // world px between dots (prototype spacing)
-  function stripParticles(e) {
-    if (e.pt !== undefined) return e.pt;
-    if (!e.bitmap) return null;
-    const cols = Math.ceil(SW() / PSP), rows = Math.ceil(config.height / PSP);
-    const c = document.createElement("canvas"); c.width = cols; c.height = rows; const g = c.getContext("2d", { willReadFrequently: true });
-    let d; try { g.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, 0, 0, cols, rows); d = g.getImageData(0, 0, cols, rows).data; } catch (_) { return (e.pt = null); }
-    const col = new Array(cols * rows), rgb = new Uint8Array(cols * rows * 3);
-    for (let k = 0; k < cols * rows; k++) { col[k] = `rgb(${d[k * 4]},${d[k * 4 + 1]},${d[k * 4 + 2]})`; rgb[k * 3] = d[k * 4]; rgb[k * 3 + 1] = d[k * 4 + 1]; rgb[k * 3 + 2] = d[k * 4 + 2]; }
-    return (e.pt = { cols, rows, col, rgb });
-  }
-  const phash = (a, b) => { let h = (a * 374761393 + b * 668265263) ^ 0x5bf03635; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
-  function stripDotLayer(e) {   // all of a strip's dots, round and soft, rendered once
-    if (e.dl !== undefined) return e.dl;
-    const P = stripParticles(e); if (!P) return null;
-    const c = document.createElement("canvas"); c.width = Math.ceil(SW()); c.height = config.height; const g = c.getContext("2d");
-    for (let a = 0; a < P.cols; a++) for (let r = 0; r < P.rows; r++) {
-      const x = a * PSP + PSP / 2, y = r * PSP + PSP / 2; g.fillStyle = P.col[r * P.cols + a];
-      g.globalAlpha = 0.3; g.beginPath(); g.arc(x, y, PSP * 0.62, 0, 6.283); g.fill();
-      g.globalAlpha = 0.95; g.beginPath(); g.arc(x, y, PSP * 0.36, 0, 6.283); g.fill();
-    }
-    return (e.dl = c);
-  }
-  function drawStream(E, left, viewR, t) {
-    // Faithful to the approved prototype: strip 1 past the edge solidifying (70-100% of dots settled, swelling together),
-    // strip 2 assembling (0-70%), the rest streaming in from a point beyond the right through a widening funnel.
-    const Z = 2 * SW(), H = config.height, sx = E + Z + SW() * 0.1, sy = H / 2;
-    const k0 = Math.floor(E / SW()), k1 = Math.floor(Math.min(viewR, E + Z) / SW());
-    for (let k = k0; k <= k1; k++) {
-      const e = strips.get(k), P = e && stripParticles(e); if (!P) continue;
-      for (let a = 0; a < P.cols; a++) {
-        const wx = k * SW() + a * PSP + PSP / 2;
-        if (wx < E || wx > E + Z || wx > viewR + PSP) continue;
-        const st = (wx - E) / Z, settled = st < 0.5 ? 1 - 0.6 * st : 1.4 * (1 - st), wc = Math.round(wx / PSP);
-        const grow0 = st < 0.5 ? 1 + 0.9 * (1 - st * 2) : 0.85;
-        for (let r = 0; r < P.rows; r++) {
-          const h = phash(wc, r), ty = r * PSP + PSP / 2, col = P.col[r * P.cols + a];
-          let x = wx, y = ty, grow = grow0, al = 0.9;
-          if (h >= settled) {
-            const h2 = phash(r, wc + 91), q = (t * (0.45 + 0.3 * h2) + h) % 1;
-            if (q > 0.985 || h2 > 0.6) continue;   // thin the in-flight set
-            const ee = 1 - Math.pow(1 - q, 2.4), u = 1 - ee, cx = wx + (sx - wx) * 0.45, cy = sy + (ty - sy) * 0.12;
-            x = u * u * sx + 2 * u * ee * cx + ee * ee * wx; y = u * u * sy + 2 * u * ee * cy + ee * ee * ty;
-            grow = 0.3 + 0.5 * ee; al = 0.2 + 0.6 * ee;
-            if (x > viewR + PSP) continue;
-          }
-          const rad = PSP * 0.45 * grow;
-          ctx.fillStyle = col;
-          if (al < 0.9) { ctx.globalAlpha = al * 0.3; ctx.beginPath(); ctx.arc(x - left, y, rad * 1.9, 0, 6.283); ctx.fill(); ctx.globalAlpha = al; ctx.beginPath(); ctx.arc(x - left, y, rad * 0.8, 0, 6.283); ctx.fill(); }
-          else { ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(x - left, y, rad * 1.05, 0, 6.283); ctx.fill(); }   // settled: one soft-sized disc
-        }
-      }
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  // ---------- WebGL points layer for the past-live particle stream (full prototype fidelity at 60fps) ----------
-  const glS = { cv: null, gl: null, prog: null, buf: null, n: 0, key: "", origin: 0, u: {}, shown: false, failed: false };
-  function glInit() {
-    const cv = document.createElement("canvas"); cv.id = "stream-gl";
-    cv.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1";
-    canvas.insertAdjacentElement("afterend", cv);
-    const gl = cv.getContext("webgl", { premultipliedAlpha: false, antialias: false, alpha: true });
-    if (!gl) { glS.failed = true; return; }
-    const vs = `attribute vec2 aT; attribute vec3 aC; attribute vec2 aH;
-      uniform float uE, uL, uS, uY, uZ, uT, uP, uSX, uSY, uVR, uH; uniform vec2 uRes;
-      varying vec3 vC; varying float vA;
-      void main() {
-        float wx = aT.x, ty = aT.y, h = aH.x, h2 = aH.y;
-        vC = aC; vA = 0.0; gl_PointSize = 0.0; gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
-        if (wx < uE || wx > uE + uZ) return;
-        float st = (wx - uE) / uZ;
-        float settled = st < 0.5 ? 1.0 - 0.6 * st : 1.4 * (1.0 - st);
-        float grow = st < 0.5 ? 1.0 + 0.9 * (1.0 - st * 2.0) : 0.85;
-        float al = 0.9; float x = wx; float y = ty;
-        if (h >= settled) {
-          float q = fract(uT * (0.45 + 0.3 * h2) + h);
-          if (q > 0.985) return;
-          float ee = 1.0 - pow(1.0 - q, 2.4), u = 1.0 - ee;
-          float cx = wx + (uSX - wx) * 0.45, cy = uSY + (ty - uSY) * 0.12;
-          x = u * u * uSX + 2.0 * u * ee * cx + ee * ee * wx; y = u * u * uSY + 2.0 * u * ee * cy + ee * ee * ty;
-          grow = 0.3 + 0.5 * ee; al = 0.2 + 0.6 * ee;
-          if (x > uVR + uP) return;
-        }
-        float rad = uP * 0.45 * grow * uS;                       // device px
-        vec2 px = vec2((x - uL) * uS, uY + y * uS);
-        gl_Position = vec4(px.x / uRes.x * 2.0 - 1.0, 1.0 - px.y / uRes.y * 2.0, 0.0, 1.0);
-        gl_PointSize = rad * 3.8; vA = al;
-      }`;
-    const fs = `precision mediump float; varying vec3 vC; varying float vA;
-      void main() {
-        float d = length(gl_PointCoord - 0.5) * 3.8;              // in units of rad
-        float core = 1.0 - smoothstep(0.7, 0.85, d), halo = (1.0 - smoothstep(1.75, 1.9, d)) * 0.3;
-        float a = vA * max(core, halo);                            // same as the prototype: halo at 0.3, core on top
-        if (a < 0.003) discard;
-        gl_FragColor = vec4(vC, a);
-      }`;
-    const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
-    try {
-      const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
-      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
-      glS.prog = p;
-    } catch (e) { console.warn("stream-gl", e); glS.failed = true; return; }
-    gl.useProgram(glS.prog);
-    for (const n of ["uE","uL","uS","uY","uZ","uT","uP","uSX","uSY","uVR","uRes"]) glS.u[n] = gl.getUniformLocation(glS.prog, n);
-    glS.a = { T: gl.getAttribLocation(glS.prog, "aT"), C: gl.getAttribLocation(glS.prog, "aC"), H: gl.getAttribLocation(glS.prog, "aH") };
-    glS.buf = gl.createBuffer(); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    glS.cv = cv; glS.gl = gl;
-  }
-  function glBuild(k0, k1) {
-    const parts = [];
-    for (let k = k0; k <= k1; k++) { const e = strips.get(k), P = e && stripParticles(e); if (P) parts.push([k, P]); }
-    const key = k0 + ":" + parts.map((p) => p[0]).join(",");
-    if (key === glS.key) return;
-    glS.key = key; glS.origin = k0 * SW();
-    let n = 0; for (const [, P] of parts) n += P.cols * P.rows;
-    const d = new Float32Array(n * 7); let o = 0;
-    for (const [k, P] of parts) for (let a = 0; a < P.cols; a++) for (let r = 0; r < P.rows; r++) {
-      const wx = k * SW() + a * PSP + PSP / 2, wc = Math.round(wx / PSP), c = P.rgb, ci = (r * P.cols + a) * 3;
-      d[o++] = wx - glS.origin; d[o++] = r * PSP + PSP / 2; d[o++] = c[ci] / 255; d[o++] = c[ci + 1] / 255; d[o++] = c[ci + 2] / 255;
-      d[o++] = phash(wc, r); d[o++] = phash(r, wc + 91);
-    }
-    const gl = glS.gl; gl.bindBuffer(gl.ARRAY_BUFFER, glS.buf); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW); glS.n = n;
-  }
-  function glStream(E, left, s, yOff, w, h) {
-    if (E === null) { if (glS.shown) { glS.gl.clear(glS.gl.COLOR_BUFFER_BIT); glS.shown = false; } return; }
-    if (glS.failed) return;
-    if (!glS.gl) { glInit(); if (glS.failed) return; }
-    const gl = glS.gl, cv = glS.cv;
-    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
-    const Z = 2 * SW(), viewR = left + w / s;
-    glBuild(Math.floor(E / SW()), Math.floor((E + Z) / SW()));
-    gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); glS.shown = true;
-    if (!glS.n) return;
-    const O = glS.origin, u = glS.u;
-    gl.useProgram(glS.prog);
-    gl.uniform1f(u.uE, E - O); gl.uniform1f(u.uL, left - O); gl.uniform1f(u.uS, s); gl.uniform1f(u.uY, yOff); gl.uniform1f(u.uZ, Z);
-    gl.uniform1f(u.uT, (performance.now() / 1000) % 1000); gl.uniform1f(u.uP, PSP); gl.uniform1f(u.uSX, E - O + Z + SW() * 0.1); gl.uniform1f(u.uSY, config.height / 2);
-    gl.uniform1f(u.uVR, viewR - O); gl.uniform2f(u.uRes, w, h);
-    gl.bindBuffer(gl.ARRAY_BUFFER, glS.buf);
-    gl.enableVertexAttribArray(glS.a.T); gl.vertexAttribPointer(glS.a.T, 2, gl.FLOAT, false, 28, 0);
-    gl.enableVertexAttribArray(glS.a.C); gl.vertexAttribPointer(glS.a.C, 3, gl.FLOAT, false, 28, 8);
-    gl.enableVertexAttribArray(glS.a.H); gl.vertexAttribPointer(glS.a.H, 2, gl.FLOAT, false, 28, 20);
-    gl.drawArrays(gl.POINTS, 0, glS.n);
-  }
   function stripThumb(e) {   // 8x24 colour sample per strip, computed once (cheap dot colours, no canvas readback per frame)
     if (e.th !== undefined) return e.th;
     if (!e.bitmap) return null;
@@ -682,8 +514,8 @@
       corr -= fix;
       // Soft limit: the visible edge may only reach strips that are received AND decoded (+ the staging zone).
       // Ease the speed down as the buffer thins instead of stopping, so new pixels never surface on screen.
-      let k = Math.max(0, Math.floor((livePos - STAGE()) / SW())); while (k <= maxIndex) { const e = strips.get(k); if (!e || !e.bitmap) break; k++; }
-      const limit = Math.min(panoramaWidth(), k * SW() + STAGE());
+      let k = Math.max(0, Math.floor((livePos - STAGE() + BAND()) / SW())); while (k <= maxIndex) { const e = strips.get(k); if (!e || !e.bitmap) break; k++; }
+      const limit = Math.min(panoramaWidth(), k * SW() - BAND() + STAGE());   // visible edge stays BAND short of strip k's repaint zone
       const ease = Math.max(0, Math.min(1, (limit - livePos) / (0.75 * SW())));
       if (livePos < limit) livePos = Math.min(limit, livePos + srvSpeed * dt * ease + Math.min(fix, Math.max(0, limit - livePos)));
       liveScroll = livePos - viewWorld();
@@ -776,7 +608,6 @@
         ctx.globalAlpha = 1;
       }
       coverage = want ? have / want : 0;
-      glStream(window.__gs && liveB !== Infinity && liveB < left + w / s ? liveB : null, left, s, yOff, w, h);
     }
     if (mark) {
       const age = (performance.now() - mark.t0) / 1000;
@@ -792,27 +623,6 @@
       }
     }
     ctx.restore();
-    {   // Past the newest painted strip (only reachable by over-scrolling live): crystallizing dots, never blank.
-      const edgeX = (panoramaWidth() - left) * s;
-      if (edgeX < w) {
-        const x0 = Math.max(0, edgeX), bh = config.height * s;
-        ctx.fillStyle = EMPTY; ctx.fillRect(x0, yOff, w - x0, bh);
-        const t = performance.now() / 1000, ink = lightMq && lightMq.matches ? "20,20,24" : "255,255,255", dpr = window.devicePixelRatio || 1;
-        const span = w - x0, N = Math.min(900, Math.ceil(span * bh / (3200 * dpr * dpr)));
-        for (let n = 0; n < N; n++) {
-          let hh = (n * 374761393) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r1 = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
-          hh = Math.imul(hh ^ (hh >>> 15), 2246822519); const r2 = ((hh ^ (hh >>> 13)) >>> 0) / 4294967296;
-          // each mote loops from far right toward the data boundary, speeding up as it's pulled in, then crystallizes
-          const ph = (t * (0.08 + 0.12 * r2) + r1) % 1, d = Math.pow(1 - ph, 1.6);
-          const x = edgeX + d * Math.max(span, w * 0.5) * (0.4 + 0.6 * r2);
-          if (x < x0 || x > w) continue;
-          const y = yOff + r2 * bh, near = Math.max(0, 1 - (x - edgeX) / (90 * s));
-          const sz = (1.2 + 1.8 * near) * dpr;
-          ctx.fillStyle = `rgba(${ink},${(0.18 + 0.25 * r1 + 0.45 * near).toFixed(2)})`;
-          ctx.fillRect(x, y, sz, sz);
-        }
-      }
-    }
     drawSurround.v = { left, ww: w / s, fi: Math.max(0, firstIdx), li: Math.min(lastIdx, maxIndex) };
     if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
     else if (ribbon < 0.999) {   // desktop ribbon: same reflection/glow as the phone band, fading out as it expands
@@ -895,7 +705,7 @@
     const lo = minPan(), hi = maxPan(), d = viewWorld() * 0.5;
     const f = (o) => (1 - 1 / (o / d * 0.55 + 1)) * d;
     if (x < lo) return lo - f(lo - x);
-    if (x > hi) return hi + f(x - hi);
+    if (x > hi) return hi;   // hard clamp: nothing past live
     return x;
   }
   function shownPan() { return rubber(panPos); }
@@ -1062,7 +872,7 @@
       // elastic nudge, with resistance; forward is the live edge so it resists harder
       const d = -back, lim = NUDGE_MAX * cssToWorld();
       const raw = d * cssToWorld() * (d > 0 ? 0.25 : 0.45);
-      nudge = lim * Math.tanh(raw / lim); nudgeVel = 0;
+      nudge = Math.min(0, lim * Math.tanh(raw / lim)); nudgeVel = 0;   // never past live
       lastPX = ev.clientX;
       return;
     }
