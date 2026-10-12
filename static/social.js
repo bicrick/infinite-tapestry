@@ -468,13 +468,65 @@ async function boot() {
   refreshFuel();
   setInterval(refreshFuel, 60000);
 
+  // Donor wall: recent gifts and the all-time board; shout-out banners link out (nofollow ugc).
+  let donorTab = "recent", donorsTop = [];
+  const ago = (iso) => { const m = (Date.now() - new Date(iso).getTime()) / 60000; return m < 1 ? "just now" : m < 60 ? `${Math.floor(m)}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`; };
+  const safeHref = (u) => (/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/|$|\?|#)/i.test(u || "") ? u : null);
+  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return ""; } };
+  const donorName = (h) => (h === "anonymous" || !h ? "Anonymous" : `<a href="/u/${encodeURIComponent(h)}">@${esc(h)}</a>`);
+  const shout = (d) => (d.tagline ? `<div class="p">“${esc(d.tagline)}”</div>` : "") +
+    (safeHref(d.url) ? `<a class="d-link" href="${esc(d.url)}" target="_blank" rel="nofollow ugc noopener noreferrer">${esc(hostOf(d.url))} ↗</a>` : "");
   async function refreshDonors() {
-    const { data } = await sb.from("donor_wall").select("*").limit(30);
-    $("donor-list").innerHTML = (data || []).map((d) =>
-      `<li class="item"><div><div class="t">${d.handle === "anonymous" ? "Anonymous" : "@" + esc(d.handle)}</div>${d.message ? `<div class="p">${esc(d.message)}</div>` : ""}</div><span class="amt">$${(d.total_cents / 100).toFixed(0)}</span></li>`).join("")
+    const [rec, top] = await Promise.all([sb.from("donors_recent").select("*").limit(20), sb.from("donors_top").select("*").limit(30)]);
+    donorsTop = (top.data || []).filter((d) => d.handle && d.handle !== "anonymous");
+    const rows = donorTab === "recent" ? (rec.data || []) : (top.data || []);
+    $("donor-list").innerHTML = rows.map((d, k) =>
+      `<li class="item"><div>${donorTab === "top" ? `<span class="rank">${k + 1}</span>` : ""}<div class="t">${donorName(d.handle)}${donorTab === "recent" ? ` <span class="muted">· ${ago(d.created_at)}</span>` : ""}</div>${shout(d)}</div>` +
+      `<span class="amt">$${((donorTab === "recent" ? d.amount_cents : d.total_cents) / 100).toFixed(0)}</span></li>`).join("")
       || `<li class="empty">Be the first to keep it painting.</li>`;
+    renderKept();
+  }
+  document.querySelectorAll(".donor-tabs [data-dl]").forEach((b) => b.addEventListener("click", () => {
+    donorTab = b.dataset.dl; document.querySelectorAll(".donor-tabs [data-dl]").forEach((x) => x.classList.toggle("on", x === b)); refreshDonors();
+  }));
+  // "kept alive by @x": a quiet ticker that cycles through donors.
+  let keptI = 0, keptT = 0;
+  function renderKept() {
+    const el = $("kept"), names = donorsTop.slice(0, 12);
+    el.classList.toggle("hidden", !names.length);
+    if (!names.length) return;
+    const show = () => {
+      const d = names[keptI++ % names.length], a = $("kept-name");
+      a.classList.remove("in"); void a.offsetWidth;
+      a.textContent = "@" + d.handle; a.href = "/u/" + encodeURIComponent(d.handle); a.title = d.tagline || "";
+      a.classList.add("in");
+    };
+    if (!keptT) { show(); if (names.length > 1) keptT = setInterval(show, 7000); }
   }
   refreshDonors();
+  setInterval(refreshDonors, 120000);
+
+  // Low-fuel nudge: soft, a few seconds after load, at most once per session.
+  let nudged = false;
+  function maybeNudge() {
+    if (nudged) return;
+    const force = /[?&]lowfuel\b/.test(location.search);
+    let seen = false; try { seen = sessionStorage.getItem("it:nudged") === "1"; } catch (_) {}
+    if (!force && seen) return;
+    const low = Number(fuel.low_cents || 500), cents = Number(fuel.balance_cents);
+    if (!force && !(fuel.balance_cents != null && cents < low)) return;
+    nudged = true; try { sessionStorage.setItem("it:nudged", "1"); } catch (_) {}
+    const hrs = Math.max(0, cents) / (hourCents || 17);
+    $("nudge-left").textContent = Number.isFinite(hrs) ? (hrs < 1 ? "Less than an hour of painting left." : `About ${Math.round(hrs)} hours of painting left.`) : "";
+    $("nudge").classList.remove("hidden"); requestAnimationFrame(() => $("nudge").classList.add("on"));
+    try { window.va && window.va("event", { name: "nudge_shown" }); } catch (_) {}
+  }
+  const closeNudge = () => { $("nudge").classList.remove("on"); setTimeout(() => $("nudge").classList.add("hidden"), 300); };
+  $("nudge-x").addEventListener("click", closeNudge);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("nudge").classList.contains("hidden")) closeNudge(); });
+  document.querySelectorAll(".nudge-tiers button").forEach((b) => b.addEventListener("click", () => { closeNudge(); donate(Number(b.dataset.cents)); }));
+  window.addEventListener("tapestry:revealed", () => setTimeout(maybeNudge, 4000), { once: true });
+  setTimeout(maybeNudge, 9000);   // in case the intro already finished
 
   async function donate(cents, { ideaId } = {}) {
     try {
@@ -491,6 +543,7 @@ async function boot() {
   document.querySelectorAll("#tiers button, #sleep-tiers button").forEach((b) => b.addEventListener("click", () => donate(Number(b.dataset.cents))));
   $("fuel-chip").addEventListener("click", () => openTab("fuel"));
   const qs = new URLSearchParams(location.search);
+  if (qs.get("fuel")) { openTab("fuel"); history.replaceState(null, "", location.pathname); }
   if (qs.get("thanks")) {
     toast("Thank you. The tapestry has more fuel.", 6000);
     history.replaceState(null, "", location.pathname);

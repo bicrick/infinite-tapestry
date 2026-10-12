@@ -156,6 +156,7 @@ def create_app(
     if supa and generator is not None and os.environ.get("TAPESTRY_CROWD", "1") == "1":
         crowd = Crowd(supa, generator.director, interpreter, generator,
                       broadcast=lambda m: broadcast(m), on_change=lambda: broadcast_director(), mock=config.mock)
+        crowd.viewers = lambda: len(clients)   # priority queue engages with a big audience
     app.state.crowd = crowd
     if generator is not None:
         def _on_flag(scene: dict) -> None:

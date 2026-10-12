@@ -32,6 +32,14 @@
     <section class="p-head">
       <h1 id="p-handle">&nbsp;</h1>
       <div id="p-meta" class="p-meta">&nbsp;</div>
+      <div id="p-banner" class="p-banner hidden"></div>
+      <form id="p-banner-edit" class="p-banner-edit hidden" autocomplete="off">
+        <div class="pbe-title">Your shout-out <span class="muted">· shown with your name wherever donors are thanked</span></div>
+        <input id="pbe-tag" maxlength="60" placeholder="A short line (60 characters)" />
+        <input id="pbe-url" maxlength="200" placeholder="Your website (optional)" inputmode="url" />
+        <div class="pbe-row"><span id="pbe-count" class="muted">0/60</span><button type="submit">Save</button></div>
+      </form>
+      <div id="p-donate-hint" class="p-donate-hint hidden">Donors get a shout-out here. <a href="/?fuel=1">Keep the tapestry alive →</a></div>
       <nav id="p-filter" class="p-filter hidden">
         <button data-f="all" class="on">All</button><button data-f="woven">Woven in</button><button data-f="pending">Pending</button><button data-f="rejected" class="own-only hidden">Not used</button>
       </nav>
