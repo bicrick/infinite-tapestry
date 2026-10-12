@@ -624,7 +624,7 @@ body.idle .kept { opacity: .45; }
 .nudge::before { content: ""; position: absolute; inset: 0; background: rgba(5,5,7,.28); opacity: 0; transition: opacity .35s ease; }
 .nudge.on::before { opacity: 1; }
 .nudge-card { position: relative; pointer-events: auto; width: min(360px, 88vw); padding: 26px 24px 18px; border-radius: 18px; text-align: center;
-  background: rgba(var(--shade),.62); color: rgb(var(--ink)); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  background: rgba(var(--shade),.84); color: rgb(var(--ink)); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2);
   border: 1px solid rgba(var(--ink),.12); box-shadow: 0 24px 80px rgba(0,0,0,.35);
   opacity: 0; transform: translateY(10px) scale(.98); transition: opacity .35s ease, transform .45s cubic-bezier(.2,.9,.3,1.2); }
 .nudge.on .nudge-card { opacity: 1; transform: none; }
