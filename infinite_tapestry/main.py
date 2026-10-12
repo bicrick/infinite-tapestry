@@ -48,8 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=Config.inpaint_model,
         help="HF id for SD1.5 inpainting checkpoint (community mirror)",
     )
-    p.add_argument("--backend", choices=["sd15", "sdxl"], default=os.environ.get("TAPESTRY_BACKEND", "sd15"),
-                   help="sdxl = SDXL inpainting at 1024px with style LoRAs (24 GB GPU)")
+    p.add_argument("--backend", choices=["sd15", "sdxl", "klein"], default=os.environ.get("TAPESTRY_BACKEND", "sd15"),
+                   help="sdxl = SDXL inpainting at 1024px with style LoRAs; klein = FLUX.2 klein 4B (24 GB GPU)")
     p.add_argument("--lcm-lora", default=Config.lcm_lora, help="empty = off (DPM++)")
     p.add_argument("--taesd-model", default=Config.taesd_model, help="empty = full VAE")
     p.add_argument(
