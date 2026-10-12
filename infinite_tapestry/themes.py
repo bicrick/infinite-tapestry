@@ -130,10 +130,11 @@ def pick_mode(rng: random.Random | None = None, have_news: bool = True) -> str:
     return r.choices([m for m, _ in modes], [w for _, w in modes])[0]
 
 
-def brief(mode: str, headlines: list[str], memory: ThemeMemory, relax: bool = False) -> str:
+def brief(mode: str, headlines: list[str], memory: ThemeMemory, relax: bool = False, spark: bool = True) -> str:
     s = ("THEME FOR THIS BATCH -> " + MODE_BRIEF[mode] +
          "")
-    s += "\nRandom spark for originality (use loosely or ignore): " + random.choice(SPARKS)
+    if spark:
+        s += "\nRandom spark for originality (use loosely or ignore): " + random.choice(SPARKS)
     if mode == "news" and headlines:
         s += "\nToday's headlines (pick one, render it visually):\n" + "\n".join(f"- {h}" for h in headlines)
     if relax:

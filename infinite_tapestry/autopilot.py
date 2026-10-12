@@ -161,7 +161,8 @@ class Autopilot:
                 mood = self.moods.next(2)
                 mode = "news" if mood == "topical" and heads else "cinematic"
                 self.last_mode = mode
-                text = brief(mode, heads, self.memory, relax=self.moods.relax_cliche(mood)) + "\n" + self.moods.brief(mood)
+                text = brief(mode, heads, self.memory, relax=self.moods.relax_cliche(mood),
+                             spark=not self.moods.is_beautiful(mood)) + "\n" + self.moods.brief(mood)
             self.last_mood = mood
             relax = bool(mood) and self.moods.relax_cliche(mood)
             plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text)
@@ -176,6 +177,7 @@ class Autopilot:
                                            and not self.memory.is_repeat(x.get("title", ""))))]
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
+            logger.info("autoplan mood=%s titles=%s", mood or self.last_mode, [s.get("title") for s in plan["scenes"]])
             for s in plan["scenes"]:
                 self.memory.add(s.get("title", ""))
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),

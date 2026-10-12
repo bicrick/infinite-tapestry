@@ -57,13 +57,20 @@ class MoodRotator:
     def relax_cliche(key: str) -> bool:
         return bool(key in _BY_KEY and _BY_KEY[key][3])
 
+    @staticmethod
+    def is_beautiful(key: str) -> bool:
+        return bool(key in _BY_KEY and _BY_KEY[key][2])
+
     def brief(self, key: str) -> str:
         m = _BY_KEY[key]
+        extra = (" This is a BEAUTY mood: no humor, no gags, no animals doing jobs, no mashing an ordinary/bureaucratic "
+                 "thing into nature, no absurd twist. One coherent, real-feeling, stunning place." if m[2] else
+                 " Humor, gags and absurd twists are welcome here.")
         seed = self.rng.randint(1000, 9999)
         return (f"MOOD FOR THIS BATCH (overrides the default tone) -> {m[4]} "
                 "Do NOT default to quirky, gross or jokey unless this mood asks for it; when the mood is beautiful, "
-                "make it sincerely, stunningly beautiful. Specific beats generic. Keep the scene immersive and wide. "
-                f"Variation seed {seed}: let it push you to an unexpected subject, place and palette.")
+                "make it sincerely, stunningly beautiful. Specific beats generic. Keep the scene immersive and wide."
+                + extra + f" Variation seed {seed}: let it push you to an unexpected subject, place and palette.")
 
 
 def beautiful_share() -> float:
