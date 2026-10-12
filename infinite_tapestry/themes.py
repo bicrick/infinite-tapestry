@@ -130,14 +130,17 @@ def pick_mode(rng: random.Random | None = None, have_news: bool = True) -> str:
     return r.choices([m for m, _ in modes], [w for _, w in modes])[0]
 
 
-def brief(mode: str, headlines: list[str], memory: ThemeMemory) -> str:
+def brief(mode: str, headlines: list[str], memory: ThemeMemory, relax: bool = False) -> str:
     s = ("THEME FOR THIS BATCH -> " + MODE_BRIEF[mode] +
          "")
     s += "\nRandom spark for originality (use loosely or ignore): " + random.choice(SPARKS)
     if mode == "news" and headlines:
         s += "\nToday's headlines (pick one, render it visually):\n" + "\n".join(f"- {h}" for h in headlines)
-    s += ("\nBANNED cliches (never use): " + ", ".join(CLICHES) +
-          ". Also avoid generic forests, generic landscapes and pretty-but-empty postcard scenes.")
+    if relax:
+        s += "\nClassic beautiful subjects are allowed for this mood, but make them SPECIFIC (named place, unusual vantage, distinctive light), never generic postcard filler."
+    else:
+        s += ("\nBANNED cliches (never use): " + ", ".join(CLICHES) +
+              ". Also avoid generic forests, generic landscapes and pretty-but-empty postcard scenes.")
     if memory.titles:
         s += "\nThemes already used recently (do NOT repeat or closely revisit): " + "; ".join(memory.titles)
     s += ("\nThe transition blend handles continuity, so you may jump to a completely new idea; "

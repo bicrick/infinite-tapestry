@@ -11,6 +11,7 @@ import time
 from typing import Any, Callable
 
 from .prompts import make_scene
+from .moods import MoodRotator
 from .themes import HeadlineCache, ThemeMemory, brief, has_cliche, mentions_minor, pick_mode
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,8 @@ class Autopilot:
         self.headlines = HeadlineCache()
         self.memory = ThemeMemory(40)
         self.last_mode = ""
+        self.moods = MoodRotator()
+        self.last_mood = ""
         self.pressure: Callable[[], int] = lambda: 0  # waiting pool ideas -> keep Auto filler thin
         self.epoch = 0  # bumped on every user enqueue; stale auto results are discarded
 
@@ -89,7 +92,7 @@ class Autopilot:
         return {
             "enabled": self.enabled, "vibe": self.vibe, "busy": self.busy,
             "error": self.last_error, "tokens": getattr(self.interpreter, "tokens_used", 0),
-            "budget": self.token_budget, "mode": self.last_mode,
+            "budget": self.token_budget, "mode": self.last_mode, "mood": self.last_mood,
         }
 
     def configure(self, enabled: bool | None = None, vibe: str | None = None) -> None:
@@ -144,14 +147,23 @@ class Autopilot:
         try:
             recent = d.recent(12)
             mom = momentum_brief(recent)
+            last_user = max((i for i, r in enumerate(recent) if r.get("origin") == "user"), default=None)
+            since = len(recent) - 1 - last_user if last_user is not None else 99
+            mood = ""
             if mom:
                 self.last_mode = "momentum"
                 text = mom
+                if since >= 2:  # drifting away: steer the new subject by a random mood
+                    mood = self.moods.next(2)
+                    text += "\nFor the drifting scenes, the NEW main subject follows this: " + self.moods.brief(mood)
             else:
                 heads = await asyncio.to_thread(self.headlines.sample, 6)
-                mode = pick_mode(have_news=bool(heads))
+                mood = self.moods.next(2)
+                mode = "news" if mood == "topical" and heads else "cinematic"
                 self.last_mode = mode
-                text = brief(mode, heads, self.memory)
+                text = brief(mode, heads, self.memory, relax=self.moods.relax_cliche(mood)) + "\n" + self.moods.brief(mood)
+            self.last_mood = mood
+            relax = bool(mood) and self.moods.relax_cliche(mood)
             plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
@@ -160,7 +172,7 @@ class Autopilot:
             plan["scenes"] = [x for x in plan["scenes"] if not is_disallowed(x["prompt"])
                               and not mentions_minor(x.get("title", "") + " " + x["prompt"])
                               # the carried-over user theme is exempt from the cliche/repeat filters
-                              and (mom or (not has_cliche(x.get("title", "") + " " + x["prompt"])
+                              and (mom or ((relax or not has_cliche(x.get("title", "") + " " + x["prompt"]))
                                            and not self.memory.is_repeat(x.get("title", ""))))]
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
