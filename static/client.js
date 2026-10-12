@@ -880,6 +880,33 @@
     panVel = Math.max(-cap, Math.min(cap, panVel + d * gain));
     wheelIdleAt = now;
   }, { passive: false });
+  // Haptic wheel (wheel.js): drives the timeline 1:1 in CSS px, then hands off to the same glide/drift.
+  let wheelHeld = false;
+  Object.assign(window.TapestryView, {
+    offsetCss: () => viewLeft() / Math.max(1e-6, pxToWorld()),
+    wheelStart() {
+      if (panMode === "live" || panMode === "return") { panPos = panMode === "return" ? shownPan() : liveScroll + nudge; nudge = 0; nudgeVel = 0; panMode = "live"; enterHistory(); }
+      else panPos = shownPan();
+      wheelHeld = true; tlScrub = true; panMode = "drag"; panVel = 0; turbo = 0; samples = [[performance.now(), panPos]];
+    },
+    wheelMove(dxCss) {
+      const lo = minPan(), hi = maxPan(), resist = panPos < lo || panPos > hi ? 0.45 : 1;
+      panPos -= dxCss * pxToWorld() * resist;
+      const now = performance.now();
+      samples.push([now, panPos]);
+      while (samples.length > 2 && now - samples[0][0] > 100) samples.shift();
+    },
+    wheelEnd() {
+      if (!wheelHeld) return;
+      wheelHeld = false; tlScrub = false;
+      const now = performance.now(), s0 = samples[0], s1 = samples[samples.length - 1];
+      const span = (s1[0] - s0[0]) / 1000;
+      panVel = now - s1[0] > 80 || span <= 0 ? 0 : (s1[1] - s0[1]) / span;
+      panVel = Math.max(-8000, Math.min(8000, panVel));
+      panMode = "glide";
+    },
+    gliding: () => panMode === "glide" && Math.abs(panVel) > 4,
+  });
   function goLive() { if (!live || panMode !== "live") startReturn(); }
   liveBtn.addEventListener("click", goLive);
 
