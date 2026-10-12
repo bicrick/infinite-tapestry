@@ -68,10 +68,10 @@ class PromptScheduler:
 
 QUALITY_NEGATIVE = ("flat texture, repetitive pattern, wallpaper, tiled, seamless pattern, still life, product shot, "
                     "empty composition, lifeless, cluttered duplicates")
-MIN_TRANSITION = 4  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
-MAX_TRANSITION = 6
-MAX_HOLD_USER = 10  # user ideas linger a bit longer (~15-20 s)
-MAX_HOLD = 8  # scenes should switch often; long holds read as stalls
+MIN_TRANSITION = 1  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
+MAX_TRANSITION = 3
+MAX_HOLD_USER = 4  # klein is coherent: short scenes (~10-15 s)
+MAX_HOLD = 4  # scenes should switch often; long holds read as stalls
 _scene_ids = __import__("itertools").count(1)
 
 
@@ -156,7 +156,7 @@ class LiveDirector:
         (no looping). Autopilot fills the queue from there."""
         sched = sorted(schedule, key=lambda x: x[0])
         return cls(sched[0][1], negative_prompt, queue=[p for _, p in sched[1:]],
-                   hold=6, blend=max(MIN_TRANSITION, min(blend, MAX_TRANSITION)), loop=False)
+                   hold=3, blend=max(MIN_TRANSITION, min(blend, MAX_TRANSITION)), loop=False)
 
     # --- compat properties ---
     @property
@@ -182,14 +182,16 @@ class LiveDirector:
         # Variable scene length (~20-45 s with the blend at ~2.9 s/strip): ideas linger a bit longer
         # than default, quiet Auto filler moves on sooner. Same for everyone, donor or not.
         if scene.get("origin") == "user":  # ideas linger longer than Auto filler
-            base = min(MAX_HOLD_USER, h + 2)
+            base = 0 if h <= 0 else max(2, min(MAX_HOLD_USER, h))
         else:
-            base = max(min(h, 3), h - 2)   # never lengthens a short hold
+            # a little variation: alternate scenes run one strip shorter/longer (2-4 strips)
+            jitter = sum(map(ord, str(scene.get("title") or scene.get("prompt") or ""))) % 3 - 1
+            base = 0 if h <= 0 else max(2, min(MAX_HOLD, h + jitter))
         # Crowd heat: the scene on stage lingers while people react to it (+1 strip per ~6 reactions, up to +3).
         heat = getattr(self, "heat", None)
         if heat is not None and scene is self._current and base > 0:
             try:
-                base = min(max(base, MAX_HOLD_USER), base + min(3, int(heat(self._active_since)) // 6))
+                base = base + min(2, int(heat(self._active_since)) // 6)
             except Exception:
                 pass
         return base
@@ -442,13 +444,13 @@ class LiveDirector:
             self._blend_start = int(d.get("blend_start", 0))
             self._active_since = int(d.get("active_since", 0))
             # Clamp persisted timings to the current (shorter) limits.
-            self.hold = max(5, min(MAX_HOLD, int(d.get("hold", self.hold))))
+            self.hold = max(2, min(MAX_HOLD, int(d.get("hold", self.hold))))
             self.blend = max(MIN_TRANSITION, min(self.blend, MAX_TRANSITION, int(d.get("blend", self.blend))))
             for s in self._queue + ([self._target] if self._target else []):
                 if s.get("transition"):
                     s["transition"] = max(MIN_TRANSITION, min(MAX_TRANSITION, int(s["transition"])))
                 if s.get("hold") is not None:
-                    s["hold"] = max(5, min(MAX_HOLD_USER if s.get("origin") == "user" else MAX_HOLD, int(s["hold"])))
+                    s["hold"] = max(2, min(MAX_HOLD_USER if s.get("origin") == "user" else MAX_HOLD, int(s["hold"])))
             if self._current.get("hold") is not None:
                 self._current["hold"] = max(0, min(MAX_HOLD, int(self._current["hold"])))
             self.loop = bool(d.get("loop", False))

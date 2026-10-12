@@ -185,6 +185,16 @@ class StripGenerator:
         if band and prompt_b and not cfg.mock:
             band = max(band, int(ctx_w * getattr(cfg, "scene_change_repaint", 0.7)))
         self.last_band = band
+        hide = int(getattr(cfg, "context_mask_px", 0) or 0)
+        if hide and self._strip_index > 0 and not cfg.mock:
+            # Show the model only the context next to the seam; masking the far-left context
+            # stops it from copying whole objects it can see (klein in-context repetition).
+            band = max(band, 0)
+            import numpy as np
+
+            m = np.asarray(mask).copy()
+            m[:, :min(hide, ctx_w - band - 32)] = 255
+            mask = Image.fromarray(m, mode="L")
         if band:
             import numpy as np
 
@@ -244,6 +254,19 @@ class StripGenerator:
             logger.info("Strip %d attempt %d looks seamed (score %.1f); retrying", self._strip_index, k, score)
         self.last_seam_score = best_score
         generated = best
+        # Near-duplicate guard: the new strip must not be a copy of something already visible in
+        # the context (klein can clone the crowd/objects it sees). Regenerate with a fresh seed.
+        self.last_dup_score = 0.0
+        if getattr(cfg, "dup_check", False) and self._strip_index > 0 and not cfg.mock:
+            for k in range(int(getattr(cfg, "dup_retries", 2))):
+                d = dup_score(generated, window, ctx_w, cfg.window_width - margin)
+                self.last_dup_score = d
+                if d < cfg.dup_threshold:
+                    break
+                logger.info("Strip %d repeats its context (dup %.2f); regenerating", self._strip_index, d)
+                generated = self.inpainter.generate(
+                    image=window, mask=mask, prompt=prompt_a, negative_prompt=self.director.negative_for(blend_t),
+                    seed=seed + 31337 * (k + 1), prompt_b=prompt_b, t=blend_t)
         if self.nsfw is not None:
             new_region = generated.crop((max(0, ctx_w - band), 0, cfg.window_width - margin, cfg.height))
             p = self.nsfw(new_region)
@@ -439,3 +462,27 @@ class StripGenerator:
                     )
         finally:
             logger.info("Generator loop exiting")
+
+
+def dup_score(generated: Image.Image, window: Image.Image, ctx_w: int, right: int) -> float:
+    """Max normalised correlation between the newly painted strip and any same-width slice of the
+    visible context (64 px steps), on small high-passed grayscale thumbnails. ~1.0 = cloned content."""
+    import numpy as np
+
+    def thumb(img):
+        g = np.asarray(img.convert("L").resize((max(1, img.width // 16), max(1, img.height // 16)),
+                                                Image.Resampling.BILINEAR), dtype=np.float32)
+        return g
+    w = right - ctx_w
+    if w <= 0:
+        return 0.0
+    new = thumb(generated.crop((ctx_w, 0, right, generated.height)))
+    new = new - new.mean(); nn = float(np.sqrt((new * new).sum())) or 1.0
+    best = 0.0
+    for x in range(0, ctx_w - w + 1, 64):
+        old = thumb(window.crop((x, 0, x + w, window.height)))
+        if old.shape != new.shape:
+            continue
+        old = old - old.mean(); on = float(np.sqrt((old * old).sum())) or 1.0
+        best = max(best, float((new * old).sum() / (nn * on)))
+    return best

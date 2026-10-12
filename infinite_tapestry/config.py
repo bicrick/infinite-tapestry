@@ -21,9 +21,9 @@ class Config:
     context_width: int = 384  # window_width - strip_width
 
     # Buffer / scroll
-    buffer_target: int = 6  # strips to keep ahead
+    buffer_target: int = 3  # strips to keep ahead
     buffer_min: int = 2  # below this, client should slow down
-    blend_strips: int = 5  # strips to interpolate between prompts
+    blend_strips: int = 2  # strips to interpolate between prompts
     history_limit: int = 600  # strips kept in memory; older ones are read from disk
     scroll_speed: float = 30.0  # px/s (nominal)
     scroll_speed_min: float = 8.0  # when buffer is low
@@ -48,6 +48,10 @@ class Config:
     style_loras: bool = True  # SDXL only: load style LoRAs (styles.py) and ramp them across transitions
     scene_change_repaint: float = 0.7  # fraction of context repainted while blending into a new scene
     user_cfg_boost: float = 1.5  # extra CFG for user ideas
+    dup_check: bool = False  # reject strips that clone visible context (klein preset turns it on)
+    dup_threshold: float = 0.8
+    dup_retries: int = 2
+    context_mask_px: int = 0  # mask (repaint) this many px of far-left context so the model can't copy it
     seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
     harmonize_seams: bool = True  # remove colour steps at the mask edge
     taesd_model: str = ""
@@ -165,5 +169,7 @@ SDXL_PRESET: dict[str, Any] = {
 
 
 # FLUX.2 [klein] 4B (Apache-2.0): SDXL geometry, 4 distilled steps, no CFG.
-# A wider repaint band lets the model blend more of the context; feather_composite softens the edge.
-KLEIN_PRESET: dict[str, Any] = {"steps": 4, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 160}
+# Narrow repaint band + no 70% scene-change repaint: a wide repainted band got cross-faded over
+# the old pixels (ghosting) and let klein redraw whole compositions each strip. Bakeoff: tapestry-samples/blend.
+KLEIN_PRESET: dict[str, Any] = {"steps": 4, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 48,
+                                "scene_change_repaint": 0.0, "dup_check": True}
