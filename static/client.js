@@ -103,7 +103,7 @@
     // Soft extension of the band into the dark space: downsample the band, upscale it (free blur), darken.
     if (yOff < 4) return;
     if (!ambCv) { ambCv = document.createElement("canvas"); ambCv.width = 24; ambCv.height = 12; ambCtx = ambCv.getContext("2d"); }
-    if (!(drawSurround.n = (drawSurround.n || 0) + 1) || drawSurround.n % 8 === 1 || portrait()) ambCtx.drawImage(canvas, 0, yOff, w, bandH, 0, 0, 24, 12);   // desktop: resample every 8th frame
+    ambCtx.drawImage(canvas, 0, yOff, w, bandH, 0, 0, 24, 12);   // every frame (the 8th-frame throttle made the reflection jump)
     ctx.save();
     ctx.imageSmoothingQuality = "high";
     ctx.globalAlpha = SURR_GLOW * surroundA;
@@ -349,15 +349,16 @@
   // The newest 2 strips on screen are staged as round dots: strip nearest the solid edge solidifying (70-100% settled),
   // the next assembling (0-70%), the rest streaming in from a point on the far right through a widening funnel.
   // Purely visual: livePos is never capped, so the scroll stays free-running.
-  const PSP = 8;   // world px between dots
+  const PSP = 6;   // world px between dots (prototype spacing)
   function stripParticles(e) {
     if (e.pt !== undefined) return e.pt;
     if (!e.bitmap) return null;
     const cols = Math.ceil(SW() / PSP), rows = Math.ceil(config.height / PSP);
     const c = document.createElement("canvas"); c.width = cols; c.height = rows; const g = c.getContext("2d", { willReadFrequently: true });
     let d; try { g.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, 0, 0, cols, rows); d = g.getImageData(0, 0, cols, rows).data; } catch (_) { return (e.pt = null); }
-    const col = new Array(cols * rows); for (let k = 0; k < cols * rows; k++) col[k] = `rgb(${d[k * 4]},${d[k * 4 + 1]},${d[k * 4 + 2]})`;
-    return (e.pt = { cols, rows, col });
+    const col = new Array(cols * rows), rgb = new Uint8Array(cols * rows * 3);
+    for (let k = 0; k < cols * rows; k++) { col[k] = `rgb(${d[k * 4]},${d[k * 4 + 1]},${d[k * 4 + 2]})`; rgb[k * 3] = d[k * 4]; rgb[k * 3 + 1] = d[k * 4 + 1]; rgb[k * 3 + 2] = d[k * 4 + 2]; }
+    return (e.pt = { cols, rows, col, rgb });
   }
   const phash = (a, b) => { let h = (a * 374761393 + b * 668265263) ^ 0x5bf03635; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
   function stripDotLayer(e) {   // all of a strip's dots, round and soft, rendered once
@@ -402,6 +403,96 @@
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // ---------- WebGL points layer for the past-live particle stream (full prototype fidelity at 60fps) ----------
+  const glS = { cv: null, gl: null, prog: null, buf: null, n: 0, key: "", origin: 0, u: {}, shown: false, failed: false };
+  function glInit() {
+    const cv = document.createElement("canvas"); cv.id = "stream-gl";
+    cv.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1";
+    canvas.insertAdjacentElement("afterend", cv);
+    const gl = cv.getContext("webgl", { premultipliedAlpha: false, antialias: false, alpha: true });
+    if (!gl) { glS.failed = true; return; }
+    const vs = `attribute vec2 aT; attribute vec3 aC; attribute vec2 aH;
+      uniform float uE, uL, uS, uY, uZ, uT, uP, uSX, uSY, uVR, uH; uniform vec2 uRes;
+      varying vec3 vC; varying float vA;
+      void main() {
+        float wx = aT.x, ty = aT.y, h = aH.x, h2 = aH.y;
+        vC = aC; vA = 0.0; gl_PointSize = 0.0; gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+        if (wx < uE || wx > uE + uZ) return;
+        float st = (wx - uE) / uZ;
+        float settled = st < 0.5 ? 1.0 - 0.6 * st : 1.4 * (1.0 - st);
+        float grow = st < 0.5 ? 1.0 + 0.9 * (1.0 - st * 2.0) : 0.85;
+        float al = 0.9; float x = wx; float y = ty;
+        if (h >= settled) {
+          float q = fract(uT * (0.45 + 0.3 * h2) + h);
+          if (q > 0.985) return;
+          float ee = 1.0 - pow(1.0 - q, 2.4), u = 1.0 - ee;
+          float cx = wx + (uSX - wx) * 0.45, cy = uSY + (ty - uSY) * 0.12;
+          x = u * u * uSX + 2.0 * u * ee * cx + ee * ee * wx; y = u * u * uSY + 2.0 * u * ee * cy + ee * ee * ty;
+          grow = 0.3 + 0.5 * ee; al = 0.2 + 0.6 * ee;
+          if (x > uVR + uP) return;
+        }
+        float rad = uP * 0.45 * grow * uS;                       // device px
+        vec2 px = vec2((x - uL) * uS, uY + y * uS);
+        gl_Position = vec4(px.x / uRes.x * 2.0 - 1.0, 1.0 - px.y / uRes.y * 2.0, 0.0, 1.0);
+        gl_PointSize = rad * 3.8; vA = al;
+      }`;
+    const fs = `precision mediump float; varying vec3 vC; varying float vA;
+      void main() {
+        float d = length(gl_PointCoord - 0.5) * 3.8;              // in units of rad
+        float core = 1.0 - smoothstep(0.7, 0.85, d), halo = (1.0 - smoothstep(1.75, 1.9, d)) * 0.3;
+        float a = vA * max(core, halo);                            // same as the prototype: halo at 0.3, core on top
+        if (a < 0.003) discard;
+        gl_FragColor = vec4(vC, a);
+      }`;
+    const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    try {
+      const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+      glS.prog = p;
+    } catch (e) { console.warn("stream-gl", e); glS.failed = true; return; }
+    gl.useProgram(glS.prog);
+    for (const n of ["uE","uL","uS","uY","uZ","uT","uP","uSX","uSY","uVR","uRes"]) glS.u[n] = gl.getUniformLocation(glS.prog, n);
+    glS.a = { T: gl.getAttribLocation(glS.prog, "aT"), C: gl.getAttribLocation(glS.prog, "aC"), H: gl.getAttribLocation(glS.prog, "aH") };
+    glS.buf = gl.createBuffer(); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    glS.cv = cv; glS.gl = gl;
+  }
+  function glBuild(k0, k1) {
+    const parts = [];
+    for (let k = k0; k <= k1; k++) { const e = strips.get(k), P = e && stripParticles(e); if (P) parts.push([k, P]); }
+    const key = k0 + ":" + parts.map((p) => p[0]).join(",");
+    if (key === glS.key) return;
+    glS.key = key; glS.origin = k0 * SW();
+    let n = 0; for (const [, P] of parts) n += P.cols * P.rows;
+    const d = new Float32Array(n * 7); let o = 0;
+    for (const [k, P] of parts) for (let a = 0; a < P.cols; a++) for (let r = 0; r < P.rows; r++) {
+      const wx = k * SW() + a * PSP + PSP / 2, wc = Math.round(wx / PSP), c = P.rgb, ci = (r * P.cols + a) * 3;
+      d[o++] = wx - glS.origin; d[o++] = r * PSP + PSP / 2; d[o++] = c[ci] / 255; d[o++] = c[ci + 1] / 255; d[o++] = c[ci + 2] / 255;
+      d[o++] = phash(wc, r); d[o++] = phash(r, wc + 91);
+    }
+    const gl = glS.gl; gl.bindBuffer(gl.ARRAY_BUFFER, glS.buf); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW); glS.n = n;
+  }
+  function glStream(E, left, s, yOff, w, h) {
+    if (E === null) { if (glS.shown) { glS.gl.clear(glS.gl.COLOR_BUFFER_BIT); glS.shown = false; } return; }
+    if (glS.failed) return;
+    if (!glS.gl) { glInit(); if (glS.failed) return; }
+    const gl = glS.gl, cv = glS.cv;
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const Z = 2 * SW(), viewR = left + w / s;
+    glBuild(Math.floor(E / SW()), Math.floor((E + Z) / SW()));
+    gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); glS.shown = true;
+    if (!glS.n) return;
+    const O = glS.origin, u = glS.u;
+    gl.useProgram(glS.prog);
+    gl.uniform1f(u.uE, E - O); gl.uniform1f(u.uL, left - O); gl.uniform1f(u.uS, s); gl.uniform1f(u.uY, yOff); gl.uniform1f(u.uZ, Z);
+    gl.uniform1f(u.uT, (performance.now() / 1000) % 1000); gl.uniform1f(u.uP, PSP); gl.uniform1f(u.uSX, E - O + Z + SW() * 0.1); gl.uniform1f(u.uSY, config.height / 2);
+    gl.uniform1f(u.uVR, viewR - O); gl.uniform2f(u.uRes, w, h);
+    gl.bindBuffer(gl.ARRAY_BUFFER, glS.buf);
+    gl.enableVertexAttribArray(glS.a.T); gl.vertexAttribPointer(glS.a.T, 2, gl.FLOAT, false, 28, 0);
+    gl.enableVertexAttribArray(glS.a.C); gl.vertexAttribPointer(glS.a.C, 3, gl.FLOAT, false, 28, 8);
+    gl.enableVertexAttribArray(glS.a.H); gl.vertexAttribPointer(glS.a.H, 2, gl.FLOAT, false, 28, 20);
+    gl.drawArrays(gl.POINTS, 0, glS.n);
   }
   function stripThumb(e) {   // 8x24 colour sample per strip, computed once (cheap dot colours, no canvas readback per frame)
     if (e.th !== undefined) return e.th;
@@ -659,11 +750,15 @@
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
+        if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) ? performance.now() : -1e9;   // arrived while its repainted band is on screen?
+        const fa = Math.min(1, (performance.now() - e.seenAt) / 1000);                                      // then crossfade it in over ~1 s
+        if (fa < 1) ctx.globalAlpha = fa * fa * (3 - 2 * fa);
         if ((i + 1) * SW() <= liveB) ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
         else if (i * SW() < liveB) { ctx.save(); ctx.beginPath(); ctx.rect(-10, 0, liveB - left + 10, config.height); ctx.clip(); ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0); ctx.restore(); }
+        ctx.globalAlpha = 1;
       }
       coverage = want ? have / want : 0;
-      if (!window.__ns && liveB !== Infinity && liveB < left + w / s) drawStream(liveB, left, left + w / s, performance.now() / 1000);
+      glStream(!window.__ns && liveB !== Infinity && liveB < left + w / s ? liveB : null, left, s, yOff, w, h);
     }
     if (mark) {
       const age = (performance.now() - mark.t0) / 1000;
