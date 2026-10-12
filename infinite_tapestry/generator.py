@@ -291,6 +291,44 @@ class StripGenerator:
 
         return strip
 
+    # ---- persistence ----
+    def attach_store(self, store) -> None:
+        """Restore from `store` if it has state, then save every new strip."""
+        self.store = store
+        state, canvas = store.load_state()
+        if state:
+            try:
+                self.director.load_dict(state.get("director", {}))
+                idx = int(state.get("strip_index", 0))
+                meta = store.load_meta()
+                keep = list(range(max(0, idx - self.buffer.history_limit), idx))
+                strips = [st for st in (store.load_strip(i, meta.get(i)) for i in keep) if st]
+                with self._lock:
+                    if canvas is not None:
+                        self._canvas = canvas
+                    self._strip_index = idx
+                self.buffer.restore(strips, idx)
+                self.restored_pos = state.get("timeline_pos")
+                logger.info("Restored %d strips (index %d) from %s", len(strips), idx, store.dir)
+            except Exception:
+                logger.exception("State restore failed; starting fresh")
+
+    def snapshot_state(self) -> dict:
+        cfg = self.config
+        return {"version": 1, "strip_index": self._strip_index, "director": self.director.to_dict(),
+                "strip_width": cfg.strip_width, "overlap": cfg.overlap, "height": cfg.height,
+                "timeline_pos": getattr(self, "timeline_pos", None), "saved_at": time.time()}
+
+    def _persist(self, strip: Strip) -> None:
+        store = getattr(self, "store", None)
+        if store is None:
+            return
+        try:
+            store.save_strip(strip)
+            store.save_state(self.snapshot_state(), self.canvas, force=strip.index % 10 == 0)
+        except Exception:
+            logger.exception("Persisting strip %s failed", strip.index)
+
     def _record_time(self, dt: float) -> None:
         a = self._ema_alpha
         self.gen_seconds_ema = dt if self.gen_seconds_ema is None else (1 - a) * self.gen_seconds_ema + a * dt
@@ -323,6 +361,8 @@ class StripGenerator:
                         break
                     continue
                 ok = self.buffer.put(strip, block=True, timeout=2.0)
+                if ok:
+                    self._persist(strip)
                 if not ok:
                     if self.buffer.closed or self._stop.is_set():
                         break

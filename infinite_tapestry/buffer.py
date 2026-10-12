@@ -130,6 +130,14 @@ class StripBuffer:
                 pass
         return True
 
+    def restore(self, strips: list["Strip"], produced: int) -> None:
+        """Seed history after a restart; viewers resume at the newest strip."""
+        with self._cond:
+            self._history = deque(strips[-self.history_limit:])
+            self._produced = produced
+            self._acknowledged = max(0, produced - 1)
+            self._cond.notify_all()
+
     def acknowledge(self, index: int) -> None:
         """Client finished displaying through `index` (inclusive)."""
         with self._cond:
