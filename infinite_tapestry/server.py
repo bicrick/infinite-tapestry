@@ -538,7 +538,7 @@ def create_app(
                         continue
                     if t in CONTROL_TYPES and supa is not None and not (user and user.get("is_admin")):
                         # Production: the stage is steered by the crowd pool (Supabase) and admins.
-                        await notice("Add your idea to the pool. The crowd and Claude decide what plays.")
+                        await notice("Add your idea to the pool. The crowd and Auto decide what plays.")
                         continue
                     if t == "ping":
                         await ws.send_json({"type": "pong"})
