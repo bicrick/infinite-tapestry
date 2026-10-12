@@ -17,6 +17,7 @@ import re
 from .prompts import make_scene
 
 logger = logging.getLogger(__name__)
+GHOSTY = re.compile(r"dissolv|fad(e|es|ing)\b|ghost|transparen|translucen|double exposure|gives? way|giving way|melt(s|ing)? into|blend(s|ing)? into", re.I)
 
 SYSTEM = (
     "You direct transitions in an endless side-scrolling AI panorama. You see the current visible window (left=older, "
@@ -24,7 +25,9 @@ SYSTEM = (
     "that belongs to both worlds), \"morph\" (keep the shapes/layout you see, change the material into the new world), "
     "\"passthrough\" (a cinematic doorway, window, fog bank or crowd you pass through), or \"interpolate\" (close scenes: "
     "smooth blend, no bridge). For bridge/morph/passthrough write 1-2 strip prompts (natural language, 1-2 sentences each) "
-    "that grow out of the right edge and arrive in the next scene. Never sexual content or minors. "
+    "that grow out of the right edge and arrive in the next scene. Use SOLID, OPAQUE physical transitions only (a wall, "
+    "a door, a vehicle, a crowd, terrain, architecture): never dissolve, fade, ghost, transparent, translucent, "
+    "double exposure, mist that reveals, or one place \"giving way\" to another. Never sexual content or minors. "
     "Reply ONLY JSON: {\"mode\":\"...\",\"bridge\":[\"...\"]}"
 )
 
@@ -79,6 +82,7 @@ class Transitioner:
         mode = str(plan.get("mode", ""))[:20]
         bridge = [str(p)[:600] for p in (plan.get("bridge") or []) if isinstance(p, str) and p.strip()][:2]
         bridge = [p for p in bridge if not is_disallowed(p)]
+        bridge = [p for p in bridge if not GHOSTY.search(p)]  # klein paints these literally as double exposures
         self.last = {"mode": mode, "bridge": bridge, "to": nxt.get("title")}
         if mode == "interpolate" or not bridge:
             return

@@ -400,11 +400,36 @@ class KleinInpainter(Inpainter):
         kw = {}
         if self._ref_img is not None and self._ref_scale >= 0.3:
             kw["image_reference"] = self._ref_img
+        soft = int(getattr(self.config, "soft_mask_px", 0) or 0)
+        if soft:
+            mask = soft_mask(mask, soft)
+            self._pipe.mask_processor.config.do_binarize = False
         with torch.no_grad():
             out = self._pipe(prompt_embeds=pe, image=filled.convert("RGB"), mask_image=mask.convert("L"),
                              num_inference_steps=self.config.steps, guidance_scale=1.0, strength=1.0,
                              width=image.width, height=image.height, generator=gen, **kw).images[0]
-        return feather_composite(image, out, mask, int(getattr(self.config, "seam_feather", 48)))
+        out = feather_composite(image, out, mask, int(getattr(self.config, "seam_feather", 48)))
+        sp = int(getattr(self.config, "seam_pass_px", 0) or 0)
+        if sp:
+            out = self.seam_pass(out, mask, pe, sp, gen)
+        return out
+
+    def seam_pass(self, img, mask, pe, width, gen):
+        """Second, low-strength inpaint over a narrow vertical band straddling the mask edge (before display)."""
+        import numpy as np
+        m = np.asarray(mask.convert("L")) > 127
+        cols = np.where(m.all(axis=0))[0]
+        if cols.size == 0:
+            return img
+        x0 = int(cols.min())
+        band = Image.new("L", img.size, 0)
+        band.paste(255, (max(0, x0 - width // 2), 0, min(img.width, x0 + width // 2), img.height))
+        band = soft_mask(band, width // 4, both=True)
+        self._pipe.mask_processor.config.do_binarize = False
+        out = self._pipe(prompt_embeds=pe, image=img, mask_image=band, num_inference_steps=4,
+                         guidance_scale=1.0, strength=float(getattr(self.config, "seam_pass_strength", 0.35)),
+                         width=img.width, height=img.height, generator=gen).images[0]
+        return feather_composite_band(img, out, max(0, x0 - width // 2), min(img.width, x0 + width // 2), width // 4)
 
 
 def slerp(a, b, t: float):
@@ -418,6 +443,34 @@ def slerp(a, b, t: float):
     so = torch.sin(om)
     u = (torch.sin((1 - t) * om) / so) * au + (torch.sin(t * om) / so) * bu
     return u * (an * (1 - t) + bn * t)
+
+
+def soft_mask(mask: Image.Image, ramp: int, both: bool = False) -> Image.Image:
+    """Turn a hard right-side mask into a 0->1 ramp of `ramp` px starting at its left edge."""
+    import numpy as np
+
+    m = (np.asarray(mask.convert("L")) > 127).astype(np.float32)
+    cols = np.where(m.all(axis=0))[0]
+    if cols.size == 0 or ramp <= 0:
+        return mask
+    x0, x1 = int(cols.min()), int(cols.max()) + 1
+    r = min(ramp, x1 - x0)
+    m[:, x0:x0 + r] = np.linspace(0, 1, r, dtype=np.float32)[None, :]
+    if both and x1 - r > x0 + r:
+        m[:, x1 - r:x1] = np.linspace(1, 0, r, dtype=np.float32)[None, :]
+    return Image.fromarray((m * 255).astype(np.uint8), mode="L")
+
+
+def feather_composite_band(orig, gen, x0, x1, ramp):
+    import numpy as np
+
+    a = np.zeros(orig.width, np.float32)
+    a[x0:x1] = 1.0
+    r = max(1, min(ramp, (x1 - x0) // 2))
+    a[x0:x0 + r] = np.linspace(0, 1, r); a[x1 - r:x1] = np.linspace(1, 0, r)
+    o = np.asarray(orig.convert("RGB")).astype(np.float32); g = np.asarray(gen.convert("RGB").resize(orig.size)).astype(np.float32)
+    w = a[None, :, None]
+    return Image.fromarray(np.clip(o * (1 - w) + g * w, 0, 255).astype(np.uint8), mode="RGB")
 
 
 def feather_composite(orig: Image.Image, gen: Image.Image, mask: Image.Image, feather: int) -> Image.Image:
