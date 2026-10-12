@@ -2,51 +2,100 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Infinite Tapestry</title>
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="hud">
-    <div class="brand">Infinite Tapestry</div>
-    <div id="stats">connecting…</div>
-  </div>
   <canvas id="view"></canvas>
-  <button id="live-btn" class="hidden" type="button">Return to live ▶</button>
-  <div id="panel">
-    <button id="panel-toggle" type="button">Controls ▾</button>
-    <div id="panel-body">
-      <div class="row">
-        <span class="lbl">Speed</span>
-        <button class="spd active" data-m="1">1x</button>
-        <button class="spd" data-m="2">2x</button>
-        <button class="spd" data-m="4">4x</button>
-        <button class="spd" data-m="8">8x</button>
+  <div class="veil"></div>
+
+  <header class="top ui">
+    <div class="brand">Infinite Tapestry</div>
+    <div id="status" class="status"><span class="dot"></span><span id="status-text">connecting</span></div>
+  </header>
+
+  <button id="live-btn" class="pill ui hidden" type="button">Return to live <span aria-hidden="true">→</span></button>
+  <div id="toast" class="toast"></div>
+
+  <div class="dock ui">
+    <div class="now">
+      <span class="now-label">Now</span>
+      <span id="now-title">—</span>
+      <span id="now-arrow" class="hidden">→</span>
+      <span id="next-title"></span>
+      <span class="bar"><span id="now-bar"></span></span>
+    </div>
+    <form id="cmd" class="cmd" autocomplete="off">
+      <input id="cmd-input" type="text" placeholder="Where should the world go next?" spellcheck="false" />
+      <div class="seg" role="group" aria-label="When">
+        <button type="button" data-when="end" class="on">Queue</button>
+        <button type="button" data-when="now">Now</button>
       </div>
-      <div class="row now"><span class="lbl">Now</span><span id="now-prompt">…</span></div>
-      <form id="prompt-form" class="row">
-        <input id="prompt-input" type="text" placeholder="Describe the next landscape…" autocomplete="off" />
-        <button type="submit">Go</button>
-      </form>
-      <div class="row">
-        <span class="lbl">Blend</span>
-        <input id="blend" type="range" min="1" max="32" value="8" />
-        <span id="blend-val">8 strips</span>
+      <span class="sep"></span>
+      <button id="speed-btn" type="button" class="icon text" title="Speed (F to fast-forward)">Auto</button>
+      <button id="skip" type="button" class="icon" title="Next scene">
+        <svg viewBox="0 0 24 24"><path d="M6 6l8 6-8 6V6zm10 0h2v12h-2z"/></svg>
+      </button>
+      <button id="export-btn" type="button" class="icon" title="Export tapestry (E)">
+        <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+      </button>
+      <button id="queue-btn" type="button" class="icon" title="Up next">
+        <svg viewBox="0 0 24 24"><path d="M4 7h12M4 12h12M4 17h8"/></svg><span id="queue-count" class="badge">0</span>
+      </button>
+    </form>
+    <div id="export-pop" class="pop hidden">
+      <div class="pop-title">Export the tapestry</div>
+      <p class="fine" id="export-meta">Everything painted so far, stitched into one PNG.</p>
+      <div class="pop-row">
+        <div class="seg small" id="export-scale">
+          <button type="button" data-s="1">Full</button>
+          <button type="button" data-s="0.5" class="on">½</button>
+          <button type="button" data-s="0.25">¼</button>
+        </div>
+        <button id="export-go" type="button" class="primary">Download PNG</button>
       </div>
-      <label class="lbl" for="playlist">Playlist (one landscape per line)</label>
-      <textarea id="playlist" rows="5"></textarea>
-      <div class="row">
-        <span class="lbl">Hold</span>
-        <input id="hold" type="number" min="0" max="500" value="16" /> strips
-        <label><input id="loop" type="checkbox" checked /> loop</label>
+    </div>
+    <div id="speed-pop" class="pop hidden">
+      <div class="pop-row">
+        <button type="button" data-mode="auto" class="mode on">Auto</button>
+        <button type="button" data-mode="manual" class="mode">Manual</button>
       </div>
-      <div class="row">
-        <button id="queue-save" type="button">Save playlist</button>
-        <button id="skip" type="button">Next ⏭</button>
+      <div id="manual-row" class="pop-row dim">
+        <input id="manual-speed" type="range" min="4" max="120" value="30" />
+        <span id="manual-val" class="num">30 px/s</span>
       </div>
-      <div class="hint">Drag to pan through history. Prompts take effect on the next generated strip (a few strips ahead of the view).</div>
+      <div class="pop-row">
+        <span class="muted">Fast-forward</span>
+        <div class="seg small" id="ff">
+          <button type="button" data-m="1" class="on">1×</button>
+          <button type="button" data-m="2">2×</button>
+          <button type="button" data-m="4">4×</button>
+          <button type="button" data-m="8">8×</button>
+        </div>
+      </div>
+      <p class="fine">Auto follows the GPU's measured paint rate and keeps a few strips in reserve, easing speed so it never stalls.</p>
     </div>
   </div>
+
+  <aside id="drawer" class="drawer">
+    <div class="drawer-head">
+      <span>Up next</span>
+      <button id="drawer-close" type="button" class="icon" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div id="current-card" class="card current"></div>
+    <ol id="queue-list" class="list"></ol>
+    <div id="queue-empty" class="empty hidden">Nothing queued. Type a destination below.</div>
+    <div class="drawer-foot">
+      <label class="toggle"><input id="loop" type="checkbox" checked /><span></span>Loop playlist</label>
+      <label class="num-field">Hold <input id="hold" type="number" min="0" max="500" value="16" /></label>
+      <label class="num-field">Blend <input id="blend" type="number" min="1" max="64" value="8" /></label>
+      <button id="clear" type="button" class="ghost">Clear</button>
+    </div>
+  </aside>
+
   <script src="config.js"></script>
   <script src="client.js"></script>
 </body>

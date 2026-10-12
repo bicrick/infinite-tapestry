@@ -191,3 +191,12 @@ opt back in with `--steps 4 --guidance-scale 1.0 --lcm-lora latent-consistency/l
 Other fixes: `strength=1.0` (0.99 left the masked strip black with LCM), color-drift correction fitted on the regenerated context,
 a 32px throwaway margin at the window's right edge (models paint a frame there), and the procedural seed is repainted by the model first.
 Pinned `diffusers<0.32` etc. because newer diffusers needs `torch.accelerator` (torch ≥ 2.6) and RunPod's PyTorch 2.4 image fails on import.
+
+## Shared tapestry, auto speed, Claude director (v0.3)
+
+- **One shared tapestry.** A single generator and one server-driven timeline (`infinite_tapestry/timeline.py`) are broadcast to every viewer over `/ws` (`clock` messages at 4 Hz), so everyone sees the same place. Panning back through history is local; "Return to live" snaps back. Speed, fast-forward, skip and the scene queue are global.
+- **Auto speed (default).** Speed follows the GPU's measured paint rate (EMA of seconds per strip) and steers the unseen runway toward 3 strips. It's low-pass filtered, acceleration-limited and brakes softly near the edge. Manual px/s is still available.
+- **Claude Haiku director.** Type a loose intention ("slowly drift into the ocean"). The server asks Claude (`claude-haiku-5-5` by default; override with `--haiku-model` or `TAPESTRY_HAIKU_MODEL`) for 1 to 4 SD-ready scenes with transition/hold lengths. Needs `ANTHROPIC_API_KEY` in the server env (never sent to the browser). If the API fails, the raw text is used instead.
+- **Queue:** reorder (drag or arrows), edit, remove, play now, skip, loop, clear.
+- **Export:** `GET /export.png?scale=0.5[&last=N]` stitches the stored history into one PNG. It's also in the UI (download icon or `E`).
+- Keys: `/` command, `F` fast-forward, `Q` queue, `E` export, `L` live.
