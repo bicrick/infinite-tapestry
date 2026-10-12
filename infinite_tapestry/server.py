@@ -323,10 +323,22 @@ def create_app(
             hub["dir_timer"] = loop.call_later(wait, _flush_director)  # trailing edge
 
     def public_base() -> str | None:
-        if hub["public_base"] is None:
+        # Re-checked every few minutes so R2 takes over as soon as its CORS policy is live.
+        if hub["public_base"] is None or time.time() - hub.get("public_at", 0) > 120:
             mirror = getattr(getattr(generator, "store", None), "mirror", None)
             hub["public_base"] = mirror.public_base() if mirror and hasattr(mirror, "public_base") else ""
+            fb = mirror.fallback_base() if mirror and hasattr(mirror, "fallback_base") else None
+            hub["fallback_base"] = fb or ""
+            hub["public_at"] = time.time()
         return hub["public_base"] or None
+
+    def cdn_bases() -> dict:
+        b = public_base()
+        out = {"strip_base": b, "lod_base": b[:-len("strips/")] + "lod/"}
+        fb = hub.get("fallback_base")
+        if fb:
+            out.update(strip_base_fb=fb, lod_base_fb=fb[:-len("strips/")] + "lod/")
+        return out
 
     def strip_meta() -> dict[int, dict]:
         """Strip metadata index, loaded once and extended as strips arrive (no per-request file scans)."""
@@ -623,7 +635,7 @@ def create_app(
             await ws.send_json(
                 {"type": "config", **config.client_dict(), "interpreter": bool(interpreter.enabled),
                  "limits": {"intent_chars": MAX_INTENT_CHARS, "intent_cooldown": intent_cooldown},
-                 "gpu_cents_per_hour": GPU_CENTS_PER_HOUR, **({"strip_base": public_base(), "lod_base": public_base()[:-len("strips/")] + "lod/"} if v2 else {})}
+                 "gpu_cents_per_hour": GPU_CENTS_PER_HOUR, **(cdn_bases() if v2 else {})}
             )
             await ws.send_json(clock_msg())
             if v2:

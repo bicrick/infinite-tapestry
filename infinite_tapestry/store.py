@@ -40,6 +40,60 @@ def _strip_mime(ext: str) -> str:
 
 
 
+class R2Public:
+    """Public strip/tile CDN on Cloudflare R2 (S3 API, zero egress fees)."""
+
+    CACHE = "public, max-age=31536000, immutable"  # strip + tile keys never change
+
+    def __init__(self, endpoint: str, key_id: str, secret: str, bucket: str, public_url: str) -> None:
+        import boto3
+        from botocore.config import Config
+
+        self.bucket, self.public_url = bucket, public_url.rstrip("/")
+        self.s3 = boto3.client("s3", endpoint_url=endpoint, aws_access_key_id=key_id,
+                               aws_secret_access_key=secret, region_name="auto",
+                               config=Config(retries={"max_attempts": 3}, connect_timeout=10, read_timeout=30))
+        self._cors: tuple[float, bool] = (0.0, False)
+
+    @classmethod
+    def from_env(cls) -> "R2Public | None":
+        e = os.environ
+        need = ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL")
+        if not all(e.get(k) for k in need) or e.get("TAPESTRY_R2", "1") == "0":
+            return None
+        try:
+            return cls(e["R2_ENDPOINT"], e["R2_ACCESS_KEY_ID"], e["R2_SECRET_ACCESS_KEY"],
+                       e.get("R2_BUCKET", "tapestry-strips"), e["R2_PUBLIC_URL"])
+        except Exception:
+            logger.exception("R2 init failed; staying on Supabase Storage")
+            return None
+
+    def put(self, key: str, data: bytes, ctype: str) -> None:
+        self.s3.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType=ctype, CacheControl=self.CACHE)
+
+    def get(self, key: str) -> bytes | None:
+        try:
+            with urllib.request.urlopen(f"{self.public_url}/{key}", timeout=15) as r:
+                return r.read()
+        except Exception:
+            return None
+
+    def cors_ok(self) -> bool:
+        """Browsers read strips via fetch/canvas, so only serve from R2 once the bucket sends CORS."""
+        at, ok = self._cors
+        if time.time() - at < (600 if ok else 120):
+            return ok
+        try:
+            req = urllib.request.Request(f"{self.public_url}/_probe.txt", method="GET",
+                                         headers={"Origin": "https://infinite-tapestry.vercel.app"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                ok = bool(r.headers.get("Access-Control-Allow-Origin"))
+        except Exception:
+            ok = False
+        self._cors = (time.time(), ok)
+        return ok
+
+
 class SupabaseMirror:
     """Fire-and-forget uploads to a Supabase Storage bucket (service role)."""
 
@@ -48,6 +102,7 @@ class SupabaseMirror:
         self._q: "queue.Queue[tuple[str, bytes, str]]" = queue.Queue(maxsize=2000)
         self.uploaded = 0
         self.failed = 0
+        self.r2 = R2Public.from_env()
         threading.Thread(target=self._run, name="supabase-mirror", daemon=True).start()
 
     @classmethod
@@ -62,8 +117,24 @@ class SupabaseMirror:
     # Supabase CDN instead of the pod (the WS only carries small JSON refs).
     public_bucket = os.environ.get("TAPESTRY_PUBLIC_BUCKET", "strips")
 
-    def public_base(self) -> str:
+    def supabase_public_base(self) -> str:
         return f"{self.url}/storage/v1/object/public/{self.public_bucket}/{self.prefix}/strips/"
+
+    def r2_live(self) -> bool:
+        return bool(self.r2 and self.r2.cors_ok())
+
+    def public_base(self) -> str:
+        """Where viewers load strips: R2 once it serves CORS, else the Supabase public bucket."""
+        if self.r2_live():
+            return f"{self.r2.public_url}/{self.prefix}/strips/"
+        return self.supabase_public_base()
+
+    def fallback_base(self) -> str | None:
+        return self.supabase_public_base() if self.r2_live() else None
+
+    def _supabase_public_too(self) -> bool:
+        # Keep the Supabase copy until browsers can read R2; TAPESTRY_SUPABASE_PUBLIC=1 forces dual writes.
+        return os.environ.get("TAPESTRY_SUPABASE_PUBLIC") == "1" or not self.r2_live()
 
     def _req(self, method: str, path: str, data: bytes | None = None, ctype: str = "application/octet-stream") -> bytes:
         bucket = self.bucket
@@ -141,6 +212,10 @@ class SupabaseMirror:
         return out
 
     def get(self, path: str) -> bytes | None:
+        if path.startswith("public:") and self.r2:
+            data = self.r2.get(f"{self.prefix}/{path[len('public:'):]}")
+            if data:
+                return data
         try:
             return self._req("GET", path)
         except Exception:
@@ -153,6 +228,13 @@ class SupabaseMirror:
                 try:
                     if path == "__call__":
                         data()
+                    elif path.startswith("public:") and self.r2:
+                        self.r2.put(f"{self.prefix}/{path[len('public:'):]}", data, ctype)
+                        if self._supabase_public_too():
+                            try:
+                                self._req("POST", path, data, ctype)
+                            except Exception as e:
+                                logger.warning("Supabase public copy %s failed: %s", path, type(e).__name__)
                     else:
                         self._req("POST", path, data, ctype)
                     self.uploaded += 1
