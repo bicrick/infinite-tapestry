@@ -383,7 +383,7 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
   .now #now-title { overflow: hidden; text-overflow: clip; letter-spacing: -.005em; text-shadow: 0 1px 10px rgba(var(--shade),.55); }
 
   /* dock: a single slim pill — input, overflow, up-next */
-  .dock { width: calc(100vw - 2 * var(--pad)); bottom: calc(26px + var(--sb)); transition: bottom .35s var(--ease), transform .6s var(--ease), opacity .6s var(--ease); }
+  .dock { width: calc(100vw - 2 * var(--pad)); bottom: calc(26px + var(--sb)); transition: transform .6s var(--ease), opacity .6s var(--ease); }
   .cmd { position: relative; height: 52px; padding: 4px 4px 4px 20px; border-radius: 26px; gap: 2px; flex-wrap: nowrap; }
   #cmd-input { font-size: 16px; min-width: 0; }   /* 16px: no iOS zoom on focus */
   .cmd .icon { width: 44px; height: 44px; border-radius: 22px; }
@@ -828,3 +828,10 @@ body.intro #amb-blobs { opacity: 0; }
 #amb-blobs i:nth-child(1) { left: -12vw; } #amb-blobs i:nth-child(2) { left: 22vw; animation-duration: 47s; animation-delay: -12s; } #amb-blobs i:nth-child(3) { left: 56vw; animation-duration: 42s; animation-delay: -25s; }
 @keyframes ab-drift { from { transform: translate3d(-4vw, 0, 0) scale(1); } to { transform: translate3d(5vw, 3%, 0) scale(1.12); } }
 @media (prefers-reduced-motion: reduce) { #amb-blobs i { animation: none; } }
+
+/* Compose sheet: smooth morph (View Transitions), covered elements fade, no colour/layout jump */
+:root { view-transition-name: none; }
+.dock { view-transition-name: dock; }
+::view-transition-group(dock) { animation-duration: .38s; animation-timing-function: cubic-bezier(.22, .8, .24, 1); }
+::view-transition-old(dock), ::view-transition-new(dock) { height: 100%; width: 100%; object-fit: fill; animation-duration: .26s; }
+.hwheel, .timeline, .veil, #react-btn, .amb-title, .amb-time { transition: opacity .32s var(--ease); }

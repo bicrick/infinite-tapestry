@@ -1430,7 +1430,15 @@
   const body = document.body, cmd = $("cmd"), input = $("cmd-input"), more = $("more-btn"), drawer = $("drawer");
   if (!cmd || !more) return;
   // Compose: focusing the pill turns the dock into a sheet with attach + queue/now + send.
-  const setCompose = (on) => body.classList.toggle("composing", on && phone.matches);
+  // Compose open/close: the pill morphs into the sheet via a View Transition (compositor transform + opacity, eased);
+  // only the dock is captured, so the live tapestry keeps running underneath. Falls back to an instant switch.
+  const setCompose = (on) => {
+    on = !!(on && phone.matches);
+    if (body.classList.contains("composing") === on) return;
+    const go = () => body.classList.toggle("composing", on);
+    if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) { try { document.startViewTransition(go); return; } catch (_) {} }
+    go();
+  };
   input.addEventListener("focus", () => { setCompose(true); setMore(false); });
   cmd.addEventListener("focusout", () => setTimeout(() => { if (!cmd.contains(document.activeElement) && !input.value) setCompose(false); }, 120));
   cmd.addEventListener("submit", () => { input.blur(); setCompose(false); setMore(false); setTimeout(() => { input.blur(); setCompose(false); }, 60); });   // collapse to the pill + dismiss keyboard right away
