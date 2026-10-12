@@ -939,9 +939,15 @@
   let editingId = null;
   let dragId = null;
 
+  let upSeq = -1;  // latest canonical upcoming snapshot rendered
   function renderQueue(d) {
     const list = $("queue-list");
-    const items = d.items || [];
+    if (typeof d.upcoming_seq === "number") {
+      if (d.upcoming_seq < upSeq && d.upcoming_seq > 0) return;  // stale snapshot (server restart resets to small numbers)
+      upSeq = d.upcoming_seq;
+    }
+    list.classList.remove("skeleton");
+    const items = d.upcoming || d.items || [];
     $("queue-count").textContent = items.length;
     $("queue-empty").classList.toggle("hidden", items.length > 0);
     $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>Auto is dreaming up what comes next.' : "Nothing queued. Type a destination below.";
@@ -952,12 +958,34 @@
       `<div class="t">${esc(cur.title)}${tgt ? ' <span class="muted">→ ' + esc(tgt.title) + "</span>" : ""}</div>` +
       `<div class="p">${esc((tgt || cur).prompt)}</div>`;
     if (editingId !== null && list.querySelector("textarea")) return; // don't clobber an edit
-    list.innerHTML = "";
+    // Keyed in-place diff: reuse unchanged rows so the sheet never flashes.
+    const old = new Map([...list.children].map((li) => [li.dataset.id, li]));
+    let prev = null;
     items.forEach((s, i) => {
-      const li = document.createElement("li");
-      li.className = "item " + (s.origin === "auto" ? "auto" : "user");
+      const key = String(s.id);
+      const sig = JSON.stringify([i, s.title, s.prompt, s.origin, s.by, s.kind, s.transition, s.hold, editingId === s.id]);
+      let li = old.get(key);
+      if (li && li.dataset.sig === sig) {
+        old.delete(key);
+        if (li.previousElementSibling !== prev) list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
+        prev = li;
+        return;
+      }
+      if (li) { old.delete(key); }
+      const fresh = document.createElement("li");
+      if (li) li.replaceWith(fresh);
+      li = fresh;
+      li.dataset.sig = sig;
+      li.className = "item " + (s.origin === "auto" ? "auto" : "user") + (s.kind === "idea" ? " idea" : "");
+      li.dataset.id = key;
+      if (s.kind === "idea") {
+        li.innerHTML = `<span class="n">${i + 1}</span><div><div class="t">${esc(s.title)}</div>` +
+          `<div class="meta">${s.by ? esc(s.by) + " · " : ""}idea · weaving in soon</div></div>`;
+        list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
+        prev = li;
+        return;
+      }
       li.draggable = true;
-      li.dataset.id = s.id;
       li.innerHTML =
         `<span class="n">${i + 1}</span><div><div class="t">${esc(s.title)}</div>` +
         (editingId === s.id
@@ -989,8 +1017,10 @@
       li.addEventListener("dragover", (e) => { e.preventDefault(); li.classList.add("over"); });
       li.addEventListener("dragleave", () => li.classList.remove("over"));
       li.addEventListener("drop", (e) => { e.preventDefault(); li.classList.remove("over"); if (dragId !== null && dragId !== s.id) send({ type: "move", id: dragId, to: i }); });
-      list.appendChild(li);
+      list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
+      prev = li;
     });
+    old.forEach((li) => li.remove());
   }
 
   function srcTag(sc) {
@@ -1002,7 +1032,7 @@
     director = d;
     const cur = d.current_scene || { title: d.current };
     const tgt = d.target_scene;
-    const next = tgt || (d.items && d.items[0]);
+    const next = tgt || ((d.upcoming || d.items) && (d.upcoming || d.items)[0]);
     if (histKey === null) {
       $("now-title").textContent = cur.title || d.current;
       $("now-arrow").classList.toggle("hidden", !next);
@@ -1070,6 +1100,7 @@
     ws.onopen = () => {
       connected = true;
       reconnectDelay = 1000;
+      send({ type: "upcoming_request" });
       requested.clear();
       livePos = null;
       if (clientPingTimer) clearInterval(clientPingTimer);

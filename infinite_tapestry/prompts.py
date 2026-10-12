@@ -204,6 +204,20 @@ class LiveDirector:
             self._queue = users[:100]
             return dropped
 
+    def trim_auto(self, keep: int) -> bool:
+        """Keep only the first `keep` pending auto scenes (ideas are waiting). True if anything was dropped."""
+        with self._lock:
+            out, n = [], 0
+            for s in self._queue:
+                if s.get("origin") == "auto":
+                    n += 1
+                    if n > keep:
+                        continue
+                out.append(s)
+            changed = len(out) != len(self._queue)
+            self._queue = out
+            return changed
+
     def drop_auto(self) -> None:
         with self._lock:
             self._queue = [s for s in self._queue if s.get("origin") != "auto"]

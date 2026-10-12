@@ -51,6 +51,7 @@ class Autopilot:
         self.headlines = HeadlineCache()
         self.memory = ThemeMemory(40)
         self.last_mode = ""
+        self.pressure: Callable[[], int] = lambda: 0  # waiting pool ideas -> keep Auto filler thin
         self.epoch = 0  # bumped on every user enqueue; stale auto results are discarded
 
     def state(self) -> dict[str, Any]:
@@ -97,7 +98,10 @@ class Autopilot:
 
     async def tick(self) -> None:
         d = self.director
-        if not self.enabled or self.busy or d.upcoming_count() >= self.low_water:
+        waiting = self.pressure()
+        if waiting and hasattr(d, "trim_auto") and d.trim_auto(2):
+            self.on_change()
+        if not self.enabled or self.busy or d.upcoming_count() >= (2 if waiting else self.low_water):
             return
         if not self._can_call():
             if time.monotonic() >= self._next_allowed or not getattr(self.interpreter, "enabled", False):

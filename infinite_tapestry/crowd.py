@@ -85,6 +85,7 @@ class Crowd:
         self.burn = os.environ.get("TAPESTRY_FUEL_BURN", "0" if mock else "1") == "1"
 
     queue_mode = "fifo"
+    pending: list = []  # cached pool ideas still waiting (for the canonical upcoming list)
 
     def state(self) -> dict:
         hours = None
@@ -98,6 +99,17 @@ class Crowd:
         st = self.director.state()
         items = st["items"] + ([st["target_scene"]] if st.get("target_scene") else [])
         return any(i.get("origin") == "user" for i in items)
+
+    async def refresh_pending(self) -> None:
+        """Cache the waiting pool so the Next sheet shows ideas the moment they're submitted."""
+        order = "created_at.asc" if self.queue_mode == "fifo" else "boost_cents.desc,votes.desc,created_at.asc"
+        rows = await asyncio.to_thread(
+            self.supa.rest, "GET", f"ideas?status=eq.pending&order={order}&limit=20&select=id,handle,body,image_path")
+        rows = [{"id": r["id"], "handle": r.get("handle"), "body": (r.get("body") or "")[:200],
+                 "image": bool(r.get("image_path"))} for r in (rows or [])]
+        if rows != self.pending:
+            self.pending = rows
+            self.on_change()
 
     async def pull_ideas(self) -> None:
         if self._audience_pending():
@@ -313,8 +325,9 @@ class Crowd:
                 if time.monotonic() - last_meter >= 60 or self.fuel_cents is None:
                     last_meter = time.monotonic()
                     await self.meter()
+                await self.refresh_pending()
                 await self.pull_ideas()
                 await self.track_landing()
             except Exception:
                 logger.exception("crowd tick failed")
-            await asyncio.sleep(8)
+            await asyncio.sleep(3)

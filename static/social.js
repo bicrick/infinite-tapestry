@@ -195,6 +195,7 @@ async function boot() {
     window.dispatchEvent(new CustomEvent("tapestry:submitted"));
     toast(`Added to the pool <span class="muted">“${esc(text)}”</span>`, 3000);
     refreshIdeas();
+    if (window.TapestryWS) window.TapestryWS.send({ type: "idea_added" });
     return true;
   };
   async function loadVotes() {
@@ -410,6 +411,7 @@ async function boot() {
   // ---------- tabs ----------
   function openTab(name) {
     $("drawer").classList.add("open");
+    if (name === "next" && window.TapestryWS) window.TapestryWS.send({ type: "upcoming_request" });
     document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("hidden", p.id !== "panel-" + name));
     if (name === "fuel") { refreshFuel(); refreshDonors(); }
