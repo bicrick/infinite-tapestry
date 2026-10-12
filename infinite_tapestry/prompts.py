@@ -182,10 +182,19 @@ class LiveDirector:
         # Variable scene length (~20-45 s with the blend at ~2.9 s/strip): donor/boosted ideas linger
         # longest, other ideas a bit longer than default, quiet Auto filler moves on sooner.
         if scene.get("prio"):
-            return max(8, min(MAX_HOLD_USER, h + 4))
-        if scene.get("origin") == "user":  # ideas linger longer than Auto filler
-            return min(MAX_HOLD_USER, h + 2)
-        return max(min(h, 3), h - 2)   # never lengthens a short hold
+            base = max(8, min(MAX_HOLD_USER, h + 4))
+        elif scene.get("origin") == "user":  # ideas linger longer than Auto filler
+            base = min(MAX_HOLD_USER, h + 2)
+        else:
+            base = max(min(h, 3), h - 2)   # never lengthens a short hold
+        # Crowd heat: the scene on stage lingers while people react to it (+1 strip per ~6 reactions, up to +3).
+        heat = getattr(self, "heat", None)
+        if heat is not None and scene is self._current and base > 0:
+            try:
+                base = min(max(base, MAX_HOLD_USER), base + min(3, int(heat(self._active_since)) // 6))
+            except Exception:
+                pass
+        return base
 
     def _begin(self, scene: dict, at: int) -> None:
         if self._target is not None:
