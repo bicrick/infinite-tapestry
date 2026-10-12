@@ -24,6 +24,7 @@
   let synth = 0, lastT = t0, offsetFix = null;   // synthetic world scroll until the real one exists
   let resolveAt = 0, finished = false;
   const RESOLVE = 2600;
+  const MB = Array.from({ length: 6 }, () => new Float32Array(40000)), MBn = new Int32Array(6);   // preallocated mote buffers
   let revealed = false, readyAt = null;
 
   function worldLeft(now) {
@@ -49,9 +50,11 @@
     let src = null;
     if (v && v.ready()) {
       const cols = 160, rows = Math.max(1, Math.round(cols * H / W));
-      probe.width = cols; probe.height = rows;
-      pg.drawImage(view, 0, 0, cols, rows);
-      const d = pg.getImageData(0, 0, cols, rows).data;
+      if (probe.width !== cols || probe.height !== rows) { probe.width = cols; probe.height = rows; }
+      // GPU readback is the expensive part: sample every 3rd frame (the image moves ~1px/frame, so this is invisible).
+      frame.n = (frame.n || 0) + 1;
+      if (!frame.d || frame.n % 3 === 0 || frame.d.length !== cols * rows * 4) { pg.drawImage(view, 0, 0, cols, rows); frame.d = pg.getImageData(0, 0, cols, rows).data; }
+      const d = frame.d;
       let lum = 0; for (let i = 0; i < d.length; i += 16) lum += d[i] + d[i + 1] + d[i + 2];
       if (readyAt == null) readyAt = now;
       // Resolve once the visible span is (nearly) painted, so points densify everywhere at once, not from the live edge.
@@ -98,9 +101,15 @@
         g.fillStyle = `rgba(${r},${gg},${b},${(0.35 + 0.6 * age) * (1 - he)})`;
         g.beginPath(); g.arc(x, y, rad, 0, 6.283); g.fill();
       }
-      if (moteA > 0.01 && h1 < 0.16) {
-        g.fillStyle = `rgba(${MOTE},${moteA * (0.22 + 0.3 * h2)})`;
-        g.fillRect(x, y, 1.5 * devicePixelRatio, 1.5 * devicePixelRatio);
+      if (moteA > 0.01 && h1 < 0.16) { const bk = Math.min(5, (h2 * 6) | 0), arr = MB[bk]; arr[MBn[bk]++] = x; arr[MBn[bk]++] = y; }   // batched below
+    }
+    if (moteA > 0.01) {   // motes: one fill per alpha bucket instead of one per mote
+      const ms = 1.5 * devicePixelRatio;
+      for (let bk = 0; bk < 6; bk++) {
+        const n = MBn[bk]; if (!n) continue; const arr = MB[bk];
+        g.fillStyle = `rgba(${MOTE},${moteA * (0.22 + 0.3 * (bk + 0.5) / 6)})`; g.beginPath();
+        for (let m = 0; m < n; m += 2) g.rect(arr[m], arr[m + 1], ms, ms);
+        g.fill(); MBn[bk] = 0;
       }
     }
     g.globalCompositeOperation = "source-over";

@@ -345,36 +345,80 @@
     }
     return (e.dots = c);
   }
-  const PC = 20, PR = 40;   // particle grid per strip
-  function stripParticles(e) {   // targets + colours + scatter offsets, computed once per strip
+  // ---------- live-edge particle stream (approved prototype) ----------
+  // The newest 2 strips on screen are staged as round dots: strip nearest the solid edge solidifying (70-100% settled),
+  // the next assembling (0-70%), the rest streaming in from a point on the far right through a widening funnel.
+  // Purely visual: livePos is never capped, so the scroll stays free-running.
+  const PSP = 9;   // world px between dots
+  function stripParticles(e) {
     if (e.pt !== undefined) return e.pt;
     if (!e.bitmap) return null;
-    const c = document.createElement("canvas"); c.width = PC; c.height = PR; const g = c.getContext("2d", { willReadFrequently: true });
-    let d; try { g.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, 0, 0, PC, PR); d = g.getImageData(0, 0, PC, PR).data; } catch (_) { return (e.pt = null); }
-    const n = PC * PR, cw = SW() / PC, ch = config.height / PR, P = { n, cw, ch, tx: new Float32Array(n), ty: new Float32Array(n), ox: new Float32Array(n), oy: new Float32Array(n), j: new Float32Array(n), col: new Array(n) };
-    for (let k = 0; k < n; k++) {
-      const cx = k % PC, cy = (k / PC) | 0;
-      let h = (k * 374761393 + (e.overlap | 0) * 31 + 7) ^ 0x5bf03635; h = Math.imul(h ^ (h >>> 13), 1274126177); const r1 = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-      h = Math.imul(h ^ (h >>> 15), 2246822519); const r2 = ((h ^ (h >>> 13)) >>> 0) / 4294967296;
-      P.tx[k] = cx * cw; P.ty[k] = cy * ch;
-      P.ox[k] = SW() * (0.4 + 2.2 * r1); P.oy[k] = (r2 - 0.5) * config.height * 0.5; P.j[k] = r2;
-      P.col[k] = `rgb(${d[k * 4]},${d[k * 4 + 1]},${d[k * 4 + 2]})`;
-    }
-    return (e.pt = P);
+    const cols = Math.ceil(SW() / PSP), rows = Math.ceil(config.height / PSP);
+    const c = document.createElement("canvas"); c.width = cols; c.height = rows; const g = c.getContext("2d", { willReadFrequently: true });
+    let d; try { g.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, 0, 0, cols, rows); d = g.getImageData(0, 0, cols, rows).data; } catch (_) { return (e.pt = null); }
+    const col = new Array(cols * rows); for (let k = 0; k < cols * rows; k++) col[k] = `rgb(${d[k * 4]},${d[k * 4 + 1]},${d[k * 4 + 2]})`;
+    return (e.pt = { cols, rows, col });
   }
-  function drawParticles(e, i, left, B) {
-    const P = stripParticles(e); if (!P) return;
-    const base = i * SW(), t = performance.now() / 1000, span = SW() * 2.2;
-    for (let k = 0; k < P.n; k++) {
-      const wx = base + P.tx[k];
-      if (wx < B) continue;                                         // left of the boundary the real image shows
-      let p = 1 - ((wx - B) / span + (P.j[k] - 0.5) * 0.35);
-      if (p <= 0.02) continue;
-      p = p > 1 ? 1 : p; const q = 1 - p, q2 = q * q, wob = q * 4 * Math.sin(t * 1.3 + P.j[k] * 40);
-      ctx.globalAlpha = 0.25 + 0.75 * p;
-      ctx.fillStyle = P.col[k];
-      const sz = P.cw * (0.35 + 0.7 * p);
-      ctx.fillRect(wx - left + P.ox[k] * q2, P.ty[k] + P.oy[k] * q2 + wob, sz, sz * (P.ch / P.cw));
+  const phash = (a, b) => { let h = (a * 374761393 + b * 668265263) ^ 0x5bf03635; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function stripDotLayer(e) {   // all of a strip's dots, round and soft, rendered once
+    if (e.dl !== undefined) return e.dl;
+    const P = stripParticles(e); if (!P) return null;
+    const c = document.createElement("canvas"); c.width = Math.ceil(SW()); c.height = config.height; const g = c.getContext("2d");
+    for (let a = 0; a < P.cols; a++) for (let r = 0; r < P.rows; r++) {
+      const x = a * PSP + PSP / 2, y = r * PSP + PSP / 2; g.fillStyle = P.col[r * P.cols + a];
+      g.globalAlpha = 0.3; g.beginPath(); g.arc(x, y, PSP * 0.62, 0, 6.283); g.fill();
+      g.globalAlpha = 0.95; g.beginPath(); g.arc(x, y, PSP * 0.36, 0, 6.283); g.fill();
+    }
+    return (e.dl = c);
+  }
+  let zA = null, zAc = null, zB = null, zBc = null, zMaskA = null, zMaskB = null;
+  function drawStream(E, left, viewR, t) {
+    const Z = 2 * SW(), ZW = Math.ceil(Z) + 2, H = config.height;
+    if (!zA) { zA = document.createElement("canvas"); zAc = zA.getContext("2d"); zB = document.createElement("canvas"); zBc = zB.getContext("2d"); }
+    if (zA.width !== ZW || zA.height !== H) { zA.width = zB.width = ZW; zA.height = zB.height = H; zMaskA = zMaskB = null; }
+    if (!zMaskA) {
+      zMaskA = zAc.createLinearGradient(0, 0, ZW, 0);   // solid image resolving out of the dots near the edge
+      zMaskA.addColorStop(0, "rgba(0,0,0,1)"); zMaskA.addColorStop(0.28, "rgba(0,0,0,.35)"); zMaskA.addColorStop(0.5, "rgba(0,0,0,0)"); zMaskA.addColorStop(1, "rgba(0,0,0,0)");
+      zMaskB = zBc.createLinearGradient(0, 0, ZW, 0);   // settled dots: dense near the edge, thinning toward the stream
+      zMaskB.addColorStop(0, "rgba(0,0,0,.25)"); zMaskB.addColorStop(0.2, "rgba(0,0,0,1)"); zMaskB.addColorStop(0.5, "rgba(0,0,0,.75)"); zMaskB.addColorStop(1, "rgba(0,0,0,0)");
+    }
+    // Rebuild the composited layers only every ~6 frames (content is world-locked, the masks drift a few px at most).
+    drawStream.n = (drawStream.n || 0) + 1;
+    if (drawStream.Eb !== undefined && drawStream.n % 6 !== 0 && Math.abs(E - drawStream.Eb) < SW() * 0.2) {
+      if (!window.__nz) { ctx.drawImage(zA, drawStream.Eb - left, 0); ctx.drawImage(zB, drawStream.Eb - left, 0); }
+      return drawFlight(E, Z, H, left, viewR, t);
+    }
+    drawStream.Eb = E;
+    zAc.globalCompositeOperation = zBc.globalCompositeOperation = "source-over";
+    zAc.clearRect(0, 0, ZW, H); zBc.clearRect(0, 0, ZW, H);
+    const k0 = Math.floor(E / SW()), k1 = Math.floor((E + Z) / SW());
+    const live = [];
+    for (let k = k0; k <= k1; k++) {
+      const e = strips.get(k); if (!e || !e.bitmap) continue;
+      const x = k * SW() - E;
+      if (!e.imgc) { e.imgc = document.createElement("canvas"); e.imgc.width = e.bitmap.width; e.imgc.height = e.bitmap.height; e.imgc.getContext("2d").drawImage(e.bitmap, 0, 0); }
+      zAc.drawImage(e.imgc, x - e.overlap, 0);
+      const dl = stripDotLayer(e); if (dl) zBc.drawImage(dl, x, 0);
+      live.push([k, e]);
+    }
+    zAc.globalCompositeOperation = zBc.globalCompositeOperation = "destination-in";
+    zAc.fillStyle = zMaskA; zAc.fillRect(0, 0, ZW, H); zBc.fillStyle = zMaskB; zBc.fillRect(0, 0, ZW, H);
+    if (!window.__nz) { ctx.drawImage(zA, E - left, 0); ctx.drawImage(zB, E - left, 0); }
+    drawFlight(E, Z, H, left, viewR, t);
+  }
+  function drawFlight(E, Z, H, left, viewR, t) {
+    // in-flight dots: a thin stream from just past the right edge fanning out onto the far half of the zone
+    const sx = viewR + SW() * 0.15, sy = H / 2, N = window.__nf ? 0 : 520;
+    for (let n = 0; n < N; n++) {
+      const h = phash(n, 7), h2 = phash(13, n), wx = E + Z * (0.35 + 0.65 * Math.sqrt(h));
+      const k = Math.floor(wx / SW()), e = strips.get(k), P = e && e.pt; if (!P) continue;
+      const a = Math.min(P.cols - 1, Math.floor((wx - k * SW()) / PSP)), r = Math.floor(h2 * P.rows), ty = r * PSP + PSP / 2;
+      const q = (t * (0.45 + 0.3 * h2) + h) % 1; if (q > 0.985) continue;
+      const ee = 1 - Math.pow(1 - q, 2.4), u = 1 - ee, cx = wx + (sx - wx) * 0.45, cy = sy + (ty - sy) * 0.12;
+      const x = u * u * sx + 2 * u * ee * cx + ee * ee * wx, y = u * u * sy + 2 * u * ee * cy + ee * ee * ty;
+      if (x > viewR + 4) continue;
+      ctx.globalAlpha = 0.2 + 0.6 * ee; ctx.fillStyle = P.col[r * P.cols + a];
+      ctx.beginPath(); ctx.arc(x - left, y, PSP * 0.36 * (0.35 + 0.55 * ee), 0, 6.283); ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
@@ -625,7 +669,7 @@
     if (!window.__nolod && (zoom < 0.97 || fast || coverage < 1)) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
-      const liveB = readyEdge();
+      const liveB = livePos !== null && !fast ? livePos - 2 * SW() : Infinity;   // solid edge: the newest 2 on-screen strips are staged as particles
       const stripLayer = zoom > 0.3;
       for (let i = Math.max(firstIdx, 0); stripLayer && i <= Math.min(lastIdx, maxIndex); i++) {
         want++;
@@ -634,9 +678,11 @@
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
-        ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);   // past-live particle assembly reverted (showed blocks in the default view)
+        if ((i + 1) * SW() <= liveB) ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
+        else if (i * SW() < liveB) { ctx.save(); ctx.beginPath(); ctx.rect(-10, 0, liveB - left + 10, config.height); ctx.clip(); ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0); ctx.restore(); }
       }
       coverage = want ? have / want : 0;
+      if (!window.__ns && liveB !== Infinity && liveB < left + w / s) drawStream(liveB, left, left + w / s, performance.now() / 1000);
     }
     if (mark) {
       const age = (performance.now() - mark.t0) / 1000;
