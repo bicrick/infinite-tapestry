@@ -692,3 +692,7 @@ body.idle .kept { opacity: .45; }
   .react-layer { width: 160px; bottom: 190px; }
 }
 @media (prefers-reduced-motion: reduce) { .react-float { animation-duration: 1.2s !important; } }
+
+/* ∞ mark opens /about (the only entry point) */
+.brand-link { pointer-events:auto; display:inline-flex; border-radius:6px; transition:opacity .3s var(--ease); }
+.brand-link:hover { opacity:.7; }
