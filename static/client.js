@@ -253,6 +253,12 @@
     const tw = LOD_N[level] * SW();
     const img = lodTile(level, c);
     if (img) { ctx.drawImage(img, c * tw - left, 0, tw, config.height); return; }
+    // Gap: the L2 overview is prefetched for all history, so slice it (blurry beats blank);
+    // from L3 also try finer tiles (needed at the still-filling live edge).
+    if (level !== 2) {
+      const p = LOD_N[2], cc = Math.floor(c * LOD_N[level] / p), t2 = lodTile(2, cc);
+      if (t2 && level === 1) { const part = t2.width / 4; ctx.drawImage(t2, (c % 4) * part, 0, part, t2.height, c * tw - left, 0, tw, config.height); return; }
+    }
     if (level > 1) for (let k = 0; k < 4; k++) drawLodChunk(level - 1, c * 4 + k, left);   // finer tiles fill the gap
   }
   function drawLod(left, span, z) {
@@ -442,7 +448,7 @@
     ctx.translate(0, yOff);
     ctx.scale(s, s);
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet.
-    if (zoom < 0.97 || fast) drawLod(left, w / s, zoom);
+    if (zoom < 0.97 || fast || coverage < 1) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
       const stripLayer = zoom > 0.3;
