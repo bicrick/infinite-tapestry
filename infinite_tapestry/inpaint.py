@@ -383,10 +383,10 @@ class KleinInpainter(Inpainter):
         pe = self._embed(prompt)
         if prompt_b and t > 0.0:
             pe_b = self._embed(prompt_b)
-            if pe_b.shape == pe.shape:
-                tt = float(min(1.0, max(0.0, t)))
-                tt = tt * tt * (3 - 2 * tt)
-                pe = pe * (1 - tt) + pe_b * tt
+            # Averaged text embeddings render as haze (neither world); switch cleanly and let the
+            # spatial outpaint carry the transition.
+            if t >= 0.5:
+                pe = pe_b
         gen = torch.Generator(device=dev).manual_seed(seed) if seed is not None else None
         filled = prefill_masked(image, mask)
         kw = {}
