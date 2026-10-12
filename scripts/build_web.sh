@@ -7,6 +7,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 rm -rf "$OUT" && mkdir -p "$OUT"
 cp -r "$ROOT"/static/* "$OUT"/
 cp -r "$ROOT"/web/api "$ROOT"/web/lib "$ROOT"/web/package.json "$ROOT"/web/vercel.json "$OUT"/
+[ -f "$ROOT"/web/middleware.js ] && cp "$ROOT"/web/middleware.js "$OUT"/
 # Default matches the live 4090 burn rate; override with TAPESTRY_CENTS_PER_HOUR.
 cat > "$OUT/config.js" <<CFG
 window.TAPESTRY_CONFIG = {
