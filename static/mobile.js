@@ -112,3 +112,6 @@
 // Desktop fullscreen toggle (Esc exits natively).
 (() => { const b = document.getElementById("fs-btn"); if (!b) return;
   if (!document.fullscreenEnabled || !document.documentElement.requestFullscreen || matchMedia("(pointer: coarse)").matches || matchMedia("(hover: none)").matches) { b.remove(); return; } b.addEventListener("click", () => { if (document.fullscreenElement) document.exitFullscreen(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); }); })();
+
+// Desktop top-left clock (viewer local time).
+(() => { const el = document.getElementById("top-clock"); if (!el) return; const f = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }); const tick = () => { el.textContent = f.format(new Date()); setTimeout(tick, 60000 - (Date.now() % 60000) + 50); }; tick(); })();

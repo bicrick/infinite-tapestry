@@ -809,3 +809,8 @@ body.react-open .cmd-terms { display: none !important; }
   .drawer-theme button:hover { color: var(--fg); }
   .drawer-theme button.on { color: var(--fg); border-color: var(--line); background: rgba(var(--ink),.05); }
 }
+
+@media (min-width: 701px) and (pointer: fine) {
+  .top-clock { margin-left: 14px; padding-left: 14px; border-left: 1px solid var(--line); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-weight: 400; }
+  body.idle #account-btn, body.ambient #account-btn { opacity: 1; pointer-events: auto; }   /* @handle / Sign in stays put on desktop */
+}
