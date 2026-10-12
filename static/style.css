@@ -243,15 +243,15 @@ body.intro .ui, body.intro .veil { opacity: 0; transform: translateY(6px); point
 body.loaded .ui, body.loaded .veil { transition: opacity .9s var(--ease), transform .9s var(--ease); }
 /* stagger, after the card has mostly opened: mark → live count → caption → dock → timeline */
 body.loaded .top, body.loaded .veil { transition-delay: .9s; }
-.top .brand, .top .top-right, .dock .now, .dock > :not(.now) { transition: opacity .8s var(--ease), transform .8s var(--ease); }
-body.intro .top .brand, body.intro .top .top-right, body.intro .dock .now, body.intro .dock > :not(.now) { opacity: 0; transform: translateY(5px); }
+.top .brand, .top .top-right, .dock .now, .dock > :not(.now):not(.cmd-terms) { transition: opacity .8s var(--ease), transform .8s var(--ease); }
+body.intro .top .brand, body.intro .top .top-right, body.intro .dock .now, body.intro .dock > :not(.now):not(.cmd-terms) { opacity: 0; transform: translateY(5px); }
 body.loaded .top .brand { transition-delay: .9s; }
 body.loaded .top .top-right { transition-delay: 1.05s; }
 body.loaded .dock { transition-delay: 1.2s; } body.loaded .dock .now { transition-delay: 1.2s; }
-body.loaded .dock > :not(.now) { transition-delay: 1.35s; }
+body.loaded .dock > :not(.now):not(.cmd-terms) { transition-delay: 1.35s; }
 body.loaded .timeline { transition-delay: 1.5s; }
 body.loaded .chat { transition-delay: 1.5s; }
-body.loaded.settled .top .brand, body.loaded.settled .top .top-right, body.loaded.settled .dock .now, body.loaded.settled .dock > :not(.now) { transition-delay: 0s; }
+body.loaded.settled .top .brand, body.loaded.settled .top .top-right, body.loaded.settled .dock .now, body.loaded.settled .dock > :not(.now):not(.cmd-terms) { transition-delay: 0s; }
 body.intro .dock { transform: translate(-50%, 10px); }
 body.loaded.settled .ui, body.loaded.settled .veil { transition-delay: 0s !important; }
 body.intro #view { opacity: 0; }
