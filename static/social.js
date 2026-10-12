@@ -9,6 +9,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const S = { enabled: false, session: null, profile: null, isAdmin: () => !!(S.profile && S.profile.is_admin), token: () => S.session && S.session.access_token, submitIdea: async () => false };
 window.TapestrySocial = S;
 
+const UP = '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>';
 const ERR = {
   not_signed_in: "Sign in to add ideas, vote and chat.",
   handle_required: "Pick a handle first.",
@@ -280,7 +281,6 @@ async function boot() {
     if (queueMode === "fifo") ideas.sort((a, b) => (a.status === "playing" ? -1 : b.status === "playing" ? 1 : 0) || String(a.created_at).localeCompare(String(b.created_at)));
     renderIdeas();
   }
-  const UP = '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>';
   function renderIdeas() {
     const list = $("idea-list");
     if (!list) return;
