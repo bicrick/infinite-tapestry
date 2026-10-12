@@ -76,6 +76,8 @@
   const SW = () => config.strip_width;
   const scale = () => canvas.height / Math.max(1, config.height);
   const viewWorld = () => canvas.width / scale();
+  // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
+  window.TapestryView = { left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas };
   const panoramaWidth = () => (maxIndex + 1) * SW();
   const viewLeft = () => (panMode === "live" ? liveScroll : shownPan());
 
