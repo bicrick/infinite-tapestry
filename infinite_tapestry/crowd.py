@@ -147,6 +147,9 @@ class Crowd:
         await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})&status=eq.pending", {"status": "playing"}, "return=minimal")
         if len(rows) == 1:
             intent = rows[0]["body"]
+            if intent.strip().lower() == "inspired by this image" and images:
+                intent = ("Take the journey into the attached reference image: describe and match its subject, setting, "
+                          "palette, light and mood as one continuous scene.")
         else:
             intent = "Weave these audience ideas into one continuous journey, in this order: " + \
                      " ; ".join(f"{i + 1}) {r['body']}" for i, r in enumerate(rows))

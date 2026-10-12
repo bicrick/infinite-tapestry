@@ -600,3 +600,10 @@ body.offline-on #intro, body.offline-on .ui, body.offline-on .amb { opacity: 0 !
 .doc .lede { font-size: 17px; color: var(--muted); margin-bottom: 36px; }
 .doc h2 { font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 36px 0 8px; }
 .doc ul { padding-left: 18px; } .doc li { margin: 4px 0; }
+/* drop-anywhere reference overlay (desktop) */
+#drop-ov { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity .18s ease; background: color-mix(in srgb, var(--bg, #0b0b0c) 55%, transparent); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+#drop-ov.on { opacity: 1; }
+#drop-ov .drop-card { position: absolute; inset: 18px; border: 1px dashed color-mix(in srgb, currentColor 35%, transparent); border-radius: 18px; display: flex; align-items: center; justify-content: center; color: var(--fg, #f2f2f2); font: 500 15px/1.2 inherit; letter-spacing: .01em; }
+#drop-ov.on .drop-card span { animation: drop-in .22s ease; }
+@keyframes drop-in { from { transform: translateY(4px); opacity: 0 } to { transform: none; opacity: 1 } }
+.ref-chip img { width: 30px; height: 30px; }
