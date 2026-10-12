@@ -40,7 +40,7 @@ bar.addEventListener("click", (ev) => {
   const k = b.dataset.k;
   recentOwn[k] = (recentOwn[k] || 0) + 1; setTimeout(() => { recentOwn[k] = Math.max(0, (recentOwn[k] || 0) - 1); }, 1500);
   floatUp(EMO[k], true);
-  send({ type: "react", k, i: V().center ? V().center() : -1, s: V().title ? V().title() : "" });
+  send({ type: "react", k, i: V().center ? Math.round(V().center()) : -1, s: V().title ? V().title() : "" });
   if (!fun.reacted) { fun.reacted = true; track("reaction", { k }); }
 });
 const fun = { reacted: false };
