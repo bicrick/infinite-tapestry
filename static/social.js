@@ -42,7 +42,7 @@ async function boot() {
   $("account-btn").classList.remove("hidden");
   $("fuel-chip").classList.remove("hidden");
   $("chat").classList.remove("hidden");
-  $("cmd-input").placeholder = "Suggest where the tapestry goes next…";
+  $("cmd-input").placeholder = innerWidth < 480 ? "Where next?" : "Suggest where the tapestry goes next…";
   if (CFG.google) $("auth-google").classList.remove("hidden");
 
   // Hoisted above first loadProfile(): loadVotes/renderIdeas run from loadProfile
