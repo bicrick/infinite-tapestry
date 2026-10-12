@@ -66,6 +66,7 @@ class PromptScheduler:
         )
 
 
+MIN_TRANSITION = 12  # strips; shorter blends read as hard cuts
 _scene_ids = __import__("itertools").count(1)
 
 
@@ -84,7 +85,7 @@ def make_scene(
         "title": (str(title).strip() or prompt.split(",")[0])[:80],
         "prompt": prompt,
         "negative": str(negative or "").strip()[:400],
-        "transition": None if transition is None else max(1, min(64, int(transition))),
+        "transition": None if transition is None else max(MIN_TRANSITION, min(64, int(transition))),
         "hold": None if hold is None else max(0, min(500, int(hold))),
         "source": source[:200],
     }

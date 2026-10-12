@@ -14,13 +14,16 @@ class Config:
     height: int = 512
     window_width: int = 512
     strip_width: int = 128
-    overlap: int = 32  # feather blend into prior context
+    overlap: int = 96  # feather blend into prior context (smoothstep)
+    seam_retries: int = 2  # regenerate a strip that shows a hard vertical cut
+    seam_threshold: float = 6.0  # max col-gradient / median above this = cut
+    repaint_band: int = 64  # px of context the model repaints at the seam
     context_width: int = 384  # window_width - strip_width
 
     # Buffer / scroll
     buffer_target: int = 6  # strips to keep ahead
     buffer_min: int = 2  # below this, client should slow down
-    blend_strips: int = 8  # strips to interpolate between prompts
+    blend_strips: int = 16  # strips to interpolate between prompts
     history_limit: int = 5000  # strips kept in memory for pan-back (~25KB each)
     scroll_speed: float = 30.0  # px/s (nominal)
     scroll_speed_min: float = 8.0  # when buffer is low
@@ -29,7 +32,7 @@ class Config:
     mock: bool = False
     seed: int = 42
     steps: int = 20
-    guidance_scale: float = 6.0  # DPM++ default; use ~1.0-1.5 with LCM-LoRA
+    guidance_scale: float = 5.0  # DPM++ default; use ~1.0-1.5 with LCM-LoRA
     strength: float = 1.0  # <1.0 truncates the LCM schedule; masked area stays black
 
     # Model IDs (community mirrors; runwayml inpaint repo is gone)

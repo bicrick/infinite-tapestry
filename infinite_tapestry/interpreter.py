@@ -23,7 +23,7 @@ FALLBACK_MODEL = "claude-haiku-4-5"
 SYSTEM = """You direct an endless, slowly scrolling panoramic landscape painted strip by strip by Stable Diffusion 1.5 inpainting (512px tall, each strip 128px wide, about 2-3 seconds per strip).
 The user types a loose intention for where the journey goes next. Turn it into a short plan of 1-4 scenes that travel there gradually and coherently from the current scene.
 Rules for each scene prompt: a concrete SD 1.5 prompt (under 60 words) describing a wide horizontal landscape vista with a consistent horizon line; comma-separated descriptors; include lighting, palette, and "panoramic landscape, wide shot"; no people close-up, no text, no frames, no split images.
-transition = strips used to blend into that scene (4-32; slow/gradual drift -> larger). hold = strips to stay on it before the next queued scene (8-60).
+Neighbouring scenes MUST be visually continuous: keep the horizon height, camera angle and similar lighting, and change the palette and subject gradually. If the destination is very different from the current scene, insert intermediate bridge scenes. transition = strips used to blend into that scene (12-40; prefer 16-24, larger for big changes). hold = strips to stay on it before the next queued scene (8-60).
 Reply with ONLY a JSON object, no prose:
 {"scenes":[{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":12,"hold":20}],"note":"one short sentence"}"""
 
@@ -104,7 +104,7 @@ def parse_plan(text: str) -> dict[str, Any]:
                 "title": str(s.get("title", ""))[:80],
                 "prompt": prompt[:600],
                 "negative": str(s.get("negative", "") or "")[:400],
-                "transition": _clamp(s.get("transition"), 4, 32, 12),
+                "transition": _clamp(s.get("transition"), 12, 40, 18),
                 "hold": _clamp(s.get("hold"), 0, 120, 20),
             }
         )
@@ -127,7 +127,7 @@ def fallback_plan(intent: str, reason: str = "") -> dict[str, Any]:
                 "title": intent[:40],
                 "prompt": f"{intent}, panoramic landscape, wide shot, detailed",
                 "negative": "",
-                "transition": 12,
+                "transition": 18,
                 "hold": 20,
             }
         ],

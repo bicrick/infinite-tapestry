@@ -46,10 +46,11 @@ def make_seed_image(height: int, width: int, seed: int = 0) -> Image.Image:
 
 
 def feather_weights(overlap: int) -> np.ndarray:
-    """1D ramp from 0 (old) to 1 (new) across `overlap` pixels."""
+    """Smoothstep ramp from 0 (old) to 1 (new) across `overlap` pixels."""
     if overlap <= 0:
         return np.zeros((0,), dtype=np.float32)
-    return np.linspace(0.0, 1.0, overlap, dtype=np.float32)
+    t = np.linspace(0.0, 1.0, overlap, dtype=np.float32)
+    return t * t * (3 - 2 * t)
 
 
 def blend_strip(
@@ -184,7 +185,10 @@ def stitch_generated_window(
         return new_canvas, strip, canvas.width
 
     new_canvas = blend_strip(canvas, strip, paste_x, overlap)
-    return new_canvas, strip, paste_x
+    # Emit the *blended* pixels so viewers (which draw strips opaquely over
+    # the previous one) see the same feathered seam as the server canvas.
+    emitted = new_canvas.crop((paste_x, 0, paste_x + strip.width, new_canvas.height))
+    return new_canvas, emitted, paste_x
 
 
 def histogram_match_strip(
