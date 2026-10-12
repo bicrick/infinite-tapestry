@@ -106,9 +106,9 @@ class Autopilot:
             plan = await asyncio.to_thread(self.interpreter.autoplan, d.recent(8), self.vibe, 2)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
-            from .guard import is_blocked
+            from .guard import is_disallowed
 
-            plan["scenes"] = [x for x in plan["scenes"] if not is_blocked(x["prompt"])]
+            plan["scenes"] = [x for x in plan["scenes"] if not is_disallowed(x["prompt"])]
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),

@@ -84,6 +84,13 @@ class StripGenerator:
         # EMA of seconds spent generating one strip = the GPU's raw capacity
         # (independent of buffer gating), used by the client's auto speed.
         self.gen_seconds_ema: float | None = None
+        # P(nsfw) classifier for generated pixels (GPU only; tests may inject one).
+        self.nsfw = None
+        self.nsfw_hits = 0
+        if not config.mock and getattr(config, "nsfw_model", ""):
+            from .nsfw import load_classifier
+
+            self.nsfw = load_classifier(config.nsfw_model, config.device)
         self._ema_alpha = 0.2
         # Global mean/std matching compounded strip-over-strip and blew out
         # saturation on GPU; off by default.
@@ -169,11 +176,11 @@ class StripGenerator:
             m[:, ctx_w - band:] = 255
             mask = Image.fromarray(m, mode="L")
         prompt_a, prompt_b, blend_t = self.director.frame_for(self._strip_index)
-        from .guard import is_blocked
+        from .guard import is_disallowed
 
-        if is_blocked(prompt_a):
+        if is_disallowed(prompt_a):
             prompt_a = "abstract soft colored mist"
-        if prompt_b and is_blocked(prompt_b):
+        if prompt_b and is_disallowed(prompt_b):
             prompt_b = None
         shown_prompt = prompt_b if (prompt_b and blend_t >= 0.5) else prompt_a
         seed = cfg.seed + self._strip_index
@@ -205,6 +212,29 @@ class StripGenerator:
             logger.info("Strip %d attempt %d looks seamed (score %.1f); retrying", self._strip_index, k, score)
         self.last_seam_score = best_score
         generated = best
+        if self.nsfw is not None:
+            new_region = generated.crop((max(0, ctx_w - band), 0, cfg.window_width - margin, cfg.height))
+            p = self.nsfw(new_region)
+            if p >= cfg.nsfw_threshold:
+                self.nsfw_hits += 1
+                logger.warning("Strip %d flagged NSFW (p=%.2f); regenerating", self._strip_index, p)
+                retry = self.inpainter.generate(
+                    image=window, mask=mask, prompt=prompt_a,
+                    negative_prompt=self.director.negative_for(blend_t) + ", nude, naked, sexual, nsfw, cleavage",
+                    seed=seed + 104729, prompt_b=prompt_b, t=blend_t,
+                )
+                if retry.size != window.size:
+                    retry = retry.resize(window.size, Image.Resampling.LANCZOS)
+                r_region = retry.crop((max(0, ctx_w - band), 0, cfg.window_width - margin, cfg.height))
+                if self.nsfw(r_region) < cfg.nsfw_threshold:
+                    generated = retry
+                else:
+                    from .nsfw import obscure
+
+                    logger.warning("Strip %d still NSFW after retry; blurring", self._strip_index)
+                    x0 = max(0, ctx_w - band)
+                    generated = generated.copy()
+                    generated.paste(obscure(r_region), (x0, 0))
 
         if generated.size != window.size:
             generated = generated.resize(window.size, Image.Resampling.LANCZOS)

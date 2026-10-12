@@ -309,8 +309,10 @@ def create_app(
                     return
                 from .guard import is_blocked
 
-                if is_blocked(text):
-                    await notice("That prompt is blocked (sexual content involving minors is never allowed).")
+                from .guard import is_sexual
+
+                if is_blocked(text) or is_sexual(text):
+                    await notice("Anything goes here except sexual content. Try another destination.")
                     return
                 d = generator.director
                 if len(d.state()["items"]) >= MAX_QUEUE:
@@ -336,7 +338,7 @@ def create_app(
                     make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""),
                                s.get("transition"), s.get("hold"), source=text, origin="user")
                     for s in plan["scenes"]
-                    if not is_blocked(s["prompt"], text)
+                    if not is_blocked(s["prompt"], text) and not is_sexual(s["prompt"])
                 ]
                 if not scenes:
                     await notice("That prompt is blocked.")
@@ -409,7 +411,9 @@ def create_app(
                             from .guard import is_blocked
 
                             prompt = data.get("prompt")
-                            if prompt and is_blocked(str(prompt)):
+                            from .guard import is_disallowed
+
+                            if prompt and is_disallowed(str(prompt)):
                                 await notice("That prompt is blocked.")
                                 continue
                             d.edit(int(sid), prompt=str(prompt)[:MAX_INTENT_CHARS * 2] if prompt else None,

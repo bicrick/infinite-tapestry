@@ -1,8 +1,10 @@
-"""Hard content block that must never be removed: no sexualized minors.
+"""Content line: "wild west except sexual content".
 
-Mature/dark/sexual adult content is allowed (private adult app). Any text that
-combines a minor/age term with a sexual term is rejected, on user input and on
-every final SD prompt."""
+Gore, horror, surreal and disturbing are fine. Sexual content and nudity are
+not (public app). Two checks:
+- is_blocked: minor/age term + sexual term. Hard block that must never be removed.
+- is_sexual: any sexual/nudity term. Rejected on user input and swapped out of
+  final SD prompts. Generated pixels are additionally checked by nsfw.py."""
 
 from __future__ import annotations
 
@@ -26,3 +28,21 @@ _SEXUAL = re.compile(
 def is_blocked(*texts: str) -> bool:
     joined = " ".join(t for t in texts if t)
     return bool(_MINOR.search(joined) and _SEXUAL.search(joined))
+
+
+_SEXUAL_STRICT = re.compile(
+    r"\b(sex|sexy|sexual|sexualized|sexually|nude|nudes|naked|nudity|erotic|erotica|porn|porno|pornographic|nsfw|"
+    r"topless|bottomless|lingerie|aroused|arousal|genital|genitals|penis|vagina|vulva|nipples?|orgasm|seductive|"
+    r"sensual|fetish|bdsm|lewd|hentai|undress|undressed|undressing|stripper|striptease|intercourse|masturbat\w*|"
+    r"boobs?|tits|bare[- ]breasted|breasts|onlyfans|xxx|horny|kinky)\b",
+    re.I,
+)
+
+
+def is_sexual(*texts: str) -> bool:
+    return bool(_SEXUAL_STRICT.search(" ".join(t for t in texts if t)))
+
+
+def is_disallowed(*texts: str) -> bool:
+    """Anything we refuse to paint: sexual content, and (always) sexualized minors."""
+    return is_blocked(*texts) or is_sexual(*texts)
