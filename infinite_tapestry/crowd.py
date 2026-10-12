@@ -27,6 +27,13 @@ GPU_CENTS_PER_HOUR = float(os.environ.get("TAPESTRY_GPU_CENTS_PER_HOUR", "17"))
 CLAUDE_CENTS_PER_TOKEN = float(os.environ.get("TAPESTRY_CLAUDE_CENTS_PER_MTOK", "30")) / 1_000_000
 
 
+
+VOTE_THRESHOLD = 3  # pending ideas; at or below this, play FIFO and hide voting
+
+
+def queue_mode(pending: int) -> str:
+    return "vote" if pending > VOTE_THRESHOLD else "fifo"
+
 class Supa:
     def __init__(self, url: str, key: str) -> None:
         self.url, self.key = url.rstrip("/"), key
@@ -77,13 +84,15 @@ class Crowd:
         self._last_burn = time.monotonic()
         self.burn = os.environ.get("TAPESTRY_FUEL_BURN", "0" if mock else "1") == "1"
 
+    queue_mode = "fifo"
+
     def state(self) -> dict:
         hours = None
         if self.fuel_cents is not None:
             hours = max(0.0, self.fuel_cents / GPU_CENTS_PER_HOUR)
         return {"cents": None if self.fuel_cents is None else round(self.fuel_cents, 2),
                 "hours": None if hours is None else round(hours, 2), "out": self.out_of_fuel,
-                "gpu_cents_per_hour": GPU_CENTS_PER_HOUR}
+                "gpu_cents_per_hour": GPU_CENTS_PER_HOUR, "queue_mode": self.queue_mode}
 
     def _audience_pending(self) -> bool:
         st = self.director.state()
@@ -95,7 +104,17 @@ class Crowd:
             return
         rows = await asyncio.to_thread(
             self.supa.rest, "GET",
-            "ideas?status=eq.pending&order=boost_cents.desc,votes.desc,created_at.asc&limit=3&select=id,handle,body,votes,boost_cents,image_path")
+            "ideas?status=eq.pending&order=created_at.asc&limit=4&select=id")
+        mode = queue_mode(len(rows or []))
+        if mode != self.queue_mode:
+            self.queue_mode = mode
+            self.broadcast({"type": "fuel", "fuel": self.state()})
+        order = "created_at.asc" if mode == "fifo" else "boost_cents.desc,votes.desc,created_at.asc"
+        # FIFO: weave one idea at a time, in arrival order, so each starts right away.
+        rows = await asyncio.to_thread(
+            self.supa.rest, "GET",
+            f"ideas?status=eq.pending&order={order}&limit={1 if mode == 'fifo' else 3}"
+            "&select=id,handle,body,votes,boost_cents,image_path")
         if not rows:
             return
         images: list[tuple[bytes, str]] = []

@@ -52,7 +52,7 @@ def test_skip_finishes_transition_and_advances():
 
 def test_parse_plan_and_fallback():
     p = parse_plan('ok {"scenes":[{"title":"T","prompt":"neon city","transition":99,"hold":"x"}],"note":"n"}')
-    assert p["scenes"][0]["transition"] == 40 and p["scenes"][0]["hold"] == 20
+    assert p["scenes"][0]["transition"] == 20 and p["scenes"][0]["hold"] == 10
     f = fallback_plan("ocean")
     assert f["source"] == "raw" and "ocean" in f["scenes"][0]["prompt"]
     assert PromptInterpreter(api_key="").plan("ocean")["source"] == "raw"
@@ -156,3 +156,17 @@ def test_ws_intent_feeds_playlist():
 def d_has(gen, prompts):
     q = gen.director.queue
     return all(p in q for p in prompts)
+
+
+def test_user_idea_preempts_auto_hold_and_timings_halved():
+    from infinite_tapestry.prompts import LiveDirector, make_scene
+    d = LiveDirector("seed", hold=12, blend=8)
+    d.frame_for(0)
+    d.add([make_scene("auto scene", hold=30, origin="auto")])
+    d.frame_for(1)  # seed still holding
+    assert d.state()["target"] is None
+    d.add_user([make_scene("user idea", transition=8, origin="user")])
+    a, b, t = d.frame_for(2)  # weaving starts immediately, auto scene dropped
+    assert b == "user idea" and t > 0
+    assert make_scene("x", transition=64, hold=200)["transition"] == 20
+    assert make_scene("x", transition=1, hold=200)["hold"] == 30

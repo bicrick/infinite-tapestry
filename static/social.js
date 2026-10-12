@@ -210,12 +210,22 @@ async function boot() {
       .in("status", ["pending", "playing"]).order("status", { ascending: false }).order("boost_cents", { ascending: false })
       .order("votes", { ascending: false }).order("created_at").limit(60);
     ideas = data || [];
+    // Adaptive voting: few pending ideas play first-come-first-served; votes only matter when busy.
+    const pending = ideas.filter((i) => i.status === "pending").length;
+    queueMode = pending > 3 ? "vote" : "fifo";
+    if (queueMode === "fifo") ideas.sort((a, b) => (a.status === "playing" ? -1 : b.status === "playing" ? 1 : 0) || String(a.created_at).localeCompare(String(b.created_at)));
     renderIdeas();
   }
   const UP = '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>';
+  let queueMode = "fifo";
   function renderIdeas() {
     const list = $("idea-list");
     if (!list) return;
+    list.classList.toggle("fifo", queueMode === "fifo");
+    let hint = $("idea-mode-hint");
+    if (!hint) { hint = document.createElement("p"); hint.id = "idea-mode-hint"; hint.className = "idea-mode-hint"; list.before(hint); }
+    hint.textContent = queueMode === "vote" ? "Busy right now · vote to choose what's painted next" : "";
+    hint.classList.toggle("hidden", queueMode !== "vote");
     $("idea-empty").classList.toggle("hidden", ideas.length > 0);
     list.innerHTML = "";
     ideas.forEach((it) => {
@@ -342,6 +352,7 @@ async function boot() {
   });
   window.addEventListener("tapestry:fuel", (e) => {
     const f = (e.detail && e.detail.fuel) || {};
+    if (f.queue_mode && f.queue_mode !== queueMode) { queueMode = f.queue_mode; refreshIdeas(); }
     if (f.gpu_cents_per_hour) hourCents = Number(f.gpu_cents_per_hour) || hourCents;
     const cents = f.cents ?? e.detail.balance_cents;
     if (cents != null) fuel = { ...fuel, balance_cents: cents };
