@@ -118,8 +118,20 @@ def create_app(
         interpreter = PromptInterpreter()
     app.state.interpreter = interpreter
 
+    autopilot = None
+    if generator is not None:
+        from .autopilot import Autopilot
+
+        autopilot = Autopilot(generator.director, interpreter, on_change=lambda: broadcast_director())
+        autopilot.enabled = bool(getattr(config, "autopilot", True))
+    app.state.autopilot = autopilot
+
     def director_state() -> dict[str, Any] | None:
-        return generator.director.state() if generator else None
+        if not generator:
+            return None
+        st = generator.director.state()
+        st["autopilot"] = autopilot.state() if autopilot else None
+        return st
 
     def gpu_stats() -> dict[str, Any] | None:
         return generator.stats() if generator else None
@@ -161,6 +173,9 @@ def create_app(
         t = clock_task["t"]
         if t is None or t.done():
             clock_task["t"] = asyncio.get_running_loop().create_task(clock_loop())
+        a = clock_task.get("auto")
+        if autopilot and (a is None or a.done()):
+            clock_task["auto"] = asyncio.get_running_loop().create_task(autopilot.run())
 
     app.state.config = config
     app.state.buffer = buffer
@@ -309,18 +324,21 @@ def create_app(
                     plan = fallback_plan(text, "raw mode")
                 else:
                     st = d.state()
-                    prev = st["queue"][-1] if (when == "end" and st["queue"]) else (st["target"] or st["current"])
+                    users = [i["prompt"] for i in st["items"] if i.get("origin") != "auto"]
+                    prev = users[-1] if (when == "end" and users) else (st["target"] or st["current"])
                     plan = await asyncio.to_thread(interpreter.plan, text, prev, None)
                 scenes = [
                     make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""),
-                               s.get("transition"), s.get("hold"), source=text)
+                               s.get("transition"), s.get("hold"), source=text, origin="user")
                     for s in plan["scenes"]
                 ]
+                if autopilot:
+                    autopilot.user_acted()
                 if when == "now":
                     d.play_now(scenes[0], at=generator.strip_index)
-                    d.add(scenes[1:], position="next")
+                    d.add_user(scenes[1:], position="next")
                 else:
-                    d.add(scenes, position="next" if when == "next" else "end")
+                    d.add_user(scenes, position="next" if when == "next" else "end")
                 await ws.send_json(
                     {"type": "plan", "req": req_id, "text": text,
                      "plan": {k: plan.get(k) for k in ("note", "source", "model")}, "scenes": scenes}
@@ -355,6 +373,9 @@ def create_app(
                         task = asyncio.create_task(handle_intent(data))
                         intent_tasks.add(task)
                         task.add_done_callback(intent_tasks.discard)
+                    elif t == "autopilot" and autopilot:
+                        autopilot.configure(data.get("enabled"), data.get("vibe"))
+                        broadcast_director()
                     elif t in ("speed", "skip", "remove", "move", "edit", "play", "clear",
                                "configure", "set_prompt", "queue") and generator:
                         wait = control_limit.check(ip)

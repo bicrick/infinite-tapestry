@@ -76,7 +76,7 @@
   const scale = () => canvas.height / Math.max(1, config.height);
   const viewWorld = () => canvas.width / scale();
   const panoramaWidth = () => (maxIndex + 1) * SW();
-  const viewLeft = () => (live ? liveScroll : panX);
+  const viewLeft = () => (panMode === "live" ? liveScroll : shownPan());
 
   function decodeStrip(buf) {
     const view = new DataView(buf);
@@ -180,6 +180,7 @@
       livePos = Math.min(panoramaWidth(), livePos + srvSpeed * dt + fix);
       liveScroll = livePos - viewWorld();
     }
+    stepPan(dt);
     draw();
     hudTimer += dt;
     if (hudTimer > 0.5) { hudTimer = 0; updateHud(srvSpeed, livePos === null ? 0 : panoramaWidth() - livePos); }
@@ -236,31 +237,133 @@
     $("speed-btn").textContent = (speedMode === "auto" ? "Auto" : Math.round(manualSpeed) + " px/s") + (speedMult > 1 ? " " + speedMult + "×" : "");
   }
 
-  // ---------- drag to pan ----------
-  let dragging = false, dragStartX = 0, dragStartPan = 0;
-  function enterHistory() { if (live) { panX = Math.max(0, liveScroll); live = false; liveBtn.classList.remove("hidden"); } }
-  canvas.addEventListener("pointerdown", (ev) => {
-    dragging = true;
-    canvas.setPointerCapture(ev.pointerId);
-    dragStartX = ev.clientX;
+  // ---------- pan physics: drag / wheel momentum, rubber-band, spring back ----------
+  // panPos is the raw (unclamped) left edge while browsing history. Bounds are
+  // [0, liveScroll]; beyond them the view rubber-bands. Releasing past the
+  // live edge springs into live mode.
+  let panPos = 0, panVel = 0;            // world px, world px/s
+  let panMode = "live";                  // live | drag | glide | wheel | return
+  let samples = [];                      // [t, x] pointer history for velocity
+  let wheelIdleAt = 0;
+  let ret = null;                        // {from, t0, dur}
+  const FRICTION = 3.2;                  // 1/s, exponential decay of glide velocity
+  const pxToWorld = () => (canvas.width / Math.max(1, canvas.clientWidth)) / scale();
+  const minPan = () => 0;
+  const maxPan = () => Math.max(0, liveScroll);
+
+  function rubber(x) {
+    // iOS-style: resistance grows with overscroll distance.
+    const lo = minPan(), hi = maxPan(), d = viewWorld() * 0.5;
+    const f = (o) => (1 - 1 / (o / d * 0.55 + 1)) * d;
+    if (x < lo) return lo - f(lo - x);
+    if (x > hi) return hi + f(x - hi);
+    return x;
+  }
+  function shownPan() { return rubber(panPos); }
+
+  function enterHistory() {
+    if (panMode === "live" || panMode === "return") {
+      panPos = panMode === "return" ? shownPan() : Math.max(0, liveScroll);
+      ret = null;
+    }
+    live = false;
+    liveBtn.classList.remove("hidden");
+  }
+
+  function startReturn() {
     enterHistory();
-    dragStartPan = panX;
+    const dist = Math.abs(maxPan() - shownPan());
+    ret = { from: shownPan(), t0: performance.now(), dur: Math.min(1100, 420 + Math.sqrt(dist) * 9) };
+    panMode = "return";
+    panVel = 0;
+    liveBtn.classList.add("hidden");
+  }
+  // Gentle spring: easeOutBack with a small overshoot.
+  const easeSpring = (t) => { const c = 0.9, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
+
+  function stepPan(dt) {
+    if (panMode === "live") return;
+    const lo = minPan(), hi = maxPan();
+    if (panMode === "return") {
+      const t = Math.min(1, (performance.now() - ret.t0) / ret.dur);
+      panPos = ret.from + (hi - ret.from) * easeSpring(t);   // target tracks the moving live edge
+      if (t >= 1) { panMode = "live"; live = true; }
+      return;
+    }
+    if (panMode === "glide" || (panMode === "wheel" && performance.now() - wheelIdleAt > 140)) {
+      panMode = "glide";
+      const out = panPos < lo ? lo - panPos : panPos > hi ? hi - panPos : 0;
+      if (out !== 0) {
+        // Critically damped spring back to the bound.
+        const k = 140, c = 2 * Math.sqrt(k);
+        panVel += (k * out - c * panVel) * dt;
+        panPos += panVel * dt;
+        if (Math.abs(out) < 0.5 && Math.abs(panVel) < 5) {
+          panPos = panPos > hi ? hi : Math.max(lo, panPos); panVel = 0;
+          if (panPos >= hi - 0.5) { panMode = "live"; live = true; liveBtn.classList.add("hidden"); }
+        }
+      } else {
+        panVel *= Math.exp(-FRICTION * dt);
+        panPos += panVel * dt;
+        if (Math.abs(panVel) < 4) panVel = 0;
+        // Gliding into the live edge with speed: just hand over to live.
+        if (panPos >= hi && panVel > 0) { panPos = hi; panVel = 0; panMode = "live"; live = true; liveBtn.classList.add("hidden"); }
+      }
+    }
+  }
+
+  let activePointer = null, lastPX = 0;
+  canvas.addEventListener("pointerdown", (ev) => {
+    if (activePointer !== null) return;
+    activePointer = ev.pointerId;
+    canvas.setPointerCapture(ev.pointerId);
+    enterHistory();
+    panPos = shownPan();
+    panMode = "drag";
+    panVel = 0;
+    lastPX = ev.clientX;
+    samples = [[performance.now(), panPos]];
   });
   canvas.addEventListener("pointermove", (ev) => {
-    if (!dragging) return;
-    const dpr = canvas.width / Math.max(1, canvas.clientWidth);
-    const dx = ((ev.clientX - dragStartX) * dpr) / scale();
-    panX = Math.max(0, Math.min(panoramaWidth() - viewWorld(), dragStartPan - dx));
+    if (ev.pointerId !== activePointer) return;
+    const dx = (ev.clientX - lastPX) * pxToWorld();
+    lastPX = ev.clientX;
+    // Apply drag in "shown" space so overscroll resists the finger.
+    const lo = minPan(), hi = maxPan();
+    const resist = panPos < lo || panPos > hi ? 0.45 : 1;
+    panPos -= dx * resist;
+    const now = performance.now();
+    samples.push([now, panPos]);
+    while (samples.length > 2 && now - samples[0][0] > 100) samples.shift();
   });
-  const endDrag = () => { dragging = false; };
+  const endDrag = (ev) => {
+    if (ev.pointerId !== activePointer) return;
+    activePointer = null;
+    const now = performance.now();
+    const s0 = samples[0], s1 = samples[samples.length - 1];
+    const span = (s1[0] - s0[0]) / 1000;
+    panVel = now - s1[0] > 80 || span <= 0 ? 0 : (s1[1] - s0[1]) / span;
+    panVel = Math.max(-8000, Math.min(8000, panVel));
+    panMode = "glide";
+  };
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
   canvas.addEventListener("wheel", (ev) => {
-    enterHistory();
-    panX = Math.max(0, Math.min(panoramaWidth() - viewWorld(), panX + (ev.deltaX || ev.deltaY)));
     ev.preventDefault();
+    enterHistory();
+    if (panMode !== "wheel") { panPos = shownPan(); panVel = 0; }
+    panMode = "wheel";
+    const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? viewWorld() : 1;
+    const d = (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY) * unit * pxToWorld();
+    const lo = minPan(), hi = maxPan();
+    panPos += d * (panPos < lo || panPos > hi ? 0.35 : 1);
+    // Trackpads supply their own momentum; mice get a short glide.
+    const dtw = Math.max(8, performance.now() - wheelIdleAt);
+    panVel = 0.6 * panVel + 0.4 * (d / (dtw / 1000));
+    if (ev.deltaMode !== 0 || Math.abs(ev.deltaY) >= 50) panVel = Math.max(-2500, Math.min(2500, panVel)); else panVel = 0;
+    wheelIdleAt = performance.now();
   }, { passive: false });
-  function goLive() { live = true; liveBtn.classList.add("hidden"); }
+  function goLive() { if (!live || panMode !== "live") startReturn(); }
   liveBtn.addEventListener("click", goLive);
 
   // ---------- auto-hide chrome ----------
@@ -402,7 +505,10 @@
   function toggleDrawer(open) { drawer.classList.toggle("open", open); }
   $("queue-btn").addEventListener("click", () => toggleDrawer());
   $("drawer-close").addEventListener("click", () => toggleDrawer(false));
-  $("loop").addEventListener("change", () => send({ type: "configure", loop: $("loop").checked }));
+  $("autopilot").addEventListener("change", () => send({ type: "autopilot", enabled: $("autopilot").checked }));
+  $("vibe").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); send({ type: "autopilot", vibe: $("vibe").value.trim() }); $("vibe").blur(); toast($("vibe").value.trim() ? "Autopilot will lean toward “" + esc($("vibe").value.trim()) + "”" : "Autopilot vibe cleared"); }
+  });
   $("hold").addEventListener("change", () => send({ type: "configure", hold: Number($("hold").value) }));
   $("blend").addEventListener("change", () => send({ type: "configure", blend: Number($("blend").value) }));
   $("clear").addEventListener("click", () => send({ type: "clear" }));
@@ -422,17 +528,18 @@
     const items = d.items || [];
     $("queue-count").textContent = items.length;
     $("queue-empty").classList.toggle("hidden", items.length > 0);
+    $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>Claude is dreaming up what comes next.' : "Nothing queued. Type a destination below.";
     const cur = d.current_scene || { title: d.current, prompt: d.current };
     const tgt = d.target_scene;
     $("current-card").innerHTML =
-      `<div class="k">${tgt ? "Transitioning" : "Now playing"}</div>` +
+      `<div class="k">${tgt ? "Transitioning" : "Now playing"} ${srcTag(tgt || cur)}</div>` +
       `<div class="t">${esc(cur.title)}${tgt ? ' <span class="muted">→ ' + esc(tgt.title) + "</span>" : ""}</div>` +
       `<div class="p">${esc((tgt || cur).prompt)}</div>`;
     if (editingId !== null && list.querySelector("textarea")) return; // don't clobber an edit
     list.innerHTML = "";
     items.forEach((s, i) => {
       const li = document.createElement("li");
-      li.className = "item";
+      li.className = "item " + (s.origin === "auto" ? "auto" : "user");
       li.draggable = true;
       li.dataset.id = s.id;
       li.innerHTML =
@@ -470,6 +577,10 @@
     });
   }
 
+  function srcTag(sc) {
+    const o = sc && sc.origin;
+    return o === "auto" ? '<span class="tag auto">✦ Claude</span>' : o === "user" ? '<span class="tag">You</span>' : "";
+  }
   function showDirector(d) {
     if (!d) return;
     director = d;
@@ -483,7 +594,16 @@
     $("now-bar").style.width = (prog * 100).toFixed(0) + "%";
     if (document.activeElement !== $("hold")) $("hold").value = d.hold;
     if (document.activeElement !== $("blend")) $("blend").value = d.blend;
-    $("loop").checked = !!d.loop;
+    const ap = d.autopilot;
+    if (ap) {
+      $("autopilot").checked = !!ap.enabled;
+      if (document.activeElement !== $("vibe")) $("vibe").value = ap.vibe || "";
+      $("auto-status").textContent = !ap.enabled ? "off" : ap.busy ? "dreaming up what's next…" : ap.error ? "Claude unavailable, improvising" : "";
+    }
+    const shown = tgt && (d.transition_progress || 0) >= 0.5 ? tgt : cur;
+    const srcEl = $("now-src");
+    srcEl.textContent = shown.origin === "auto" ? "✦ Claude" : shown.origin === "user" ? "You" : "Now";
+    srcEl.className = "src" + (shown.origin === "auto" ? " auto" : "");
     renderQueue(d);
   }
 
