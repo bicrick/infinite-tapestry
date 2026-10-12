@@ -30,7 +30,7 @@ function tree({ v = "full", img, band, line, sub, by, viewers = 0 }) {
       h("div", { style: { position: "absolute", left: 64, top: 60, display: "flex" } }, brand(28)),
       h("div", { style: { position: "absolute", right: 64, top: 62, display: "flex" } }, livePill(viewers)),
       h("div", { style: { position: "absolute", left: 64, bottom: 64, right: 64, display: "flex", justifyContent: "space-between", alignItems: "flex-end" } },
-        h("div", { style: { fontSize: 36, fontWeight: 300, letterSpacing: -0.8, color: INK, maxWidth: 760, lineHeight: 1.15 } }, line || "An endless painting, steered by everyone watching."),
+        h("div", { style: { fontSize: 36, fontWeight: 300, letterSpacing: -0.8, color: INK, maxWidth: 760, lineHeight: 1.15 } }, line || "You choose where it goes."),
         url()));
   }
   if (v === "close") {
@@ -46,7 +46,7 @@ function tree({ v = "full", img, band, line, sub, by, viewers = 0 }) {
         url()));
   }
   // full-bleed variants: full | live | by
-  const big = v === "by" ? `“${line}”` : (line || "An endless painting, steered by everyone watching.");
+  const big = v === "by" ? `“${line}”` : (line || "You choose where it goes.");
   return root(
     bgImg(img),
     shade("to top", 0.88), shade("to bottom", 0.55),
@@ -55,7 +55,7 @@ function tree({ v = "full", img, band, line, sub, by, viewers = 0 }) {
     h("div", { style: { position: "absolute", left: 60, right: 60, bottom: 56, display: "flex", flexDirection: "column", gap: 14 } },
       h("div", { style: { fontSize: v === "by" ? (big.length > 60 ? 44 : 54) : 52, fontWeight: 300, lineHeight: 1.1, letterSpacing: -1.2, maxWidth: 1000 } }, big),
       h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-        h("div", { style: { fontSize: 24, color: DIM } }, v === "by" ? `by @${by} · woven into the Infinite Tapestry` : (sub || "Suggest what comes next. It paints it live.")),
+        h("div", { style: { fontSize: 24, color: DIM } }, v === "by" ? `by @${by} · woven into the Infinite Tapestry` : (sub || "An endless painting, live.")),
         url())));
 }
 

@@ -59,15 +59,15 @@ async function card(req, res) {
     } else if (kind === "at") {
       a = parseInt(req.query.a, 10); b = parseInt(req.query.b, 10);
       if (!(a >= 0)) return fallback();
-      idea = (await rest("GET", `ideas?status=in.(playing,played)&start_strip=lte.${a + 3}&order=start_strip.desc&limit=1&select=handle,body,start_strip,end_strip`).catch(() => []))[0] || null;
-      if (idea && idea.end_strip != null && idea.end_strip < a) idea = null;
+      idea = (await rest("GET", `ideas?status=in.(playing,played)&start_strip=lte.${a + 3}&order=start_strip.desc&limit=1&select=handle,body,start_strip,end_strip,status`).catch(() => []))[0] || null;
+      if (idea && !(idea.end_strip != null ? a <= idea.end_strip : idea.status === "playing" && a <= idea.start_strip + 16)) idea = null;   // credit only the idea that painted this exact spot
       [a, b] = settle(a, Number.isFinite(b) ? b : a + 7); final = true;
     }
     if (idea || kind === "at") {
       const img = await getCrop(a, b, 1200, 630);
       if (!img) return fallback();
       const o = idea ? { v: "by", img: toDataUrl(img), line: clip(idea.body, 90), by: idea.handle }
-                     : { v: "full", img: toDataUrl(img), line: "A moment from the Infinite Tapestry.", sub: "An endless painting, steered by everyone watching." };
+                     : { v: "full", img: toDataUrl(img), line: "A moment from the Infinite Tapestry.", sub: "You choose where it goes." };
       return send(await render(o), final);
     }
     // home: rotate designs every 10 minutes, painted from the last few minutes of the live tapestry
@@ -76,10 +76,10 @@ async function card(req, res) {
     if (!max) return fallback();
     const viewers = (hz && hz.viewers) || 0;
     const V = [
-      { v: "live", line: "It's painting right now.", sub: "Suggest what comes next." },
-      { v: "band", line: "An endless painting, steered by everyone watching." },
-      { v: "close", line: "Suggest what comes next.", sub: "A painting that never ends. Type an idea and watch it paint itself in." },
-      { v: "full", line: "An endless painting, steered by everyone watching.", sub: "Suggest what comes next. It paints it live." },
+      { v: "live", line: "You choose where it goes.", sub: "An endless painting, live." },
+      { v: "band", line: "You choose where it goes." },
+      { v: "close", line: "You choose where it goes.", sub: "An endless painting. Suggest what comes next." },
+      { v: "full", line: "You choose where it goes.", sub: "An endless painting, live." },
     ][bucket % 4];
     const img = V.v === "band" ? await getCrop(max - 48, max - 8, 1600, 314) : await getCrop(max - 15, max - 8, 1200, 630);
     if (!img) return fallback();
