@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import collections
 import html
+import os
 import logging
 import random
 import re
@@ -63,7 +64,8 @@ def has_cliche(text: str) -> bool:
 
 class HeadlineCache:
     def __init__(self, feeds: list[str] | None = None, refresh_s: float = REFRESH_S, timeout: float = 8.0) -> None:
-        self.feeds = feeds or FEEDS
+        self.feeds = feeds if feeds is not None else (
+            [] if os.environ.get("TAPESTRY_HEADLINES", "1") == "0" else FEEDS)
         self.refresh_s = refresh_s
         self.timeout = timeout
         self._items: list[str] = []
