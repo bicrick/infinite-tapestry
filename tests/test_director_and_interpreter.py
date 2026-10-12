@@ -39,8 +39,8 @@ def test_scene_transition_and_hold_override_defaults():
     assert d.frame_for(1) == ("b", None, 0.0)
     assert "fog" in d.negative_for(0.0)
     d.add([make_scene("c")])
-    assert d.frame_for(7) == ("b", None, 0.0)  # user hold capped at 10
-    assert d.frame_for(12)[1] == "c"
+    assert d.frame_for(3) == ("b", None, 0.0)  # user hold capped at 4
+    assert d.frame_for(6)[1] == "c"
 
 
 def test_skip_finishes_transition_and_advances():
