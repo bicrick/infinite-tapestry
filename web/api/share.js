@@ -3,7 +3,27 @@ const { rest } = require("../lib/common");
 // /s/<id>: a share page with a rich preview of where the idea landed, then straight into the tapestry.
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+function moment(req, res) {
+  const m = String(req.query.m || "").match(/^(\d{1,7})-(\d{1,7})$/);
+  if (!m) { res.setHeader("location", "/"); return res.status(302).end(); }
+  const a = +m[1], b = Math.max(a, Math.min(+m[2], a + 63));
+  const host = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
+  const target = `/?at=${a}&to=${b}`, img = `${host}/api/og?a=${a}&b=${b}`;
+  const title = "A moment from the Infinite Tapestry", desc = "An endless painting that never stops, steered by everyone watching.";
+  res.setHeader("content-type", "text/html; charset=utf-8");
+  res.setHeader("cache-control", "public, s-maxage=86400");
+  return res.status(200).send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><title>${title}</title>
+<meta property="og:type" content="website" /><meta property="og:site_name" content="Infinite Tapestry" />
+<meta property="og:title" content="${title}" /><meta property="og:description" content="${desc}" />
+<meta property="og:image" content="${img}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="${img}" /><meta name="twitter:title" content="${title}" />
+<meta http-equiv="refresh" content="0; url=${target}" /><link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+<style>body{background:#050505;color:#888;font:13px Inter,system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0}a{color:#ddd}</style>
+</head><body><a href="${target}">Open the tapestry</a><script>location.replace(${JSON.stringify(target)})</script></body></html>`);
+}
+
 module.exports = async (req, res) => {
+  if (req.query.m) return moment(req, res);
   const id = parseInt(req.query.id, 10) || 0;
   let idea = null;
   try {

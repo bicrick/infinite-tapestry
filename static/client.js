@@ -65,8 +65,11 @@
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
   }
 
+  // Battery saver: drop to 1x resolution and ~30fps on low battery (Battery API) or data-saver.
+  const saver = { on: false };
+  window.TapestrySaver = saver;
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = saver.on ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.floor(canvas.clientWidth * dpr);
     canvas.height = Math.floor(canvas.clientHeight * dpr);
   }
@@ -74,12 +77,36 @@
   resize();
 
   const SW = () => config.strip_width;
-  const scale = () => canvas.height / Math.max(1, config.height);
+  // Portrait phones: the tapestry is a centred horizontal band (letterboxed), not a zoomed-in slice.
+  const portrait = () => canvas.height > canvas.width * 1.15;
+  const BAND_ASPECT = 1.25;   // band width : height
+  const scale = () => (portrait() ? Math.min(canvas.height, canvas.width / BAND_ASPECT) : canvas.height) / Math.max(1, config.height);
+  let ambCv = null, ambCtx = null;
+  function drawSurround(w, h, yOff, bandH) {
+    // Soft extension of the band into the dark space: downsample the band, upscale it (free blur), darken.
+    if (yOff < 4) return;
+    if (!ambCv) { ambCv = document.createElement("canvas"); ambCv.width = 24; ambCv.height = 12; ambCtx = ambCv.getContext("2d"); }
+    ambCtx.drawImage(canvas, 0, yOff, w, bandH, 0, 0, 24, 12);
+    ctx.save();
+    ctx.imageSmoothingQuality = "high";
+    ctx.globalAlpha = 0.55;
+    ctx.drawImage(ambCv, 0, 0, 24, 3, 0, 0, w, yOff + 2);                  // top edge, stretched up
+    ctx.drawImage(ambCv, 0, 9, 24, 3, 0, yOff + bandH - 2, w, h - yOff - bandH + 2);   // bottom edge, stretched down
+    ctx.globalAlpha = 1;
+    const g1 = ctx.createLinearGradient(0, 0, 0, yOff);
+    g1.addColorStop(0, "rgba(5,5,6,.96)"); g1.addColorStop(0.75, "rgba(5,5,6,.72)"); g1.addColorStop(1, "rgba(5,5,6,.35)");
+    ctx.fillStyle = g1; ctx.fillRect(0, 0, w, yOff);
+    const y2 = yOff + bandH, g2 = ctx.createLinearGradient(0, y2, 0, h);
+    g2.addColorStop(0, "rgba(5,5,6,.35)"); g2.addColorStop(0.25, "rgba(5,5,6,.72)"); g2.addColorStop(1, "rgba(5,5,6,.96)");
+    ctx.fillStyle = g2; ctx.fillRect(0, y2, w, h - y2);
+    ctx.restore();
+  }
   const viewWorld = () => canvas.width / scale();
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
-  window.TapestryView = { left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas };
+  window.TapestryView = { left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
   const panoramaWidth = () => (maxIndex + 1) * SW();
-  const viewLeft = () => (panMode === "live" ? liveScroll : shownPan());
+  let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
+  const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
 
   function decodeStrip(buf) {
     const view = new DataView(buf);
@@ -264,7 +291,9 @@
     let downX = 0, moved = false;
     tl.addEventListener("pointermove", (ev) => {
       const f = fracFromEvent(ev);
-      tlTip.textContent = f > 0.995 ? "Live" : fmtTime(timeAt(f * maxIndex));
+      const label = f > 0.995 ? "Live" : fmtTime(timeAt(f * maxIndex));
+      if (tlScrub && label !== tlTip.textContent && navigator.vibrate && ev.pointerType === "touch") navigator.vibrate(3);   // scrubber tick
+      tlTip.textContent = label;
       tlTip.style.left = (f * 100) + "%";
       if (tlScrub) { if (Math.abs(ev.clientX - downX) > 3) moved = true; if (moved) scrubTo(f); }
     });
@@ -289,6 +318,7 @@
   window.TapestryJump = jumpTo;
 
   function frame(ts) {
+    if (saver.on && lastTs && ts - lastTs < 30) { requestAnimationFrame(frame); return; }   // ~30fps cap
     if (!lastTs) lastTs = ts;
     const dt = Math.min(0.1, (ts - lastTs) / 1000);
     lastTs = ts;
@@ -301,8 +331,14 @@
       liveScroll = livePos - viewWorld();
     }
     stepPan(dt);
+    if (!gesture && (nudge !== 0 || nudgeVel !== 0)) {   // spring the nudge back to the live edge
+      const k = 220, c = 2 * Math.sqrt(k);
+      nudgeVel += (-k * nudge - c * nudgeVel) * dt;
+      nudge += nudgeVel * dt;
+      if (Math.abs(nudge) < 0.3 && Math.abs(nudgeVel) < 3) { nudge = 0; nudgeVel = 0; }
+    }
     {
-      const L = viewLeft() + viewWorld() / 2;
+      const L = viewLeft() - (panMode === "live" ? nudge : 0) + viewWorld() / 2;
       if (prevCenter !== null && dt > 0) {
         const v = (L - prevCenter) / dt;
         velS += (v - velS) * Math.min(1, dt * 10);
@@ -371,6 +407,7 @@
       }
     }
     ctx.restore();
+    if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
     // Motion blur that scales with scrub velocity (cheap: smear the frame onto itself).
     const blur = Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260)) * (window.devicePixelRatio || 1);
     if (blur > 0.5) {
@@ -518,33 +555,96 @@
     }
   }
 
+  // ---------- gestures ----------
+  // While live, input is "armed" rather than acted on: taps toggle the UI, small jiggles nudge the
+  // view elastically and spring back, and only a deliberate backward drag/scroll/flick leaves live.
+  const LEAVE_PX = 60;          // backward distance (CSS px) that commits to rewinding
+  const FLICK_PX_MS = 0.6;      // or a fast backward flick (CSS px per ms) past FLICK_MIN_PX
+  const FLICK_MIN_PX = 24;
+  const NUDGE_MAX = 36;         // max elastic offset in CSS px while still live
   let activePointer = null, lastPX = 0;
+  let gesture = null;           // {x0, t0, moved, wasIdle, armed, hist: [[t, x]]}
+  const cssToWorld = () => pxToWorld();
+  function commitRewind() {
+    // Leave live from wherever the nudge left us, then continue as a normal drag.
+    panPos = liveScroll + nudge; nudge = 0; nudgeVel = 0;
+    panMode = "live";
+    enterHistory();
+    panMode = "drag";
+    panVel = 0;
+    samples = [[performance.now(), panPos]];
+  }
   canvas.addEventListener("pointerdown", (ev) => {
     if (activePointer !== null) return;
     activePointer = ev.pointerId;
-    canvas.setPointerCapture(ev.pointerId);
-    enterHistory();
+    try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
+    lastPX = ev.clientX;
+    const armed = panMode === "live";
+    // Touch: the painting is never a scrubber. Taps toggle the UI; scrubbing is the timeline's job.
+    if (ev.pointerType === "touch") {
+      gesture = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), moved: 0, wasIdle: document.body.classList.contains("idle"), armed: true, touch: true, hist: [[performance.now(), ev.clientX]] };
+      return;
+    }
+    gesture = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), moved: 0, wasIdle: document.body.classList.contains("idle"), armed, hist: [[performance.now(), ev.clientX]] };
+    if (armed) return;
     panPos = shownPan();
     panMode = "drag";
     panVel = 0;
-    lastPX = ev.clientX;
     samples = [[performance.now(), panPos]];
   });
   canvas.addEventListener("pointermove", (ev) => {
-    if (ev.pointerId !== activePointer) return;
+    if (ev.pointerId !== activePointer || !gesture) return;
+    const now = performance.now();
+    gesture.moved = Math.max(gesture.moved, Math.hypot(ev.clientX - gesture.x0, ev.clientY - gesture.y0));
+    gesture.hist.push([now, ev.clientX]);
+    while (gesture.hist.length > 2 && now - gesture.hist[0][0] > 80) gesture.hist.shift();
+    if (gesture.touch) return;
+    if (gesture.armed) {
+      const back = ev.clientX - gesture.x0;   // dragging right = looking back in time
+      const h0 = gesture.hist[0], v = (ev.clientX - h0[1]) / Math.max(1, now - h0[0]);
+      if (back > LEAVE_PX || (back > FLICK_MIN_PX && v > FLICK_PX_MS)) {
+        gesture.armed = false;
+        commitRewind();
+        lastPX = ev.clientX;
+        return;
+      }
+      // elastic nudge, with resistance; forward is the live edge so it resists harder
+      const d = -back, lim = NUDGE_MAX * cssToWorld();
+      const raw = d * cssToWorld() * (d > 0 ? 0.25 : 0.45);
+      nudge = lim * Math.tanh(raw / lim); nudgeVel = 0;
+      lastPX = ev.clientX;
+      return;
+    }
     const dx = (ev.clientX - lastPX) * pxToWorld();
     lastPX = ev.clientX;
     // Apply drag in "shown" space so overscroll resists the finger.
     const lo = minPan(), hi = maxPan();
     const resist = panPos < lo || panPos > hi ? 0.45 : 1;
     panPos -= dx * resist;
-    const now = performance.now();
     samples.push([now, panPos]);
     while (samples.length > 2 && now - samples[0][0] > 100) samples.shift();
   });
   const endDrag = (ev) => {
     if (ev.pointerId !== activePointer) return;
     activePointer = null;
+    const g = gesture; gesture = null;
+    const isTap = g && g.moved < 8 && performance.now() - g.t0 < 350;
+    if (isTap && ev.type === "pointerup") {
+      // A tap toggles the chrome. (Pointerdown already revealed it if it was hidden.)
+      if (!g.wasIdle) setTimeout(() => document.body.classList.add("idle"), 0);
+    }
+    if (g && g.touch) return;
+    if (g && g.armed) {
+      // A fast backward flick released before reaching LEAVE_PX still counts.
+      const h = g.hist, a = h[0], b = h[h.length - 1];
+      const back = ev.clientX - g.x0, v = (b[1] - a[1]) / Math.max(1, b[0] - a[0]);
+      if (ev.type === "pointerup" && back > FLICK_MIN_PX && v > FLICK_PX_MS && performance.now() - b[0] < 80) {
+        commitRewind();
+        panVel = Math.min(4000, v * 1000 * pxToWorld()) * -1;   // carry the flick's momentum back in time
+        panMode = "glide";
+      }
+      return;   // otherwise we never left live: the nudge springs back in frame()
+    }
     const now = performance.now();
     const s0 = samples[0], s1 = samples[samples.length - 1];
     const span = (s1[0] - s0[0]) / 1000;
@@ -554,13 +654,35 @@
   };
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
+
+  // Wheel / trackpad: while live, accumulate backward scroll; commit past LEAVE_PX or on a fast flick.
+  let wheelAcc = 0, wheelAccAt = 0;
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
-    enterHistory();
+    const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? innerWidth : 1;
+    const dCss = (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY) * unit;
+    if (panMode === "live") {
+      const now = performance.now();
+      if (now - wheelAccAt > 220) wheelAcc = 0;      // a pause resets the intent
+      wheelAccAt = now;
+      wheelAcc += dCss;
+      const back = -wheelAcc;                          // negative delta = scroll back in time
+      if (back > LEAVE_PX || -dCss > 90) {
+        wheelAcc = 0;
+        commitRewind();
+        panMode = "wheel";
+        wheelIdleAt = now;
+      } else {
+        const lim = NUDGE_MAX * cssToWorld(), raw = -back * cssToWorld() * 0.35;
+        nudge = lim * Math.tanh(raw / lim); nudgeVel = 0;
+        clearTimeout(canvas._wheelRelease);
+        canvas._wheelRelease = setTimeout(() => { if (panMode === "live") wheelAcc = 0; }, 230);
+        return;   // springs back in frame() once wheel events stop feeding it
+      }
+    }
     if (panMode !== "wheel") { panPos = shownPan(); panVel = 0; }
     panMode = "wheel";
-    const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? viewWorld() : 1;
-    const d = (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) ? ev.deltaX : ev.deltaY) * unit * pxToWorld();
+    const d = dCss * pxToWorld();
     const lo = minPan(), hi = maxPan();
     panPos += d * (panPos < lo || panPos > hi ? 0.35 : 1);
     // Trackpads supply their own momentum; mice get a short glide.
@@ -958,4 +1080,49 @@
 
   connect();
   requestAnimationFrame(frame);
+})();
+
+// ---------- phones: slim pill → compose sheet, overflow, sheet drag-to-dismiss, chat in a sheet ----------
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const phone = matchMedia("(max-width: 560px)");
+  const body = document.body, cmd = $("cmd"), input = $("cmd-input"), more = $("more-btn"), drawer = $("drawer");
+  if (!cmd || !more) return;
+  // Compose: focusing the pill turns the dock into a sheet with attach + queue/now + send.
+  const setCompose = (on) => body.classList.toggle("composing", on && phone.matches);
+  input.addEventListener("focus", () => { setCompose(true); setMore(false); });
+  cmd.addEventListener("focusout", () => setTimeout(() => { if (!cmd.contains(document.activeElement) && !input.value) setCompose(false); }, 120));
+  cmd.addEventListener("submit", () => setTimeout(() => { if (!input.value) { input.blur(); setCompose(false); } }, 50));
+  document.addEventListener("pointerdown", (e) => {
+    if (body.classList.contains("composing") && !cmd.contains(e.target) && !input.value) { input.blur(); setCompose(false); }
+    if (body.classList.contains("more-open") && !cmd.contains(e.target)) setMore(false);
+  }, true);
+  // Overflow: secondary actions in a compact row above the pill.
+  function setMore(on) { const cap = document.querySelector(".dock .now"); if (cap) cap.style.visibility = on ? "hidden" : ""; body.classList.toggle("more-open", on); more.setAttribute("aria-expanded", on ? "true" : "false"); }
+  more.addEventListener("click", (e) => { e.preventDefault(); setMore(!body.classList.contains("more-open")); });
+  cmd.querySelectorAll(".sec").forEach((b) => b.addEventListener("click", () => phone.matches && b.id !== "speed-btn" && setTimeout(() => setMore(false), 150)));
+  // Chat lives in the sheet on phones.
+  const chat = $("chat"), chatHome = chat && chat.parentNode, chatPanel = $("panel-chat");
+  const placeChat = () => {
+    if (!chat || !chatPanel) return;
+    if (phone.matches && chat.parentNode !== chatPanel) chatPanel.appendChild(chat);
+    else if (!phone.matches && chat.parentNode !== chatHome) chatHome.appendChild(chat);
+  };
+  phone.addEventListener("change", placeChat); placeChat();
+  // Bottom sheet: drag the handle (or the head) down to dismiss.
+  const grab = $("drawer-grab"), head = drawer && drawer.querySelector(".drawer-head");
+  let y0 = null, dy = 0;
+  const start = (e) => { if (!phone.matches) return; y0 = e.clientY; dy = 0; drawer.style.transition = "none"; };
+  const move = (e) => { if (y0 === null) return; dy = Math.max(0, e.clientY - y0); drawer.style.transform = `translateY(${dy}px)`; };
+  const end = () => {
+    if (y0 === null) return; y0 = null;
+    drawer.style.transition = ""; drawer.style.transform = "";
+    if (dy > 90) drawer.classList.remove("open");
+  };
+  [grab, head].forEach((el) => el && el.addEventListener("pointerdown", (e) => { if (e.target.closest("button")) return; start(e); el.setPointerCapture && el.setPointerCapture(e.pointerId); }));
+  [grab, head].forEach((el) => el && el.addEventListener("pointermove", move));
+  [grab, head].forEach((el) => el && ["pointerup", "pointercancel"].forEach((t) => el.addEventListener(t, end)));
+  // Placeholder fits the pill.
+  const ph = () => { if (phone.matches) input.placeholder = "Where next?"; };
+  phone.addEventListener("change", ph); setTimeout(ph, 0); setTimeout(ph, 3000);
 })();
