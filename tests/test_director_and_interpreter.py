@@ -179,7 +179,7 @@ def test_scene_beats_unfold_across_hold():
 
 def test_variable_scene_length_by_weight():
     d = LiveDirector("a", hold=6, blend=4, loop=False)
-    assert d._hold_len(make_scene("x", hold=6, origin="auto")) == 4          # quiet filler moves on sooner
+    assert d._hold_len(make_scene("x", hold=6, origin="auto")) == 3          # capped at 4, jitter -1
     assert d._hold_len(make_scene("x", hold=6, origin="user")) == 4          # short scenes
     s = make_scene("x", hold=6, origin="user"); s["prio"] = True
     assert d._hold_len(s) == 4                                              # no donor perk on stage time
@@ -199,9 +199,9 @@ def test_no_priority_queue():
 def test_reactions_stretch_the_scene_on_stage():
     d = LiveDirector("a", hold=6, blend=4, loop=False)
     d._current = make_scene("x", hold=6, origin="auto"); d._active_since = 100
-    assert d._hold_len(d._current) == 4
+    assert d._hold_len(d._current) == 3
     d.heat = lambda since: 13 if since == 100 else 0
-    assert d._hold_len(d._current) == 6          # +2 for ~13 reactions
+    assert d._hold_len(d._current) == 5          # +2 for ~13 reactions
     d.heat = lambda since: 500
-    assert d._hold_len(d._current) == 6          # +2 max
+    assert d._hold_len(d._current) == 5          # +2 max
     assert d._hold_len(make_scene("y", hold=6, origin="auto")) == 4   # only the scene on stage
