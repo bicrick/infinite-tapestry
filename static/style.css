@@ -696,3 +696,15 @@ body.idle .kept { opacity: .45; }
 /* ∞ mark opens /about (the only entry point) */
 .brand-link { pointer-events:auto; display:inline-flex; border-radius:6px; transition:opacity .3s var(--ease); }
 .brand-link:hover { opacity:.7; }
+
+/* ---------- odometer (live · N watching) ---------- */
+.odo { display: inline-flex; position: relative; vertical-align: -0.1em; font-variant-numeric: tabular-nums; overflow: hidden;
+  height: 1.3em; line-height: 1.3em; transition: width 450ms cubic-bezier(.2,.8,.2,1); white-space: nowrap; }
+.odo-d { display: inline-block; flex: none; height: 1.3em; overflow: hidden; transition: opacity 450ms cubic-bezier(.2,.8,.2,1), transform 450ms cubic-bezier(.2,.8,.2,1);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22%, #000 78%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 22%, #000 78%, transparent 100%); }
+.odo-s { display: block; white-space: pre; text-align: center; line-height: 1.3em; will-change: transform; }
+.odo-d.rolling .odo-s { filter: blur(.35px); }
+.odo-d.enter { opacity: 0; transform: translateY(40%); }
+.odo-d.leave { opacity: 0; transform: translateY(-40%); }
+@media (prefers-reduced-motion: reduce) { .odo, .odo-d { transition: none !important; } .odo-d.rolling .odo-s { filter: none; } }
