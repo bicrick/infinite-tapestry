@@ -19,20 +19,22 @@
   const motes = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), v: 0.00004 + Math.random() * 0.00012, a: Math.random() }));
   // Sampled world points.
   let pts = null, tReady = 0;
+  const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
   const probe = document.createElement("canvas");
   const pg = probe.getContext("2d", { willReadFrequently: true });
   function sample() {
-    const cols = Math.round(Math.min(200, W() / 7)), rows = Math.round(cols * H() / W());
+    const cols = Math.round(Math.min(120, W() / 12)), rows = Math.round(cols * H() / W());
     probe.width = cols; probe.height = rows;
     pg.drawImage(view, 0, 0, cols, rows);
     const d = pg.getImageData(0, 0, cols, rows).data;
     let lum = 0;
     const out = [];
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-      const i = (y * cols + x) * 4, r = d[i], gg = d[i + 1], b = d[i + 2];
+      const i = (y * cols + x) * 4; let r = d[i], gg = d[i + 1], b = d[i + 2];
       lum += r + gg + b;
       if (r + gg + b < 30) continue;                              // no points in the void
-      for (let n = 0; n < 2; n++) out.push({ x: (x + Math.random()) / cols, y: (y + Math.random()) / rows, r, g: gg, b,
+      { const m = (r + gg + b) / 3, k = 1.55; r = clamp(m + (r - m) * k + 12); gg = clamp(m + (gg - m) * k + 12); b = clamp(m + (b - m) * k + 12); }
+      for (let n = 0; n < 1; n++) out.push({ x: (x + Math.random()) / cols, y: (y + Math.random()) / rows, r, g: gg, b,
         k: Math.random() * 0.85 + (1 - x / cols) * 0.15, j: (Math.random() - 0.5) * 0.06, s: 0.5 + Math.random() });
     }
     return { lum: lum / (cols * rows * 3), out, cell: W() / cols };
@@ -61,7 +63,7 @@
       for (const q of pts.out) {
         if (q.k > e * 1.15) continue;                           // points arrive in random order
         const local = Math.min(1, (e * 1.15 - q.k) * 3);
-        const rad = cell * q.s * (0.1 + 0.3 * local);
+        const rad = cell * q.s * (0.16 + 0.34 * local);
         const yy = (q.y + q.j * (1 - local)) * h;
         g.fillStyle = `rgba(${q.r},${q.g},${q.b},${0.18 + 0.55 * local})`;
         g.beginPath(); g.arc(q.x * w, yy, rad, 0, 6.283); g.fill();

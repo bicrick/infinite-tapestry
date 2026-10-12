@@ -211,6 +211,10 @@
       ctx.fillText(connected ? "Painting the first strips…" : "Connecting…", w / 2, h / 2);
       return;
     }
+    if (pendingSeek && maxIndex >= 0) {
+      const ps = pendingSeek; pendingSeek = null;
+      setTimeout(() => seekTo(ps[0], ps[1]), document.body.classList.contains("intro") ? 2400 : 300);
+    }
     const s = scale();
     const left = viewLeft();
     const firstIdx = Math.max(0, Math.floor(left / SW()) - 1);
@@ -223,6 +227,19 @@
       ensureDecoded(e);
       if (!e.bitmap) continue;
       ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
+    }
+    if (mark) {
+      const age = (performance.now() - mark.t0) / 1000;
+      const a = age < 0.6 ? age / 0.6 : age > 5.5 ? Math.max(0, 1 - (age - 5.5) / 1.5) : 1;
+      if (a <= 0) mark = null;
+      else {
+        const x0 = mark.from * SW() - left, x1 = (mark.to + 1) * SW() - left, H = h / s;
+        ctx.fillStyle = `rgba(0,0,0,${0.42 * a})`;
+        ctx.fillRect(-10, 0, Math.max(0, x0 + 10), H);
+        ctx.fillRect(x1, 0, Math.max(0, viewWorld() - x1 + 10), H);
+        ctx.fillStyle = `rgba(255,255,255,${0.75 * a})`;
+        ctx.fillRect(x0, 6, x1 - x0, 1.2);
+      }
     }
     ctx.restore();
     requestMissing(firstIdx - 8, lastIdx + 2);
@@ -291,6 +308,25 @@
     liveBtn.classList.remove("hidden");
   }
 
+  // ---------- permalinks: ?at=<strip>[&to=<strip>] ----------
+  let mark = null, seek = null;
+  function seekTo(from, to) {
+    if (maxIndex < 0) { pendingSeek = [from, to]; return; }
+    from = Math.max(0, Math.min(from, maxIndex)); to = Math.max(from, Math.min(to ?? from + 8, maxIndex));
+    enterHistory();
+    const span = (to - from + 1) * SW();
+    const target = Math.max(0, from * SW() - Math.max(0, (viewWorld() - span) / 2));
+    seek = { from: shownPan(), to: target, t0: performance.now(), dur: Math.min(2200, 600 + Math.sqrt(Math.abs(target - shownPan())) * 12) };
+    panMode = "seek"; panVel = 0;
+    mark = { from, to, t0: performance.now() + seek.dur * 0.6 };
+  }
+  let pendingSeek = null;
+  window.TapestrySeek = seekTo;
+  {
+    const q = new URLSearchParams(location.search);
+    if (q.has("at")) pendingSeek = [parseInt(q.get("at"), 10) || 0, q.has("to") ? parseInt(q.get("to"), 10) : null];
+  }
+
   function startReturn() {
     enterHistory();
     const dist = Math.abs(maxPan() - shownPan());
@@ -305,6 +341,13 @@
   function stepPan(dt) {
     if (panMode === "live") return;
     const lo = minPan(), hi = maxPan();
+    if (panMode === "seek") {
+      const t = Math.min(1, (performance.now() - seek.t0) / seek.dur);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;   // ease in-out cubic
+      panPos = seek.from + (Math.min(seek.to, hi) - seek.from) * e;
+      if (t >= 1) { panMode = "glide"; panVel = 0; }
+      return;
+    }
     if (panMode === "return") {
       const t = Math.min(1, (performance.now() - ret.t0) / ret.dur);
       panPos = ret.from + (hi - ret.from) * easeSpring(t);   // target tracks the moving live edge

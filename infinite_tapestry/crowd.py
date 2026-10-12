@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import time
+import urllib.parse
 import urllib.request
 from typing import Any, Callable
 
@@ -93,7 +94,21 @@ class Crowd:
             return
         rows = await asyncio.to_thread(
             self.supa.rest, "GET",
-            "ideas?status=eq.pending&order=boost_cents.desc,votes.desc,created_at.asc&limit=3&select=id,handle,body,votes,boost_cents")
+            "ideas?status=eq.pending&order=boost_cents.desc,votes.desc,created_at.asc&limit=3&select=id,handle,body,votes,boost_cents,image_path")
+        if not rows:
+            return
+        images: list[tuple[bytes, str]] = []
+        kept = []
+        for r in rows:
+            if r.get("image_path"):
+                img = await asyncio.to_thread(self._load_ref, r["image_path"])
+                if img is None:
+                    await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}", {"status": "rejected"}, "return=minimal")
+                    await asyncio.to_thread(self.supa.audit, "nsfw_ref_block", str(r["id"]), {"path": r["image_path"]})
+                    continue
+                images.append(img)
+            kept.append(r)
+        rows = kept
         if not rows:
             return
         ids = ",".join(str(r["id"]) for r in rows)
@@ -104,7 +119,7 @@ class Crowd:
             intent = "Weave these audience ideas into one continuous journey, in this order: " + \
                      " ; ".join(f"{i + 1}) {r['body']}" for i, r in enumerate(rows))
         st = self.director.state()
-        plan = await asyncio.to_thread(self.interpreter.plan, intent, st["target"] or st["current"], None)
+        plan = await asyncio.to_thread(self.interpreter.plan, intent, st["target"] or st["current"], None, images or None)
         by = ", ".join(dict.fromkeys("@" + r["handle"] for r in rows))
         from .guard import is_disallowed
 
@@ -113,6 +128,7 @@ class Crowd:
                   for s in plan["scenes"] if not is_disallowed(s["prompt"])]
         for sc in scenes:
             sc["by"] = by
+            sc["idea_ids"] = [r["id"] for r in rows]
         if scenes:
             self.director.add_user(scenes)
         await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})",
@@ -163,6 +179,41 @@ class Crowd:
         except Exception:
             logger.exception("self-stop failed")
 
+    def _load_ref(self, path: str) -> tuple[bytes, str] | None:
+        """Fetch a reference image (<=2 MB), screen it with the NSFW classifier. None = blocked/unusable."""
+        import io
+        from PIL import Image
+        try:
+            url = f"{self.supa.url}/storage/v1/object/public/idea-refs/{urllib.parse.quote(path)}"
+            data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "tapestry"}), timeout=15).read(2_100_000)
+            im = Image.open(io.BytesIO(data)).convert("RGB")
+            im.thumbnail((768, 768))
+            nsfw = getattr(self.generator, "nsfw", None)
+            if nsfw is not None and nsfw(im) >= getattr(self.generator.config, "nsfw_threshold", 0.6):
+                return None
+            buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
+            return buf.getvalue(), "image/jpeg"
+        except Exception:
+            logger.exception("reference image failed: %s", path)
+            return None
+
+    async def track_landing(self) -> None:
+        """Record where each idea landed on the tapestry (strip range) for permalinks."""
+        st = self.director.state()
+        idx = int(getattr(self.director, "_last_index", 0))
+        live = set()
+        for sc in (st.get("current_scene"), st.get("target_scene")):
+            for i in (sc or {}).get("idea_ids") or []:
+                live.add(i)
+        started = getattr(self, "_landing", {})
+        for i in live - set(started):
+            started[i] = idx
+            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{i}&start_strip=is.null", {"start_strip": idx}, "return=minimal")
+        for i in set(started) - live:
+            started.pop(i)
+            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{i}", {"end_strip": idx}, "return=minimal")
+        self._landing = started
+
     async def run(self) -> None:
         last_meter = 0.0
         while True:
@@ -171,6 +222,7 @@ class Crowd:
                     last_meter = time.monotonic()
                     await self.meter()
                 await self.pull_ideas()
+                await self.track_landing()
             except Exception:
                 logger.exception("crowd tick failed")
             await asyncio.sleep(8)
