@@ -107,4 +107,4 @@ async function readRaw(req) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-module.exports = { env, rest, userFromToken, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus };
+module.exports = { env, rest, userFromToken, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD };

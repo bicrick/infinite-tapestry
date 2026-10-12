@@ -23,3 +23,16 @@ def test_lod_levels_build_and_cache(tmp_path):
     l2 = Image.open(io.BytesIO(st.lod.get(2, 0)))
     assert l2.size == (64 * 32 // 16, 2)
     assert st.lod.path(1, 3).exists() and st.lod.path(2, 0).exists()
+
+
+def test_crop_section_cover_fit(tmp_path):
+    from infinite_tapestry.lod import crop_section
+    st = HistoryStore(tmp_path)
+    for i in range(6):
+        st.save_strip(Strip(index=i, width=40, height=32, overlap=8 if i else 0,
+                            jpeg=_jpeg((i * 40, 90, 200)), prompt="p", created_at=1000.0 + i))
+    data = crop_section(st, 32, 32, 1, 4, 300, 160)
+    assert data and Image.open(io.BytesIO(data)).size == (300, 160)
+    assert (tmp_path / "crops" / "1-4-300x160.jpg").exists()
+    assert crop_section(st, 32, 32, 1, 4, 300, 160) == data
+    assert crop_section(st, 32, 32, 50, 60, 300, 160) is None

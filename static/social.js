@@ -84,7 +84,11 @@ async function boot() {
     setTimeout(() => (needHandle ? $("handle-input") : $("auth-email")).focus(), 50);
   }
   S.openAuth = openAuth;
-  $("account-btn").addEventListener("click", openAuth);
+  // Signed in with a handle: your name opens your profile. Otherwise it opens sign-in.
+  $("account-btn").addEventListener("click", () => {
+    if (S.session && S.profile && S.profile.handle) location.href = "/u/" + encodeURIComponent(S.profile.handle);
+    else openAuth();
+  });
   $("auth-pop").addEventListener("click", (e) => { if (e.target === $("auth-pop")) $("auth-pop").classList.add("hidden"); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("auth-pop").classList.add("hidden"); });
   $("auth-form").addEventListener("submit", async (e) => {
@@ -183,7 +187,7 @@ async function boot() {
       const mine = S.session && it.user_id === S.session.user.id;
       li.innerHTML =
         `<button class="votes${myVotes.has(it.id) ? " on" : ""}" title="Vote">${UP}<span>${it.votes}</span></button>` +
-        `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}<div class="t">${esc(it.body)}</div><div class="who">@${esc(it.handle)}${it.status === "playing" ? " · weaving in now" : ""}` +
+        `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}<div class="t">${esc(it.body)}</div><div class="who"><a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a>${it.status === "playing" ? " · weaving in now" : ""}` +
         `${it.boost_cents ? ` · <span class="boosted">boosted $${(it.boost_cents / 100).toFixed(0)}</span>` : ""}</div></div>` +
         `<div class="acts">` +
         (it.status === "pending" ? `<button class="icon" data-a="boost" title="Boost with fuel">⚡︎</button>` : "") +
@@ -220,7 +224,7 @@ async function boot() {
       const li = document.createElement("li");
       li.className = "item";
       li.innerHTML = `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}` +
-        `<div class="t">${esc(it.body)}</div><div class="who">@${esc(it.handle)} · strip ${it.start_strip}</div>` +
+        `<div class="t">${esc(it.body)}</div><div class="who"><a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a> · strip ${it.start_strip}</div>` +
         `<div class="links"><a data-a="view">View where it landed</a><a data-a="copy">Copy link</a></div></div>`;
       li.addEventListener("click", async (e) => {
         if (e.target.dataset.a === "copy") {

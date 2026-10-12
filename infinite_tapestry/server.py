@@ -237,6 +237,21 @@ def create_app(
         return Response(data, media_type="image/jpeg",
                         headers={"Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*"})
 
+    @app.get("/crop/{a}/{b}.jpg")
+    async def crop(a: int, b: int, w: int = 600, h: int = 315) -> Response:
+        """A finished section of the tapestry as an image (thumbnails, share cards)."""
+        from .lod import crop_section
+
+        store = getattr(generator, "store", None)
+        w, h = max(64, min(1600, w)), max(64, min(1000, h))
+        if store is None or a < 0 or b < a or b >= generator.strip_index:
+            return Response(status_code=404)
+        data = await asyncio.to_thread(crop_section, store, config.strip_width, config.height, a, b, w, h)
+        if not data:
+            return Response(status_code=404)
+        return Response(data, media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*"})
+
     @app.get("/timeline")
     async def timeline_points(points: int = 300) -> dict[str, Any]:
         """Sampled (strip index, unix time) pairs so the client can label its scrubber with wall-clock time."""
