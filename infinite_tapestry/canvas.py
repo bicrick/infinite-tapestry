@@ -1,4 +1,4 @@
-"""Rolling panorama canvas: crop context, stitch, and feather seams."""
+"""Rolling horizontal canvas: crop context, stitch, and feather seams."""
 
 from __future__ import annotations
 
@@ -7,41 +7,20 @@ from PIL import Image
 
 
 def make_seed_image(height: int, width: int, seed: int = 0) -> Image.Image:
-    """Procedural starter panorama so the first inpaint has context."""
+    """Neutral, subject-free starter canvas (soft colored noise, no horizon).
+
+    On GPU it's fully repainted with the first prompt; in mock mode it just
+    gives the first strips something to continue from."""
     rng = np.random.default_rng(seed)
     yy, xx = np.meshgrid(
         np.linspace(0, 1, height, dtype=np.float32),
         np.linspace(0, 1, width, dtype=np.float32),
         indexing="ij",
-    )  # both (H, W)
-
-    # Soft sky-to-ground gradient with gentle noise for texture.
-    sky = np.stack(
-        [
-            0.45 + 0.25 * (1.0 - yy),
-            0.60 + 0.20 * (1.0 - yy),
-            0.85 + 0.10 * (1.0 - yy),
-        ],
-        axis=-1,
     )
-    ground = np.stack(
-        [
-            0.25 + 0.15 * yy,
-            0.40 + 0.10 * yy,
-            0.20 + 0.05 * yy,
-        ],
-        axis=-1,
-    )
-    horizon = 0.55
-    blend = (1.0 / (1.0 + np.exp(-(yy - horizon) * 25.0)))[..., None]
-    base = sky * (1.0 - blend) + ground * blend
-
+    hue = rng.uniform(0, 1, 3).astype(np.float32)
+    base = 0.35 + 0.15 * np.sin(2 * np.pi * (xx[..., None] * (1 + hue) + yy[..., None] * hue + hue * 6))
     noise = rng.normal(0.0, 0.03, size=base.shape).astype(np.float32)
-    # Low-frequency horizontal variation so mock mode looks less flat.
-    bands = (0.04 * np.sin(2 * np.pi * (3 + seed % 5) * xx + seed))[..., None]
-    base = np.clip(base + noise + bands, 0.0, 1.0)
-
-    arr = (base * 255).astype(np.uint8)
+    arr = (np.clip(base + noise, 0.0, 1.0) * 255).astype(np.uint8)
     return Image.fromarray(arr, mode="RGB")
 
 

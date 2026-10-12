@@ -28,16 +28,34 @@ logger = logging.getLogger(__name__)
 
 
 def seam_score(img: Image.Image, x0: int, x1: int) -> float:
-    """Worst column-to-column jump in [x0, x1) relative to that region's median
-    gradient. Natural edges are rarely full-height; seams are, so we use the
-    per-column mean over all rows (a full-height edge dominates it)."""
+    """How much [x0, x1) looks like an inpainting seam (a dead-straight cut).
+
+    A seam is a jump between two adjacent columns that is strong in nearly
+    EVERY row. Real vertical content (pillars, building edges, shelves) is
+    usually interrupted somewhere (floors, ceilings, overlaps, shading), so we
+    weight the column's mean jump by the fraction of rows where the jump is
+    strong, then divide by the region's median gradient."""
     import numpy as np
 
     a = np.asarray(img.convert("RGB"), dtype=np.float32)[:, max(0, x0 - 8):x1]
-    g = np.abs(np.diff(a, axis=1)).mean(axis=(0, 2))
-    if g.size == 0:
+    if a.shape[1] < 3:
         return 0.0
-    return float(g.max() / (np.median(g) + 1.0))
+    d = np.abs(np.diff(a, axis=1)).mean(axis=2)  # (H, W-1)
+    row_med = np.median(d, axis=1, keepdims=True) + 2.0
+    coverage = (d > 4.0 * row_med).mean(axis=0)  # fraction of rows with a strong jump
+    g = d.mean(axis=0)
+    # Sharpness: inpainting seams change in ONE column; painted edges (even
+    # crisp pillars) are anti-aliased over 2-4 px after the VAE decode.
+    gray = a.mean(axis=2)
+    wide = np.zeros_like(g)
+    wide[1:-1] = np.abs(gray[:, 3:] - gray[:, :-3]).mean(axis=0)
+    sharp = g / (wide + 1.0)
+    score = (
+        g / (np.median(g) + 1.0)
+        * np.clip((coverage - 0.5) / 0.4, 0.0, 1.0)
+        * np.clip((sharp - 0.6) / 0.3, 0.0, 1.0)
+    )
+    return float(score.max())
 
 
 class StripGenerator:

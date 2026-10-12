@@ -11,7 +11,7 @@ from typing import Callable, Deque
 
 @dataclass
 class Strip:
-    """One generated panorama strip ready for the client."""
+    """One generated tapestry strip ready for the client."""
 
     index: int
     width: int

@@ -20,12 +20,12 @@ API_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_MODEL = os.environ.get("TAPESTRY_HAIKU_MODEL", "claude-haiku-5-5")
 FALLBACK_MODEL = "claude-haiku-4-5"
 
-SYSTEM = """You direct an endless, slowly scrolling panoramic landscape painted strip by strip by Stable Diffusion 1.5 inpainting (512px tall, each strip 128px wide, about 2-3 seconds per strip).
+SYSTEM = """You direct an endless, horizontally scrolling image that Stable Diffusion 1.5 inpainting paints strip by strip (512px tall, each new strip 128px wide, about 2-3 seconds per strip). The world can be ANYTHING: landscapes, interiors, endless rooms or corridors, cities, crowds, machines, abstract or geometric art, microscopic worlds, outer space, underwater, surreal or dreamlike scenes, any illustration or painting style.
 The user types a loose intention for where the journey goes next. Turn it into a short plan of 1-4 scenes that travel there gradually and coherently from the current scene.
-Rules for each scene prompt: a concrete SD 1.5 prompt (under 60 words) describing a wide horizontal landscape vista with a consistent horizon line; comma-separated descriptors; include lighting, palette, and "panoramic landscape, wide shot"; no people close-up, no text, no frames, no split images.
-Neighbouring scenes MUST be visually continuous: keep the horizon height, camera angle and similar lighting, and change the palette and subject gradually. If the destination is very different from the current scene, insert intermediate bridge scenes. transition = strips used to blend into that scene (12-40; prefer 16-24, larger for big changes). hold = strips to stay on it before the next queued scene (8-60).
+Each scene prompt: a concrete SD 1.5 prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, written so it can extend sideways indefinitely (describe a continuous space or pattern, not a single centered object). Avoid text, frames, borders and split images.
+Continuity: continue the existing composition, perspective and lighting; change subject, palette and style gradually. For big jumps, invent bridging scenes that morph one into the other. transition = strips used to blend into that scene (12-40; prefer 16-24, larger for big changes). hold = strips to stay on it before the next queued scene (8-60).
 Reply with ONLY a JSON object, no prose:
-{"scenes":[{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":12,"hold":20}],"note":"one short sentence"}"""
+{"scenes":[{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":18,"hold":20}],"note":"one short sentence"}"""
 
 
 class PromptInterpreter:
@@ -125,7 +125,7 @@ def fallback_plan(intent: str, reason: str = "") -> dict[str, Any]:
         "scenes": [
             {
                 "title": intent[:40],
-                "prompt": f"{intent}, panoramic landscape, wide shot, detailed",
+                "prompt": f"{intent}, highly detailed",
                 "negative": "",
                 "transition": 18,
                 "hold": 20,

@@ -1,6 +1,6 @@
 # Infinite Tapestry
 
-An endlessly scrolling, low-res panorama that keeps changing as it moves. An open-source inpainting model generates each newly revealed strip just ahead of the viewport, so the scroll never ends.
+An endlessly scrolling, low-res tapestry of anything (rooms, cities, machines, oceans, space, abstract art, dreams) that keeps changing as it moves. An open-source inpainting model generates each newly revealed strip just ahead of the viewport, so the scroll never ends.
 
 ## How it works
 
@@ -24,7 +24,7 @@ pip install -e .
 python -m infinite_tapestry.main --mock --port 8000
 ```
 
-Open http://127.0.0.1:8000/ — you should see a scrolling mock panorama.
+Open http://127.0.0.1:8000/ — you should see a scrolling mock tapestry.
 
 ```bash
 pytest -q
@@ -110,7 +110,7 @@ All of these are CLI flags (and live in `infinite_tapestry/config.py`):
 | Flag | Default | Meaning |
 |---|---|---|
 | `--mock` | off | CPU fake generator |
-| `--height` | 512 | Panorama height (px) |
+| `--height` | 512 | Tapestry height (px) |
 | `--window-width` | 512 | Inpaint window width |
 | `--strip-width` | 128 | Newly revealed width per step |
 | `--overlap` | 32 | Seam feather (px) |

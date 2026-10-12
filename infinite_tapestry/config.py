@@ -16,7 +16,7 @@ class Config:
     strip_width: int = 128
     overlap: int = 96  # feather blend into prior context (smoothstep)
     seam_retries: int = 2  # regenerate a strip that shows a hard vertical cut
-    seam_threshold: float = 6.0  # max col-gradient / median above this = cut
+    seam_threshold: float = 12.0  # real cuts score 20+; shelves/pillars stay below ~10
     repaint_band: int = 64  # px of context the model repaints at the seam
     context_width: int = 384  # window_width - strip_width
 
@@ -51,18 +51,21 @@ class Config:
 
     # Prompt schedule: (cumulative_strips_at_which_prompt_starts, prompt)
     # Prompt drifts between consecutive entries based on strip index.
+    # Default playlist deliberately spans genres; nothing assumes a landscape.
     prompts: list[tuple[int, str]] = field(
         default_factory=lambda: [
-            (0, "a sunlit meadow with wildflowers, distant rolling hills, soft clouds, panoramic landscape"),
-            (24, "a dense misty forest with tall pines, mossy ground, dappled light, panoramic landscape"),
-            (48, "snowy mountain peaks above a frozen lake, cold blue sky, panoramic landscape"),
-            (72, "a desert canyon at golden hour, red rock formations, panoramic landscape"),
-            (96, "a futuristic desert city on the horizon, neon glow at dusk, panoramic landscape"),
+            (0, "an endless grand library, towering wooden bookshelves, rolling ladders, warm lamplight, dust in the air, highly detailed"),
+            (24, "inside a giant clockwork machine, brass gears and cogs, glowing furnace light, intricate mechanical detail"),
+            (48, "a coral reef deep underwater, schools of tropical fish, shafts of sunlight from above, vivid colors"),
+            (72, "a neon-lit cyberpunk street market at night, rain-slick pavement, glowing signs, crowds of silhouettes"),
+            (96, "abstract geometric art, bold interlocking shapes, bauhaus palette, clean flat color, modernist composition"),
+            (120, "a nebula in deep space, swirling violet and teal gas clouds, scattered stars, cosmic dust"),
+            (144, "a surreal dreamscape, melting clocks, floating staircases, soft pastel sky, painterly"),
         ]
     )
     negative_prompt: str = (
         "blurry, low quality, distorted, watermark, text, frame, border, "
-        "ugly, duplicate, mutant, collage, split screen, panel, seam"
+        "ugly, duplicate, collage, split screen, diptych, panel, seam"
     )
 
     def __post_init__(self) -> None:
