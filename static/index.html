@@ -98,23 +98,29 @@
         <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9.5" cy="10" r="1.6"/><path d="M5 17l4.5-4.5 3 3L15 13l4 4"/></svg>
         <input id="ref-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />
       </label>
-      <div class="seg" role="group" aria-label="When">
+      <div class="seg compose-only" role="group" aria-label="When">
         <button type="button" data-when="end" class="on">Queue</button>
         <button type="button" data-when="now">Now</button>
       </div>
-      <span class="sep"></span>
-      <button id="speed-btn" type="button" class="icon text" title="Speed (F to fast-forward)">Auto</button>
-      <button id="skip" type="button" class="icon" title="Next scene">
+      <span class="sep sec"></span>
+      <button id="speed-btn" type="button" class="icon text sec" title="Speed (F to fast-forward)">Auto</button>
+      <button id="skip" type="button" class="icon sec" title="Next scene">
         <svg viewBox="0 0 24 24"><path d="M6 6l8 6-8 6V6zm10 0h2v12h-2z"/></svg>
       </button>
-      <button id="hide-btn" type="button" class="icon" title="Hide interface (H) · or press and hold the canvas">
+      <button id="hide-btn" type="button" class="icon sec" title="Hide interface (H) · or press and hold the canvas">
         <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
       </button>
-      <button id="fullscreen-btn" type="button" class="icon" title="Full screen (Shift+F)">
+      <button id="fullscreen-btn" type="button" class="icon sec" title="Full screen (Shift+F)">
         <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
       </button>
-      <button id="export-btn" type="button" class="icon" title="Export tapestry (E)">
+      <button id="export-btn" type="button" class="icon sec" title="Export tapestry (E)">
         <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+      </button>
+      <button id="send-btn" type="submit" class="icon send phone-only" title="Send" aria-label="Send">
+        <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      </button>
+      <button id="more-btn" type="button" class="icon phone-only" title="More" aria-label="More" aria-expanded="false">
+        <svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>
       </button>
       <button id="queue-btn" type="button" class="icon" title="Up next">
         <svg viewBox="0 0 24 24"><path d="M4 7h12M4 12h12M4 17h8"/></svg><span id="queue-count" class="badge">0</span>
@@ -155,15 +161,18 @@
   </div>
 
   <aside id="drawer" class="drawer">
+    <div class="grab phone-only" id="drawer-grab" aria-hidden="true"><span></span></div>
     <div class="drawer-head">
       <nav class="tabs" id="tabs">
         <button data-tab="next" class="on">Next</button>
         <button data-tab="ideas" class="social-only hidden">Ideas</button>
         <button data-tab="fuel" class="social-only hidden">Fuel</button>
+        <button data-tab="chat" class="social-only phone-tab hidden">Chat</button>
         <button data-tab="audit" class="admin-only hidden">Audit</button>
       </nav>
       <button id="drawer-close" type="button" class="icon" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
+    <section class="panel hidden" id="panel-chat"></section>
     <section class="panel" id="panel-next">
     <div id="current-card" class="card current"></div>
     <ol id="queue-list" class="list"></ol>

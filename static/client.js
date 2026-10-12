@@ -1044,3 +1044,48 @@
   connect();
   requestAnimationFrame(frame);
 })();
+
+// ---------- phones: slim pill → compose sheet, overflow, sheet drag-to-dismiss, chat in a sheet ----------
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const phone = matchMedia("(max-width: 560px)");
+  const body = document.body, cmd = $("cmd"), input = $("cmd-input"), more = $("more-btn"), drawer = $("drawer");
+  if (!cmd || !more) return;
+  // Compose: focusing the pill turns the dock into a sheet with attach + queue/now + send.
+  const setCompose = (on) => body.classList.toggle("composing", on && phone.matches);
+  input.addEventListener("focus", () => { setCompose(true); setMore(false); });
+  cmd.addEventListener("focusout", () => setTimeout(() => { if (!cmd.contains(document.activeElement) && !input.value) setCompose(false); }, 120));
+  cmd.addEventListener("submit", () => setTimeout(() => { if (!input.value) { input.blur(); setCompose(false); } }, 50));
+  document.addEventListener("pointerdown", (e) => {
+    if (body.classList.contains("composing") && !cmd.contains(e.target) && !input.value) { input.blur(); setCompose(false); }
+    if (body.classList.contains("more-open") && !cmd.contains(e.target)) setMore(false);
+  }, true);
+  // Overflow: secondary actions in a compact row above the pill.
+  function setMore(on) { body.classList.toggle("more-open", on); more.setAttribute("aria-expanded", on ? "true" : "false"); }
+  more.addEventListener("click", (e) => { e.preventDefault(); setMore(!body.classList.contains("more-open")); });
+  cmd.querySelectorAll(".sec").forEach((b) => b.addEventListener("click", () => phone.matches && b.id !== "speed-btn" && setTimeout(() => setMore(false), 150)));
+  // Chat lives in the sheet on phones.
+  const chat = $("chat"), chatHome = chat && chat.parentNode, chatPanel = $("panel-chat");
+  const placeChat = () => {
+    if (!chat || !chatPanel) return;
+    if (phone.matches && chat.parentNode !== chatPanel) chatPanel.appendChild(chat);
+    else if (!phone.matches && chat.parentNode !== chatHome) chatHome.appendChild(chat);
+  };
+  phone.addEventListener("change", placeChat); placeChat();
+  // Bottom sheet: drag the handle (or the head) down to dismiss.
+  const grab = $("drawer-grab"), head = drawer && drawer.querySelector(".drawer-head");
+  let y0 = null, dy = 0;
+  const start = (e) => { if (!phone.matches) return; y0 = e.clientY; dy = 0; drawer.style.transition = "none"; };
+  const move = (e) => { if (y0 === null) return; dy = Math.max(0, e.clientY - y0); drawer.style.transform = `translateY(${dy}px)`; };
+  const end = () => {
+    if (y0 === null) return; y0 = null;
+    drawer.style.transition = ""; drawer.style.transform = "";
+    if (dy > 90) drawer.classList.remove("open");
+  };
+  [grab, head].forEach((el) => el && el.addEventListener("pointerdown", (e) => { if (e.target.closest("button")) return; start(e); el.setPointerCapture && el.setPointerCapture(e.pointerId); }));
+  [grab, head].forEach((el) => el && el.addEventListener("pointermove", move));
+  [grab, head].forEach((el) => el && ["pointerup", "pointercancel"].forEach((t) => el.addEventListener(t, end)));
+  // Placeholder fits the pill.
+  const ph = () => { if (phone.matches) input.placeholder = "Where next?"; };
+  phone.addEventListener("change", ph); setTimeout(ph, 0); setTimeout(ph, 3000);
+})();
