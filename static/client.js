@@ -861,8 +861,8 @@
     ev.preventDefault();
     const input = $("cmd-input");
     const text = input.value.trim();
-    if (!text) return;
     const S = window.TapestrySocial;
+    if (!text && !(S && S.hasRef && S.hasRef())) return;
     if (S && S.enabled && !S.isAdmin()) {  // production: ideas go to the shared pool
       S.submitIdea(text).then((ok) => { if (ok) input.value = ""; });
       return;

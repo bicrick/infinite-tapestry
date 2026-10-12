@@ -157,20 +157,50 @@ async function boot() {
   // ---------- ideas ----------
   // ---------- optional reference image ----------
   let refFile = null;
+  const refPlaceholder = $("cmd-input").placeholder;
+  async function attachRef(f) {
+    if (!f) return;
+    if (!/^image\/(jpeg|png|webp|gif|avif|heic)$/.test(f.type)) return toast("Use a JPEG, PNG or WebP image.");
+    if (f.size > 15e6) return toast("That image is too large.");
+    if (needLogin()) return;
+    try { refFile = await shrink(f); } catch (_) { return toast("Couldn't read that image."); }
+    $("ref-thumb").src = URL.createObjectURL(refFile);
+    $("ref-chip").classList.remove("hidden");
+    $("cmd-input").placeholder = "Add words, or just send the image";
+    $("cmd-input").focus();
+  }
+  function clearRef() { refFile = null; $("ref-chip").classList.add("hidden"); $("cmd-input").placeholder = refPlaceholder; }
+  S.attachRef = attachRef;
+  S.hasRef = () => !!refFile;
   $("ref-file").addEventListener("change", async () => {
     const f = $("ref-file").files[0];
     $("ref-file").value = "";
-    if (!f) return;
-    if (needLogin()) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return toast("JPEG, PNG or WebP only.");
-    if (f.size > 15e6) return toast("That image is too large.");
-    refFile = await shrink(f);
-    $("ref-thumb").src = URL.createObjectURL(refFile);
-    $("ref-chip").classList.remove("hidden");
-    $("cmd-input").placeholder = "Describe where to take it…";
-    $("cmd-input").focus();
+    attachRef(f);
   });
-  $("ref-clear").addEventListener("click", () => { refFile = null; $("ref-chip").classList.add("hidden"); });
+  $("ref-clear").addEventListener("click", clearRef);
+  // Desktop: drop an image anywhere; any device: paste an image.
+  const fine = matchMedia("(pointer: fine)");
+  const ov = document.createElement("div");
+  ov.id = "drop-ov"; ov.innerHTML = '<div class="drop-card"><span>Drop to use as reference</span></div>';
+  document.body.appendChild(ov);
+  const hasImg = (e) => [...(e.dataTransfer?.items || [])].some((i) => i.kind === "file" && /^image\//.test(i.type));
+  let dragDepth = 0;
+  window.addEventListener("dragenter", (e) => { if (!fine.matches || !hasImg(e)) return; e.preventDefault(); dragDepth++; ov.classList.add("on"); });
+  window.addEventListener("dragover", (e) => { if (hasImg(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } });
+  window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; ov.classList.remove("on"); } });
+  window.addEventListener("drop", (e) => {
+    dragDepth = 0; ov.classList.remove("on");
+    const f = [...(e.dataTransfer?.files || [])].find((x) => /^image\//.test(x.type));
+    if (!f) return;
+    e.preventDefault();
+    attachRef(f);
+  });
+  window.addEventListener("paste", (e) => {
+    const it = [...(e.clipboardData?.items || [])].find((i) => i.kind === "file" && /^image\//.test(i.type));
+    if (!it) return;
+    e.preventDefault();
+    attachRef(it.getAsFile());
+  });
   async function shrink(file) {  // downscale to <=1280px JPEG so uploads stay well under 2 MB
     const bmp = await createImageBitmap(file);
     const k = Math.min(1, 1280 / Math.max(bmp.width, bmp.height));
@@ -179,10 +209,12 @@ async function boot() {
     c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
     return await new Promise((r) => c.toBlob(r, "image/jpeg", 0.86));
   }
+  const IMAGE_ONLY = "Inspired by this image";
   const refUrl = (p) => `${CFG.supabaseUrl}/storage/v1/object/public/idea-refs/${p}`;
 
   S.submitIdea = async (text) => {
     if (needLogin()) return false;
+    if (!text && refFile) text = IMAGE_ONLY;  // image alone is a valid idea; Auto describes it
     let image = null;
     if (refFile) {
       image = `${S.session.user.id}/${Date.now().toString(36)}.jpg`;
@@ -191,7 +223,7 @@ async function boot() {
     }
     const { error } = await sb.rpc("submit_idea", { p_body: text, p_image: image });
     if (error) { toast(friendly(error)); return false; }
-    refFile = null; $("ref-chip").classList.add("hidden");
+    clearRef();
     window.dispatchEvent(new CustomEvent("tapestry:submitted"));
     toast(`Added to the pool <span class="muted">“${esc(text)}”</span>`, 3000);
     refreshIdeas();
