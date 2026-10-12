@@ -169,6 +169,12 @@ class StripGenerator:
             m[:, ctx_w - band:] = 255
             mask = Image.fromarray(m, mode="L")
         prompt_a, prompt_b, blend_t = self.director.frame_for(self._strip_index)
+        from .guard import is_blocked
+
+        if is_blocked(prompt_a):
+            prompt_a = "abstract soft colored mist"
+        if prompt_b and is_blocked(prompt_b):
+            prompt_b = None
         shown_prompt = prompt_b if (prompt_b and blend_t >= 0.5) else prompt_a
         seed = cfg.seed + self._strip_index
 
