@@ -68,6 +68,7 @@ class PromptScheduler:
 
 MIN_TRANSITION = 2  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
 MAX_TRANSITION = 4
+MAX_HOLD_USER = 4  # user ideas linger a bit longer (~15-20 s)
 MAX_HOLD = 3  # scenes should switch often; long holds read as stalls
 _scene_ids = __import__("itertools").count(1)
 
@@ -91,7 +92,7 @@ def make_scene(
         "prompt": prompt,
         "negative": str(negative or "").strip()[:400],
         "transition": None if transition is None else max(MIN_TRANSITION, min(MAX_TRANSITION, int(transition))),
-        "hold": None if hold is None else max(0, min(MAX_HOLD, int(hold))),
+        "hold": None if hold is None else max(0, min(MAX_HOLD_USER if origin == "user" else MAX_HOLD, int(hold))),
         "source": source[:200],
         "origin": origin if origin in ("user", "auto", "seed") else "user",
         "style": _norm_style(lora) if lora else _label(style),
@@ -173,7 +174,10 @@ class LiveDirector:
 
     def _hold_len(self, scene: dict) -> int:
         h = scene.get("hold")
-        return self.hold if h is None else int(h)
+        h = self.hold if h is None else int(h)
+        if scene.get("origin") == "user":  # ideas linger longer than Auto filler
+            return min(MAX_HOLD_USER, h + 2)
+        return h
 
     def _begin(self, scene: dict, at: int) -> None:
         if self._target is not None:
@@ -416,7 +420,7 @@ class LiveDirector:
                 if s.get("transition"):
                     s["transition"] = max(MIN_TRANSITION, min(MAX_TRANSITION, int(s["transition"])))
                 if s.get("hold") is not None:
-                    s["hold"] = max(0, min(MAX_HOLD, int(s["hold"])))
+                    s["hold"] = max(0, min(MAX_HOLD_USER if s.get("origin") == "user" else MAX_HOLD, int(s["hold"])))
             if self._current.get("hold") is not None:
                 self._current["hold"] = max(0, min(MAX_HOLD, int(self._current["hold"])))
             self.loop = bool(d.get("loop", False))
