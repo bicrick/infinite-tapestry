@@ -182,11 +182,11 @@ class LiveDirector:
         # Variable scene length (~20-45 s with the blend at ~2.9 s/strip): ideas linger a bit longer
         # than default, quiet Auto filler moves on sooner. Same for everyone, donor or not.
         if scene.get("origin") == "user":  # ideas linger longer than Auto filler
-            base = max(2, min(MAX_HOLD_USER, h))
+            base = 0 if h <= 0 else max(2, min(MAX_HOLD_USER, h))
         else:
             # a little variation: alternate scenes run one strip shorter/longer (2-4 strips)
             jitter = sum(map(ord, str(scene.get("title") or scene.get("prompt") or ""))) % 3 - 1
-            base = max(2, min(MAX_HOLD, h + jitter))
+            base = 0 if h <= 0 else max(2, min(MAX_HOLD, h + jitter))
         # Crowd heat: the scene on stage lingers while people react to it (+1 strip per ~6 reactions, up to +3).
         heat = getattr(self, "heat", None)
         if heat is not None and scene is self._current and base > 0:

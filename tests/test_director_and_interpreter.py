@@ -53,7 +53,7 @@ def test_skip_finishes_transition_and_advances():
 
 def test_parse_plan_and_fallback():
     p = parse_plan('ok {"scenes":[{"title":"T","prompt":"neon city","transition":99,"hold":"x"}],"note":"n"}')
-    assert p["scenes"][0]["transition"] == 6 and p["scenes"][0]["hold"] == 7
+    assert p["scenes"][0]["transition"] == 3 and p["scenes"][0]["hold"] == 3
     f = fallback_plan("ocean")
     assert f["source"] == "raw" and "ocean" in f["scenes"][0]["prompt"]
     assert PromptInterpreter(api_key="").plan("ocean")["source"] == "raw"
@@ -165,24 +165,24 @@ def test_user_idea_preempts_auto_hold_and_timings_halved():
     d.add_user([make_scene("user idea", transition=8, origin="user")])
     a, b, t = d.frame_for(2)  # weaving starts immediately, auto scene dropped
     assert b == "user idea" and t > 0
-    assert make_scene("x", transition=64, hold=200)["transition"] == 6
-    assert make_scene("x", transition=1, hold=200)["hold"] == 10  # user cap
-    assert make_scene("x", hold=200, origin="auto")["hold"] == 8
+    assert make_scene("x", transition=64, hold=200)["transition"] == 3
+    assert make_scene("x", transition=1, hold=200)["hold"] == 4  # user cap
+    assert make_scene("x", hold=200, origin="auto")["hold"] == 4
 
 
 def test_scene_beats_unfold_across_hold():
     d = LiveDirector("a", hold=0, blend=4, loop=False)
     d._current = make_scene("p0", hold=4, origin="user", beats=["b1", "b2", "b3"])  # user +2 → 6-strip hold
     d._active_since = 0
-    assert [d.frame_for(i)[0] for i in range(6)] == ["b1", "b1", "b2", "b2", "b3", "b3"]
+    assert [d.frame_for(i)[0] for i in range(4)] == ["b1", "b1", "b2", "b3"]
 
 
 def test_variable_scene_length_by_weight():
     d = LiveDirector("a", hold=6, blend=4, loop=False)
     assert d._hold_len(make_scene("x", hold=6, origin="auto")) == 4          # quiet filler moves on sooner
-    assert d._hold_len(make_scene("x", hold=6, origin="user")) == 8          # ideas linger
+    assert d._hold_len(make_scene("x", hold=6, origin="user")) == 4          # short scenes
     s = make_scene("x", hold=6, origin="user"); s["prio"] = True
-    assert d._hold_len(s) == 8                                              # no donor perk on stage time
+    assert d._hold_len(s) == 4                                              # no donor perk on stage time
 
 
 def test_no_priority_queue():
@@ -203,5 +203,5 @@ def test_reactions_stretch_the_scene_on_stage():
     d.heat = lambda since: 13 if since == 100 else 0
     assert d._hold_len(d._current) == 6          # +2 for ~13 reactions
     d.heat = lambda since: 500
-    assert d._hold_len(d._current) == 7          # +3 max
+    assert d._hold_len(d._current) == 6          # +2 max
     assert d._hold_len(make_scene("y", hold=6, origin="auto")) == 4   # only the scene on stage
