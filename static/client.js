@@ -121,7 +121,7 @@
   }
   const viewWorld = () => canvas.width / scale();
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
-  window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(), bh = config.height * s0; return { top: portrait() ? bandTopFor(canvas.height, bh) : 0, height: bh }; }, setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, coverage: () => coverage, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
+  window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(), bh = config.height * s0; return { top: portrait() ? bandTopFor(canvas.height, bh) : 0, height: bh }; }, setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, coverage: () => coverage, zoom: () => zoom, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -405,7 +405,7 @@
       prevCenter = L;
       // Zoom out with speed: ~0.5x at 3k world px/s, ~0.05x when humming through hours.
       const zt = COARSE ? 1 - Math.min(0.62, Math.max(0, (Math.abs(velS) - 500) / 5200))   // touch: unchanged
-        : Math.max(0.05, 1 / (1 + Math.max(0, Math.abs(velS) - 600) / 2600));
+        : Math.max(0.05, 1 / (1 + Math.max(0, Math.abs(velS) - 2500) / 4000));   // deep zoom only at turbo speeds
       // Spring zoom: out quickly as speed builds, snappy (slightly underdamped) back in on settle.
       if (zt < zoom) { zoom += (zt - zoom) * Math.min(1, dt * 6); zoomVel = 0; }
       else { const k = 90, c = 1.6 * Math.sqrt(k); zoomVel += (k * (zt - zoom) - c * zoomVel) * dt; zoom = Math.min(1.015, zoom + zoomVel * dt); }
@@ -588,7 +588,7 @@
   // Gentle spring: easeOutBack with a small overshoot.
   const easeSpring = (t) => { const c = 0.9, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
 
-  let driftVel = 0, driftAcc = 0, driftArm = 0;
+  let driftVel = 0, driftAcc = 0, driftArm = 0, turbo = 0;
   function holdDrift() { driftVel = 0; driftAcc = 0; driftArm = 0; }
   function stepPan(dt) {
     if (panMode === "live") return;
@@ -620,7 +620,9 @@
           if (panPos >= hi - 0.5) { panMode = "live"; live = true; liveBtn.classList.add("hidden"); }
         }
       } else {
-        panVel *= Math.exp(-(Math.abs(panVel) > 8000 ? 1.4 : FRICTION) * dt);
+        // Friction: firm at normal speeds (~0.4-0.7s glide), loose once in turbo so it hums.
+        if (performance.now() - wheelIdleAt > 250) turbo *= Math.exp(-1.2 * dt);
+        panVel *= Math.exp(-(7.5 - 6.3 * turbo) * dt);
         panPos += panVel * dt;
         if (Math.abs(panVel) < 4) panVel = 0;
         // Drift: once settled and the high-res strips are in, resume the slow forward drift with a
@@ -746,7 +748,10 @@
   // repeated flicks build up to "humming" through hours, then friction lets it coast down.
   let wheelAcc = 0, wheelAccAt = 0;
   const WHEEL_MIN = 10;          // CSS px of same-direction scroll before engaging (ignores accidental deltas)
-  const VMAX = 260000;           // world px/s ceiling (~hours of history in seconds)
+  const VMAX = 260000;           // world px/s ceiling in full turbo (~hours of history in seconds)
+  const VNORM = 4500;            // ceiling for ordinary scrolling
+  const TURBO_RATE = 2600;       // CSS px/s of wheel input (300ms window) that counts as turbo
+  const wheelHist = [];
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
     if (ev.ctrlKey) return;      // pinch-zoom gesture: ignore
@@ -765,10 +770,17 @@
     } else if (panMode !== "wheel" && panMode !== "glide") { panPos = shownPan(); panVel = 0; }
     panMode = "glide";
     const d = dCss * pxToWorld();
-    // Reversing direction brakes hard first; same direction accelerates (gain grows with speed).
-    if (panVel !== 0 && Math.sign(panVel) !== Math.sign(d)) panVel *= 0.35;
-    const gain = 9 * (1 + Math.abs(panVel) / 2500);
-    panVel = Math.max(-VMAX, Math.min(VMAX, panVel + d * gain));
+    // Wheel input rate over a short window decides normal vs turbo.
+    wheelHist.push([now, Math.abs(dCss)]);
+    while (wheelHist.length && now - wheelHist[0][0] > 300) wheelHist.shift();
+    const rate = wheelHist.reduce((a, x) => a + x[1], 0) / 0.3;          // CSS px/s of wheel input
+    if (rate > TURBO_RATE) turbo = Math.min(1, turbo + 0.07 * Math.min(3, rate / TURBO_RATE));   // sustained/rapid → builds
+    // Reversing direction brakes hard and drops turbo.
+    if (panVel !== 0 && Math.sign(panVel) !== Math.sign(d)) { panVel *= 0.2; turbo = 0; }
+    // Normal: linear, capped, short glide. Turbo: gain stacks with speed (nonlinear), high ceiling.
+    const gain = 5 * (1 + turbo * turbo * Math.abs(panVel) / 1200);
+    const cap = VNORM + (VMAX - VNORM) * turbo * turbo;
+    panVel = Math.max(-cap, Math.min(cap, panVel + d * gain));
     wheelIdleAt = now;
   }, { passive: false });
   function goLive() { if (!live || panMode !== "live") startReturn(); }
