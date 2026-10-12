@@ -235,21 +235,47 @@ class Crowd:
     # fallback of start_strip + 12.
     _ORPHAN_SPAN = 12
 
+    def _director_idea_ids(self) -> set:
+        """idea_ids still on the restored director (current + target + queue)."""
+        st = self.director.state()
+        ids: set = set()
+        scenes = list(st.get("items") or [])
+        for sc in (st.get("current_scene"), st.get("target_scene")):
+            if sc:
+                scenes.append(sc)
+        for sc in scenes:
+            for i in (sc or {}).get("idea_ids") or []:
+                ids.add(i)
+        return ids
+
     async def recover_interrupted(self) -> None:
         """On Crowd startup: fix ideas left mid-flight by a previous process.
 
-        - playing + start_strip IS NULL → pending (queued in-memory, never on stage)
+        Skip any idea whose id is still on the restored director (state.json
+        persists queue/current/target with idea_ids) — those will keep playing
+        and track_landing will finish them.
+
+        - playing + start_strip IS NULL → pending (was queued, never reached stage)
         - playing + start_strip set + end_strip IS NULL → played with
           end_strip = start_strip + 12 (reached the stage; close the range)
         """
-        await asyncio.to_thread(
-            self.supa.rest, "PATCH", "ideas?status=eq.playing&start_strip=is.null",
-            {"status": "pending"}, "return=minimal")
-        rows = await asyncio.to_thread(
+        live = self._director_idea_ids()
+        never_landed = await asyncio.to_thread(
+            self.supa.rest, "GET",
+            "ideas?status=eq.playing&start_strip=is.null&select=id") or []
+        for r in never_landed:
+            if r["id"] in live:
+                continue
+            await asyncio.to_thread(
+                self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
+                {"status": "pending"}, "return=minimal")
+        orphaned = await asyncio.to_thread(
             self.supa.rest, "GET",
             "ideas?status=eq.playing&start_strip=not.is.null&end_strip=is.null&select=id,start_strip") or []
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        for r in rows:
+        for r in orphaned:
+            if r["id"] in live:
+                continue
             start = int(r["start_strip"])
             await asyncio.to_thread(
                 self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",

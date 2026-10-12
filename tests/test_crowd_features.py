@@ -28,13 +28,15 @@ class FakeDirector:
     def __init__(self):
         self._last_index = 10
         self.cur = {"title": "a", "idea_ids": [7]}
+        self.target = None
+        self.items = []
         self.added = []
 
     def state(self):
         return {
             "current_scene": self.cur,
-            "target_scene": None,
-            "items": [],
+            "target_scene": self.target,
+            "items": list(self.items),
             "target": None,
             "current": "sky",
         }
@@ -98,19 +100,40 @@ def test_pull_ideas_rejects_when_all_scenes_disallowed(monkeypatch):
 
 def test_recover_interrupted_requeues_and_finalizes():
     s = FakeSupa(get_map={
+        "ideas?status=eq.playing&start_strip=is.null": [{"id": 2}],
         "ideas?status=eq.playing&start_strip=not.is.null": [{"id": 3, "start_strip": 100}],
     })
-    c = Crowd(s, FakeDirector(), None, None, lambda m: None, lambda: None, mock=True)
+    d = FakeDirector()
+    d.cur = {"title": "unrelated"}  # no idea_ids overlapping 2/3
+    c = Crowd(s, d, None, None, lambda m: None, lambda: None, mock=True)
     asyncio.run(c.recover_interrupted())
-    assert any(
-        call[0] == "PATCH" and call[1] == "ideas?status=eq.playing&start_strip=is.null"
-        and call[2] == {"status": "pending"}
-        for call in s.calls
-    )
+    assert ("PATCH", "ideas?id=eq.2", {"status": "pending"}) in s.calls
     fin = [call for call in s.calls if call[0] == "PATCH" and call[1] == "ideas?id=eq.3"]
     assert fin
     assert fin[-1][2]["status"] == "played"
     assert fin[-1][2]["end_strip"] == 112
+
+
+def test_recover_interrupted_skips_ideas_still_in_director():
+    """Director queue/current/target (with idea_ids) is restored from state.json — leave those alone."""
+    s = FakeSupa(get_map={
+        "ideas?status=eq.playing&start_strip=is.null": [{"id": 7}, {"id": 8}],
+        "ideas?status=eq.playing&start_strip=not.is.null": [
+            {"id": 9, "start_strip": 50},
+            {"id": 10, "start_strip": 60},
+        ],
+    })
+    d = FakeDirector()
+    d.cur = {"title": "now", "idea_ids": [7]}
+    d.target = {"title": "next", "idea_ids": [9]}
+    d.items = [{"title": "queued", "idea_ids": [10], "origin": "user"}]
+    c = Crowd(s, d, None, None, lambda m: None, lambda: None, mock=True)
+    asyncio.run(c.recover_interrupted())
+    patched = {(call[1], (call[2] or {}).get("status")) for call in s.calls if call[0] == "PATCH"}
+    assert ("ideas?id=eq.8", "pending") in patched  # never landed, not in director
+    assert ("ideas?id=eq.7", "pending") not in patched
+    assert not any(p[0] == "ideas?id=eq.9" for p in patched)
+    assert not any(p[0] == "ideas?id=eq.10" for p in patched)
 
 
 def test_fuel_state_includes_gpu_cents_per_hour():
