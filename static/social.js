@@ -36,7 +36,6 @@ async function boot() {
   const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
   const sb = createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, { auth: { persistSession: true, detectSessionInUrl: true, flowType: "pkce" } });
   S.sb = sb;
-  let myVotes = new Set();   // declared early: auth callbacks can render the pool before the pool section runs
   S.enabled = true;
   document.body.classList.add("social");
   document.querySelectorAll(".social-only").forEach((el) => el.classList.remove("hidden"));
