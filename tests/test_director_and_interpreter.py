@@ -166,4 +166,5 @@ def test_user_idea_preempts_auto_hold_and_timings_halved():
     a, b, t = d.frame_for(2)  # weaving starts immediately, auto scene dropped
     assert b == "user idea" and t > 0
     assert make_scene("x", transition=64, hold=200)["transition"] == 4
-    assert make_scene("x", transition=1, hold=200)["hold"] == 3
+    assert make_scene("x", transition=1, hold=200)["hold"] == 4  # user cap
+    assert make_scene("x", hold=200, origin="auto")["hold"] == 3
