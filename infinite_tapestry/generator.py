@@ -197,6 +197,11 @@ class StripGenerator:
         if hasattr(self.inpainter, "set_styles"):
             self.inpainter.set_styles(ramp(style_a, style_b, blend_t if prompt_b else 0.0))
         seed = cfg.seed + self._strip_index
+        if hasattr(self.inpainter, "set_ref") and hasattr(self.director, "ref_ids"):
+            from . import refs as _refs
+
+            rid, rscale = _refs.schedule(*self.director.ref_ids(), blend_t if prompt_b else 0.0)
+            self.inpainter.set_ref(rid, _refs.get(rid), rscale)
 
         # SD sometimes paints a hard vertical "panel" edge instead of growing
         # out of the context (most often mid-transition). Score each attempt by

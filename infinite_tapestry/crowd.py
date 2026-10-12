@@ -152,6 +152,13 @@ class Crowd:
                      " ; ".join(f"{i + 1}) {r['body']}" for i, r in enumerate(rows))
         st = self.director.state()
         plan = await asyncio.to_thread(self.interpreter.plan, intent, st["target"] or st["current"], None, images or None)
+        from . import refs as _refs
+
+        if images and (_refs.blocked(plan.get("image_flags")) or plan.get("source") != "haiku"):
+            # Vision moderation flagged (or couldn't check) the reference image: reject, never render it.
+            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})", {"status": "rejected"}, "return=minimal")
+            await asyncio.to_thread(self.supa.audit, "ref_block", ids, {"flags": plan.get("image_flags"), "source": plan.get("source")})
+            return
         by = ", ".join(dict.fromkeys("@" + r["handle"] for r in rows))
         from .guard import is_disallowed
 
@@ -168,6 +175,11 @@ class Crowd:
         for sc in scenes:
             sc["by"] = by
             sc["idea_ids"] = [r["id"] for r in rows]
+        if images:
+            # Steer the idea's own scene(s) with the (first) reference image via IP-Adapter.
+            for sc in scenes[-2:]:
+                _refs.put(sc["id"], images[0][0])
+                sc["ref"] = "style"
         self.director.add_user(scenes)
         # Stay `playing` until track_landing sees the idea leave the stage; only
         # store the plan here so a restart before landing can recover (see recover_interrupted).
