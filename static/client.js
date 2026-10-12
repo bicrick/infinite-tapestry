@@ -565,18 +565,32 @@
     evictFar(firstIdx, lastIdx);
   }
 
+  // 'live · N watching' with an odometer for N; the prefix/suffix only re-render when they change.
+  function setWatching(el, pre, post) {
+    if (!el || !window.Odometer) { if (el) el.textContent = pre + viewers + post; return; }
+    if (!el._odo) {
+      el.textContent = "";
+      el._pre = document.createElement("span"); el._num = document.createElement("span"); el._post = document.createElement("span");
+      el.append(el._pre, el._num, el._post);
+      el._odo = window.Odometer(el._num);
+    }
+    if (el._pre.textContent !== pre) el._pre.textContent = pre;
+    if (el._post.textContent !== post) el._post.textContent = post;
+    el._odo.set(viewers);
+  }
+  function resetWatching(el) { if (el && el._odo) { el._odo = null; } }
   function updateHud(speed, ahead) {
     const aheadStrips = Math.max(0, ahead / SW());
     statusEl.classList.toggle("off", !connected);
     statusEl.classList.toggle("warn", connected && live && aheadStrips < 1);
-    if (!connected) { statusText.textContent = "reconnecting"; return; }
+    if (!connected) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "reconnecting"; const mi = $("status-mini"); if (mi) mi.textContent = "reconnecting"; return; }
     const parts = [];
     const S = window.TapestrySocial;
     if (!DEBUG && !(S && S.isAdmin())) {
       parts.push(live ? "live" : "rewound");
       if (speedMult > 1) parts.push(speedMult + "×");
-      parts.push(viewers + " watching");
-      statusText.textContent = parts.join("  ·  ");
+      setWatching(statusText, parts.join("  ·  ") + "  ·  ", " watching");
+      setWatching($("status-mini"), parts.join("  ·  ") + "  ·  ", "");
       syncSpeedUi();
       return;
     }
@@ -585,7 +599,9 @@
     parts.push(aheadStrips.toFixed(1) + " ahead");
     parts.push(speed.toFixed(0) + " px/s" + (speedMult > 1 ? " · " + speedMult + "×" : ""));
     parts.push(viewers + (viewers === 1 ? " viewer" : " viewers"));
+    resetWatching(statusText);
     statusText.textContent = parts.join("  ·  ");
+    { const mi = $("status-mini"); if (mi) { resetWatching(mi); mi.textContent = parts.join("  ·  "); } }
     syncSpeedUi();
   }
   function syncSpeedUi() {
