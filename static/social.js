@@ -11,7 +11,8 @@ window.TapestrySocial = S;
 const ERR = {
   not_signed_in: "Sign in to add ideas, vote and chat.",
   handle_required: "Pick a handle first.",
-  one_active_idea: "You already have an idea in the pool. Withdraw it or wait until it plays.",
+  one_active_idea: "You have a few ideas waiting already. Give them a moment to play.",
+  too_many_pending: "You have a few ideas waiting already. Give them a moment to play.",
   content_not_allowed: "That one's outside what the tapestry paints.",
   banned: "This account is suspended.",
   muted: "You're muted for a little while.",
@@ -24,8 +25,8 @@ function friendly(e) {
   const key = Object.keys(ERR).find((k) => m.includes(k));
   if (key) return ERR[key];
   const rl = m.match(/rate_limited:?(\d+)?/);
-  if (rl) return rl[1] ? `Easy there. Try again in ${rl[1]}s.` : "Easy there. Try again shortly.";
-  if (m.includes("cooldown")) { const s = m.match(/(\d+)/); return `Next idea in ${s ? s[1] + "s" : "a moment"}.`; }
+  if (rl) return "That's a lot of ideas at once. Give it a few seconds.";
+  if (m.includes("cooldown")) return "One moment, then send it again.";
   return "Something went wrong. Try again.";
 }
 const toast = (h, ms) => W().toast(h, ms);
