@@ -10,3 +10,17 @@ def test_trim_auto_keeps_users_and_first_autos():
     items = d.state()["items"]
     assert [i["origin"] for i in items] == ["user", "auto", "auto"]
     assert not d.trim_auto(2)
+
+
+def test_ref_schedule_ramps_between_scenes():
+    from infinite_tapestry import refs
+    import io
+    from PIL import Image
+    buf = io.BytesIO(); Image.new("RGB", (64, 64), (200, 10, 10)).save(buf, "JPEG")
+    refs.put(901, buf.getvalue())
+    assert refs.schedule(None, None, 0.0) == (None, 0.0)
+    rid, sc = refs.schedule(None, 901, 1.0)
+    assert rid == 901 and abs(sc - refs.STYLE_SCALE) < 1e-6
+    assert refs.schedule(901, None, 0.0)[0] == 901
+    assert refs.blocked(["minor"]) and refs.blocked(["Sexual"]) and not refs.blocked(["real_face"])
+    assert refs.face_mode_allowed("u", {}) is False
