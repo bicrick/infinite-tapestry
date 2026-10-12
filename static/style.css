@@ -568,3 +568,16 @@ body.hist-cap .dock .now .bar { visibility: hidden; }
 /* Non-tapestry pages (profile, confirm) scroll normally: the app shell locks html/body. */
 html.page, html:has(body.page) { overflow: auto; height: auto; overscroll-behavior-y: auto; }
 html.page body, body.page { overflow: visible; height: auto; min-height: 100%; touch-action: auto; }
+
+/* ---------- offline splash ---------- */
+.offline { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; pointer-events: none;
+  opacity: 0; visibility: hidden; transition: opacity .9s var(--ease), visibility 0s linear .9s; background: var(--bg-deep); }
+body.offline-on .offline { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .9s var(--ease), visibility 0s; }
+.off-bg { position: absolute; inset: -40px; background: center/cover no-repeat; filter: blur(40px) saturate(1.1); opacity: .35; }
+.off-bg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent, var(--bg-deep) 75%); }
+.off-card { position: relative; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px; }
+.off-mark { width: 34px; opacity: .7; filter: var(--mark-filter); margin-bottom: 8px; }
+.off-title { font-size: 17px; font-weight: 500; letter-spacing: -.01em; color: var(--fg); }
+.off-sub { font-size: 13px; color: var(--muted); }
+body.offline-on #view { filter: blur(18px) brightness(.8); transition: filter .9s var(--ease); }
+body.offline-on #intro, body.offline-on .ui, body.offline-on .amb { opacity: 0 !important; transition: opacity .5s; }
