@@ -1,7 +1,6 @@
 // Designed 1200x630 link-preview cards (World Labs-style minimalism) over real tapestry crops.
 // One source of truth for the static variants (pre-rendered) and the live /api/og cards.
 const fs = require("fs"), path = require("path");
-const { ImageResponse } = require("@vercel/og");
 
 const font = (w) => fs.readFileSync(path.join(__dirname, "fonts", `inter-${w}.woff`));
 const FONTS = [300, 400, 500].map((w) => ({ name: "Inter", data: font(w), weight: w, style: "normal" }));
@@ -61,6 +60,7 @@ function tree({ v = "full", img, band, line, sub, by, viewers = 0 }) {
 }
 
 async function render(opts) {
+  const { ImageResponse } = await import("@vercel/og");   // ESM-only package
   const r = new ImageResponse(tree(opts), { width: 1200, height: 630, fonts: FONTS });
   return Buffer.from(await r.arrayBuffer());
 }
