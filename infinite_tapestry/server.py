@@ -157,6 +157,21 @@ def create_app(
         crowd = Crowd(supa, generator.director, interpreter, generator,
                       broadcast=lambda m: broadcast(m), on_change=lambda: broadcast_director(), mock=config.mock)
     app.state.crowd = crowd
+    if generator is not None:
+        def _on_flag(scene: dict) -> None:
+            """Explicit output after one repaint: strike the source idea(s) and log it (runs on the generator thread)."""
+            ids = [i for i in (scene or {}).get("idea_ids") or []]
+            logger.warning("explicit-output strike: scene=%r ideas=%s", (scene or {}).get("title"), ids)
+            if supa is None:
+                return
+            try:
+                if ids:
+                    supa.rest("PATCH", "ideas?id=in.(%s)" % ",".join(str(i) for i in ids), {"status": "rejected"}, "return=minimal")
+                supa.audit("nsfw_output_strike", ",".join(str(i) for i in ids),
+                           {"title": (scene or {}).get("title"), "by": (scene or {}).get("by"), "origin": (scene or {}).get("origin")})
+            except Exception:
+                logger.exception("strike bookkeeping failed")
+        generator.on_flag = _on_flag
     if autopilot and crowd:
         autopilot.pressure = lambda: len(crowd.pending)
 
@@ -496,8 +511,10 @@ def create_app(
 
                 from .guard import is_sexual
 
-                if is_blocked(text) or is_sexual(text):
-                    await notice("Anything goes here except sexual content. Try another destination.")
+                from .guard import hard_block_reason
+
+                if hard_block_reason(text):
+                    await notice("Anything goes here except sexual content, minors and slurs. Try another destination.")
                     return
                 d = generator.director
                 if len(d.state()["items"]) >= MAX_QUEUE:

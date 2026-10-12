@@ -131,7 +131,13 @@ class Crowd:
             return
         images: list[tuple[bytes, str]] = []
         kept = []
+        from .guard import hard_block_reason
         for r in rows:
+            why = hard_block_reason(r.get("body") or "")
+            if why:
+                await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}", {"status": "rejected"}, "return=minimal")
+                await asyncio.to_thread(self.supa.audit, "idea_hard_block", str(r["id"]), {"reason": why})
+                continue
             if r.get("image_path"):
                 img = await asyncio.to_thread(self._load_ref, r["image_path"])
                 if img is None:

@@ -24,3 +24,21 @@ def test_ref_schedule_ramps_between_scenes():
     assert refs.schedule(901, None, 0.0)[0] == 901
     assert refs.blocked(["minor"]) and refs.blocked(["Sexual"]) and not refs.blocked(["real_face"])
     assert refs.face_mode_allowed("u", {}) is False
+
+
+def test_hard_blocks_only():
+    from infinite_tapestry.guard import hard_block_reason
+    assert hard_block_reason("feces land") is None
+    assert hard_block_reason("cartoon gore zombie buffet, vomit fountains") is None
+    assert hard_block_reason("naked party") == "sexual"
+    assert hard_block_reason("kids on a slide") == "minor"
+
+
+def test_drop_flagged_resumes_auto():
+    from infinite_tapestry.prompts import LiveDirector, make_scene
+    d = LiveDirector("seed", hold=0, blend=4, loop=False)
+    d.add_user([make_scene("bad idea", origin="user")])
+    d.frame_for(0)
+    assert d.state()["target"] == "bad idea"
+    d.drop_flagged(1)
+    assert d.state()["target"] is None

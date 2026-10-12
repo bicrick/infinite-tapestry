@@ -88,6 +88,7 @@ class StripGenerator:
         # P(nsfw) classifier for generated pixels (GPU only; tests may inject one).
         self.nsfw = None
         self.nsfw_hits = 0
+        self.on_flag = None  # callback(scene) when a scene's strip stays explicit after one repaint
         if not config.mock and getattr(config, "nsfw_model", ""):
             from .nsfw import load_classifier
 
@@ -246,8 +247,8 @@ class StripGenerator:
                 self.nsfw_hits += 1
                 logger.warning("Strip %d flagged NSFW (p=%.2f); regenerating", self._strip_index, p)
                 retry = self.inpainter.generate(
-                    image=window, mask=mask, prompt=prompt_a,
-                    negative_prompt=self.director.negative_for(blend_t) + ", nude, naked, sexual, nsfw, cleavage",
+                    image=window, mask=mask, prompt=prompt_a + ", everyone fully clothed",
+                    negative_prompt=self.director.negative_for(blend_t) + ", nude, naked, sexual, nsfw, cleavage, bare skin",
                     seed=seed + 104729, prompt_b=prompt_b, t=blend_t,
                 )
                 if retry.size != window.size:
@@ -256,12 +257,30 @@ class StripGenerator:
                 if self.nsfw(r_region) < cfg.nsfw_threshold:
                     generated = retry
                 else:
-                    from .nsfw import obscure
+                    # Still flagged: the flagged pixels never leave this function (no broadcast,
+                    # no storage). Drop the scene, strike its source idea, repaint as Auto filler.
+                    logger.warning("Strip %d still NSFW after retry; falling back to Auto", self._strip_index)
+                    try:
+                        if self.on_flag:
+                            self.on_flag(self.director.flagged_scene() if hasattr(self.director, "flagged_scene") else scene_meta)
+                    except Exception:
+                        logger.exception("on_flag failed")
+                    if hasattr(self.director, "drop_flagged"):
+                        self.director.drop_flagged(self._strip_index)
+                    safe = self.director.safe_prompt() if hasattr(self.director, "safe_prompt") else "cinematic photo, empty misty landscape"
+                    generated = self.inpainter.generate(
+                        image=window, mask=mask, prompt=safe,
+                        negative_prompt=self.director.negative_for(0.0) + ", nude, naked, sexual, nsfw, people",
+                        seed=seed + 7, prompt_b=None, t=0.0)
+                    if generated.size != window.size:
+                        generated = generated.resize(window.size, Image.Resampling.LANCZOS)
+                    g_region = generated.crop((max(0, ctx_w - band), 0, cfg.window_width - margin, cfg.height))
+                    if self.nsfw(g_region) >= cfg.nsfw_threshold:  # last resort: plain blur of the fallback
+                        from .nsfw import obscure
 
-                    logger.warning("Strip %d still NSFW after retry; blurring", self._strip_index)
-                    x0 = max(0, ctx_w - band)
-                    generated = generated.copy()
-                    generated.paste(obscure(r_region), (x0, 0))
+                        generated = generated.copy()
+                        generated.paste(obscure(g_region), (max(0, ctx_w - band), 0))
+                    shown_prompt, scene_meta = safe, {"title": "Auto", "origin": "auto"}
 
         if generated.size != window.size:
             generated = generated.resize(window.size, Image.Resampling.LANCZOS)

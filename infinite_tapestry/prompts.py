@@ -443,6 +443,30 @@ class LiveDirector:
             self.loop = bool(d.get("loop", False))
             _scene_ids = __import__("itertools").count(int(d.get("next_id", 1)) + 1)
 
+    def flagged_scene(self) -> dict:
+        """The scene currently being painted (target if blending), for strike bookkeeping."""
+        with self._lock:
+            return dict(self._target or self._current or {})
+
+    def drop_flagged(self, at: int) -> None:
+        """Abandon the scene being painted after an explicit-content flag; resume on Auto."""
+        with self._lock:
+            if self._target is not None:
+                self._target = None
+            else:
+                safe = next((dict(x) for x in reversed(self.history) if x.get("origin") == "auto"), None)
+                if safe:
+                    self._current = safe
+            self._active_since = at
+
+    def safe_prompt(self) -> str:
+        """Most recent Auto scene prompt to repaint with after an explicit-content flag."""
+        with self._lock:
+            for s in reversed(self.history + self._queue):
+                if s.get("origin") == "auto" and s.get("prompt"):
+                    return s["prompt"]
+        return "cinematic photo, wide empty desert highway at dusk, 24mm"
+
     def caption(self) -> dict:
         """Scene the most recent strip mostly shows (target once past halfway through a blend)."""
         with self._lock:
