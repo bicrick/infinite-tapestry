@@ -1,5 +1,6 @@
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from infinite_tapestry.buffer import StripBuffer
@@ -55,6 +56,43 @@ def test_parse_plan_and_fallback():
     f = fallback_plan("ocean")
     assert f["source"] == "raw" and "ocean" in f["scenes"][0]["prompt"]
     assert PromptInterpreter(api_key="").plan("ocean")["source"] == "raw"
+
+
+def test_parse_plan_salvages_truncated_scenes_json():
+    """Haiku 5.5 thinking can truncate mid-object; keep complete scenes already emitted."""
+    truncated = (
+        '{"scenes":[{"title":"Neon Drift","prompt":"neon city, wet streets, cyan glow",'
+        '"negative":"","transition":20,"hold":16,"style":"pixel art"},'
+        '{"title":"Half","prompt":"forest path under moonlight, mist rolling in from the'
+    )
+    p = parse_plan(truncated)
+    assert len(p["scenes"]) == 1
+    assert p["scenes"][0]["title"] == "Neon Drift"
+    assert p["scenes"][0]["prompt"].startswith("neon city")
+    assert p["scenes"][0]["style"] == "pixel art"
+
+
+def test_parse_plan_valid_still_parses():
+    raw = (
+        '{"scenes":['
+        '{"title":"One","prompt":"endless dunes at dusk","transition":18,"hold":20,"style":"none"},'
+        '{"title":"Two","prompt":"crystal caves, blue light","transition":22,"hold":14,"style":"watercolor"}'
+        '],"note":"drifting inland"}'
+    )
+    p = parse_plan(raw)
+    assert len(p["scenes"]) == 2
+    assert p["note"] == "drifting inland"
+    assert p["scenes"][1]["style"] == "watercolor"
+
+
+def test_parse_plan_refusal_and_empty_still_raise():
+    with pytest.raises(ValueError, match="refusal"):
+        parse_plan("I can't help create that content.")
+    with pytest.raises(ValueError, match="empty plan"):
+        parse_plan('{"scenes":[],"note":"nothing"}')
+    with pytest.raises(ValueError, match="no JSON in reply"):
+        # Truncated before any closing brace → nothing extractable.
+        parse_plan('{"scenes":[{"title":"T","prompt":"trunc')
 
 
 def test_style_note_encourages_periodic_styles_and_lora_preference():

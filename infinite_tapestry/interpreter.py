@@ -78,6 +78,9 @@ class PromptInterpreter:
             {
                 "model": model,
                 "max_tokens": max_tokens,
+                # Haiku 5.5 adaptive thinking counts toward max_tokens; disable so
+                # short JSON plans are not truncated mid-object.
+                "thinking": {"type": "disabled"},
                 "system": system,
                 "messages": [{"role": "user", "content": user}],
             }
@@ -108,7 +111,7 @@ class PromptInterpreter:
         last: Exception | None = None
         for model in dict.fromkeys([self.model, FALLBACK_MODEL]):
             try:
-                plan = parse_plan(self._call(model, user, system=AUTO_SYSTEM, max_tokens=700))
+                plan = parse_plan(self._call(model, user, system=AUTO_SYSTEM, max_tokens=1600))
                 plan["source"], plan["model"] = "haiku", model
                 return plan
             except urllib.error.HTTPError as e:
@@ -173,7 +176,13 @@ def parse_plan(text: str) -> dict[str, Any]:
     m = re.search(r"\{.*\}", text, re.S)
     if not m:
         raise ValueError("no JSON in reply")
-    data = json.loads(m.group(0))
+    blob = m.group(0)
+    try:
+        data = json.loads(blob)
+    except json.JSONDecodeError:
+        # Truncated model output (e.g. thinking ate max_tokens): keep any complete
+        # scene objects already present in the scenes array.
+        data = _salvage_truncated_plan(blob)
     scenes = []
     for s in data.get("scenes", [])[:6]:
         prompt = str(s.get("prompt", "")).strip()
@@ -194,6 +203,58 @@ def parse_plan(text: str) -> dict[str, Any]:
     if any(is_refusal(sc["prompt"]) for sc in scenes) or is_refusal(str(data.get("note", ""))):
         raise ValueError("refusal")
     return {"scenes": scenes, "note": str(data.get("note", ""))[:200]}
+
+
+def _salvage_truncated_plan(blob: str) -> dict[str, Any]:
+    """Extract complete scene objects from a truncated plan JSON blob."""
+    sm = re.search(r'"scenes"\s*:\s*\[', blob)
+    if not sm:
+        raise ValueError("no JSON in reply")
+    scenes: list[dict[str, Any]] = []
+    i = sm.end()
+    depth = 0
+    start: int | None = None
+    in_string = False
+    escape = False
+    while i < len(blob):
+        c = blob[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == '"':
+                in_string = False
+        else:
+            if c == '"':
+                in_string = True
+            elif c == "{":
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0 and start is not None:
+                    try:
+                        obj = json.loads(blob[start : i + 1])
+                        if isinstance(obj, dict):
+                            scenes.append(obj)
+                    except json.JSONDecodeError:
+                        pass
+                    start = None
+                elif depth < 0:
+                    break
+            elif c == "]" and depth == 0:
+                break
+        i += 1
+    note = ""
+    nm = re.search(r'"note"\s*:\s*"((?:[^"\\]|\\.)*)"', blob)
+    if nm:
+        try:
+            note = json.loads(f'"{nm.group(1)}"')
+        except json.JSONDecodeError:
+            note = nm.group(1)
+    return {"scenes": scenes, "note": note}
 
 
 def _clamp(v: Any, lo: int, hi: int, default: int) -> int:
