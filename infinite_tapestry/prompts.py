@@ -383,9 +383,9 @@ class LiveDirector:
                     self._promote(nxt)
                     self._target = None
                     self._active_since = strip_index
-                    return self._beat(self._current, strip_index - self._active_since), None, 0.0
-                return self.current, self.target, t
-            return self.current, None, 0.0
+                    return self._beat(self._current, 0), None, 0.0
+                return self._beat(self._current, 0, last=True), self._beat(self._target, 0), t
+            return self._beat(self._current, strip_index - self._active_since), None, 0.0
 
     def styles_for(self, t: float) -> tuple[str, str | None]:
         """(style of current scene, style of target scene or None) — call right after frame_for."""
