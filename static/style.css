@@ -59,3 +59,31 @@ html, body {
 #stats.low {
   color: #c4a35a;
 }
+
+#view:active { cursor: grabbing; }
+.hidden { display: none !important; }
+#live-btn {
+  position: fixed; right: 18px; bottom: 18px; z-index: 3;
+  padding: 10px 16px; border-radius: 20px; border: 0;
+  background: var(--accent); color: #fff; font-size: 0.95rem; cursor: pointer;
+}
+#panel {
+  position: fixed; left: 14px; bottom: 14px; z-index: 3; width: min(380px, calc(100vw - 28px));
+  background: rgba(10, 14, 18, 0.82); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; font-size: 0.85rem;
+}
+#panel.collapsed #panel-body { display: none; }
+#panel-toggle { width: 100%; text-align: left; background: none; border: 0; color: var(--fg); padding: 8px 12px; cursor: pointer; }
+#panel-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+#panel .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#panel .lbl { color: var(--muted); min-width: 44px; }
+#panel button { background: #22303c; color: var(--fg); border: 1px solid #33424f; border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+#panel button.active { background: var(--accent); border-color: var(--accent); }
+#panel input[type=text], #panel textarea, #panel input[type=number] {
+  background: #0f151b; color: var(--fg); border: 1px solid #33424f; border-radius: 6px; padding: 5px 7px; font: inherit;
+}
+#panel input[type=text] { flex: 1; }
+#panel input[type=number] { width: 64px; }
+#panel textarea { width: 100%; resize: vertical; }
+#now-prompt { flex: 1; color: var(--fg); font-style: italic; }
+#panel .hint { color: var(--muted); font-size: 0.75rem; }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Infinite Tapestry</title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="hud">
@@ -12,6 +12,42 @@
     <div id="stats">connecting…</div>
   </div>
   <canvas id="view"></canvas>
-  <script src="/static/client.js"></script>
+  <button id="live-btn" class="hidden" type="button">Return to live ▶</button>
+  <div id="panel">
+    <button id="panel-toggle" type="button">Controls ▾</button>
+    <div id="panel-body">
+      <div class="row">
+        <span class="lbl">Speed</span>
+        <button class="spd active" data-m="1">1x</button>
+        <button class="spd" data-m="2">2x</button>
+        <button class="spd" data-m="4">4x</button>
+        <button class="spd" data-m="8">8x</button>
+      </div>
+      <div class="row now"><span class="lbl">Now</span><span id="now-prompt">…</span></div>
+      <form id="prompt-form" class="row">
+        <input id="prompt-input" type="text" placeholder="Describe the next landscape…" autocomplete="off" />
+        <button type="submit">Go</button>
+      </form>
+      <div class="row">
+        <span class="lbl">Blend</span>
+        <input id="blend" type="range" min="1" max="32" value="8" />
+        <span id="blend-val">8 strips</span>
+      </div>
+      <label class="lbl" for="playlist">Playlist (one landscape per line)</label>
+      <textarea id="playlist" rows="5"></textarea>
+      <div class="row">
+        <span class="lbl">Hold</span>
+        <input id="hold" type="number" min="0" max="500" value="16" /> strips
+        <label><input id="loop" type="checkbox" checked /> loop</label>
+      </div>
+      <div class="row">
+        <button id="queue-save" type="button">Save playlist</button>
+        <button id="skip" type="button">Next ⏭</button>
+      </div>
+      <div class="hint">Drag to pan through history. Prompts take effect on the next generated strip (a few strips ahead of the view).</div>
+    </div>
+  </div>
+  <script src="config.js"></script>
+  <script src="client.js"></script>
 </body>
 </html>

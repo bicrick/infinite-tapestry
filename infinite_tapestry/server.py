@@ -32,6 +32,9 @@ HEADER_SIZE = struct.calcsize(HEADER_FMT)
 PING_INTERVAL_S = 20.0
 
 
+RECENT_ON_CONNECT = 24
+
+
 def encode_strip_message(strip: "Strip") -> bytes:
     prompt_bytes = strip.prompt.encode("utf-8")
     if len(prompt_bytes) > 65535:
@@ -53,7 +56,17 @@ def create_app(
     buffer: "StripBuffer",
     generator: "StripGenerator | None" = None,
 ) -> FastAPI:
-    app = FastAPI(title="Infinite Tapestry", version="0.1.0")
+    app = FastAPI(title="Infinite Tapestry", version="0.2.0")
+    from fastapi.middleware.cors import CORSMiddleware
+
+    # Frontend may be hosted separately (e.g. Vercel) and talk to this box.
+    app.add_middleware(
+        CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    )
+    base_target = buffer.target
+
+    def director_state() -> dict[str, Any] | None:
+        return generator.director.state() if generator else None
     app.state.config = config
     app.state.buffer = buffer
     app.state.generator = generator
@@ -61,9 +74,6 @@ def create_app(
     if STATIC_DIR.is_dir():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    @app.get("/")
-    async def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -99,8 +109,8 @@ def create_app(
         try:
             await ws.send_json({"type": "config", **config.client_dict()})
 
-            # Catch-up from history so a refresh isn't blank.
-            for strip in buffer.snapshot():
+            # Catch-up: only the recent tail; older strips on request (pan-back).
+            for strip in buffer.snapshot()[-RECENT_ON_CONNECT:]:
                 await ws.send_bytes(encode_strip_message(strip))
                 last_index = max(last_index, strip.index)
 
@@ -134,6 +144,7 @@ def create_app(
                             "type": "status",
                             "buffer": buffer.peek_depth(),
                             "last_index": last_index,
+                            "director": director_state(),
                         }
                     )
 
@@ -156,8 +167,42 @@ def create_app(
                             buffer.acknowledge(idx)
                     elif msg_type == "status_request":
                         await ws.send_json(
-                            {"type": "status", "buffer": buffer.peek_depth()}
+                            {
+                                "type": "status",
+                                "buffer": buffer.peek_depth(),
+                                "director": director_state(),
+                            }
                         )
+                    elif msg_type == "history":
+                        # Pan-back: send stored strips in [start, end].
+                        start = int(data.get("start", 0))
+                        end = int(data.get("end", start))
+                        end = min(end, start + 64)
+                        for strip in buffer.strips_between(start, end):
+                            await ws.send_bytes(encode_strip_message(strip))
+                    elif msg_type in ("set_prompt", "queue", "skip") and generator:
+                        d = generator.director
+                        at = generator.strip_index
+                        if msg_type == "set_prompt" and str(data.get("prompt", "")).strip():
+                            d.set_prompt(
+                                str(data["prompt"])[:500], data.get("blend"), at=at
+                            )
+                        elif msg_type == "queue":
+                            d.set_queue(
+                                [str(p)[:500] for p in data.get("prompts", [])][:50],
+                                hold=data.get("hold"),
+                                blend=data.get("blend"),
+                                loop=data.get("loop"),
+                            )
+                        elif msg_type == "skip":
+                            d.skip(at)
+                        await ws.send_json(
+                            {"type": "director", "director": director_state()}
+                        )
+                    elif msg_type == "speed":
+                        # Fast-forward: let the generator run further ahead.
+                        mult = max(1.0, min(16.0, float(data.get("multiplier", 1))))
+                        buffer.set_target(int(base_target * mult))
 
             push_task = asyncio.create_task(push_strips())
             recv_task = asyncio.create_task(recv_client())
@@ -183,6 +228,10 @@ def create_app(
                 await ws.close()
             except Exception:
                 pass
+
+    if STATIC_DIR.is_dir():
+        # Serve the standalone frontend at "/" (index.html, client.js, config.js).
+        app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="root")
 
     app.state.ws_ping_interval = PING_INTERVAL_S
     return app
