@@ -286,6 +286,7 @@
   const COARSE = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
   const PHONE = matchMedia("(max-width: 560px)");
   let wheelGlide = false, landAt = 0;    // haptic-wheel flick: long, low-friction coast (iOS picker feel)
+  const RIBBON = 0.6; let ribbon = 1;
   let zoom = 1, zoomVel = 0, velS = 0, prevCenter = null, blurCv = null, blurCtx = null;
 
   // ---------- LOD tiles (served from the GPU box, mirrored in Storage) ----------
@@ -510,9 +511,12 @@
       }
       prevCenter = L;
       // Zoom out with speed: ~0.5x at 3k world px/s, ~0.05x when humming through hours.
-      const zt = PHONE.matches ? 1   // phones: no zoom-out while scrubbing (blur + label instead)
-        : COARSE ? 1 - Math.min(0.62, Math.max(0, (Math.abs(velS) - 500) / 5200))   // touch: unchanged
-        : Math.max(0.05, 1 / (1 + Math.max(0, Math.abs(velS) - 2500) / 4000));   // deep zoom only at turbo speeds
+      const zt = 1;   // no zoom-out while scrubbing anywhere (blur + wheel label instead)
+      // Desktop ribbon: while the chrome is up the band eases down to a ribbon; idle -> full bleed.
+      const b = document.body.classList;
+      const rt = !portrait() && !PHONE.matches && !b.contains("idle") && !b.contains("intro") && !b.contains("immersive") ? RIBBON : 1;
+      ribbon += (rt - ribbon) * (1 - Math.exp(-dt * 4.2));
+      if (Math.abs(ribbon - rt) < 0.0008) ribbon = rt;
       // Spring zoom: out quickly as speed builds, snappy (slightly underdamped) back in on settle.
       if (zt < zoom) { zoom += (zt - zoom) * Math.min(1, dt * 6); zoomVel = 0; }
       else { const k = 90, c = 1.6 * Math.sqrt(k); zoomVel += (k * (zt - zoom) - c * zoomVel) * dt; zoom = Math.min(1.015, zoom + zoomVel * dt); }
@@ -542,11 +546,12 @@
       setTimeout(() => seekTo(ps[0], ps[1]), document.body.classList.contains("intro") ? 2400 : 300);
     }
     const s0 = scale();
-    const s = s0 * zoom;
+    const s = s0 * zoom * ribbon;
     const center = viewLeft() + viewWorld() / 2;
-    const left = center - (w / s) / 2;
+    // Never show blank canvas past the painted edge when the ribbon widens the view.
+    const left = Math.max(0, Math.min(center - (w / s) / 2, panoramaWidth() - w / s));
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
-    const yOff = portrait() ? bandTopFor(h, config.height * s0) + (config.height * s0 - config.height * s) / 2 : (h - config.height * s) / 2;
+    const yOff = portrait() ? bandTopFor(h, config.height * s0) + (config.height * s0 - config.height * s) / 2 : (h * (1 - 0.06 * (1 - ribbon) / (1 - RIBBON)) - config.height * s) / 2;
     publishBand(yOff, config.height * s, h);
     const firstIdx = Math.max(0, Math.floor(left / SW()) - 1);
     const lastIdx = Math.ceil((left + w / s) / SW()) + 1;
@@ -584,9 +589,9 @@
       }
     }
     ctx.restore();
-    if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
+    if (portrait() || ribbon < 0.999) drawSurround(w, h, Math.max(0, yOff), config.height * s);
     // Motion blur that scales with scrub velocity (cheap: smear the frame onto itself).
-    const blur = (PHONE.matches ? Math.min(12, Math.max(0, (Math.abs(velS) - 500) / 420))
+    const blur = (true ? Math.min(12, Math.max(0, (Math.abs(velS) - 500) / 420))
       : Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260))) * (window.devicePixelRatio || 1);
     if (blur > 0.5) {
       // Smear through a half-res scratch canvas (a canvas can't reliably draw onto itself).
@@ -886,38 +891,20 @@
   const VNORM = 4500;            // ceiling for ordinary scrolling
   const TURBO_RATE = 1600;       // CSS px/s of wheel input (300ms window) that counts as turbo
   const wheelHist = [];
+  let mwEndT = 0;
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
-    wheelGlide = false;
     if (ev.ctrlKey) return;      // pinch-zoom gesture: ignore
     const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? innerHeight : 1;
     const vert = Math.abs(ev.deltaY) >= Math.abs(ev.deltaX);
     const dCss = (vert ? -ev.deltaY : ev.deltaX) * unit;   // + = forward in time
-    const now = performance.now();
-    if (panMode === "live" || panMode === "return") {
-      if (dCss >= 0) return;                         // already live: forward scroll does nothing
-      if (now - wheelAccAt > 220 || Math.sign(wheelAcc) !== Math.sign(dCss)) wheelAcc = 0;
-      wheelAccAt = now;
-      wheelAcc += dCss;
-      if (-wheelAcc < WHEEL_MIN) return;
-      wheelAcc = 0;
-      commitRewind();
-    } else if (panMode !== "wheel" && panMode !== "glide") { panPos = shownPan(); panVel = 0; }
-    panMode = "glide";
-    const d = dCss * pxToWorld();
-    // Wheel input rate over a short window decides normal vs turbo.
-    wheelHist.push([now, Math.abs(dCss)]);
-    while (wheelHist.length && now - wheelHist[0][0] > 300) wheelHist.shift();
-    const rate = wheelHist.reduce((a, x) => a + x[1], 0) / 0.3;          // CSS px/s of wheel input
-    if (rate > TURBO_RATE) turbo = Math.min(1, turbo + 0.07 * Math.min(3, rate / TURBO_RATE));   // sustained/rapid → builds
-    if (turbo > 0.8 && performance.now() - (window.__vaTurboAt || -1e9) > 60000) { window.__vaTurboAt = performance.now(); try { window.va && window.va("event", { name: "scroll_turbo" }); } catch (_) {} }
-    // Reversing direction brakes hard and drops turbo.
-    if (panVel !== 0 && Math.sign(panVel) !== Math.sign(d)) { panVel *= 0.2; turbo = 0; }
-    // Normal: linear, capped, short glide. Turbo: gain stacks with speed (nonlinear), high ceiling.
-    const gain = 9 * (1 + turbo * turbo * Math.abs(panVel) / 1200);
-    const cap = VNORM + (VMAX - VNORM) * turbo * turbo;
-    panVel = Math.max(-cap, Math.min(cap, panVel + d * gain));
-    wheelIdleAt = now;
+    if (!wheelHeld && dCss >= 0 && (panMode === "live" || panMode === "return")) return;   // already live
+    const TV = window.TapestryView;
+    if (!wheelHeld) TV.wheelStart();
+    TV.wheelMove(-dCss);                    // same 1:1 wheel as the phone's haptic dial
+    const hw = document.getElementById("hwheel"); if (hw) hw.classList.add("active");
+    clearTimeout(mwEndT);
+    mwEndT = setTimeout(() => { if (hw) hw.classList.remove("active"); TV.wheelEnd(); }, 70);
   }, { passive: false });
   // Haptic wheel (wheel.js): drives the timeline 1:1 in CSS px, then hands off to the same glide/drift.
   let wheelHeld = false;

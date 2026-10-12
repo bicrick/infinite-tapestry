@@ -275,7 +275,7 @@ body.loaded #view { transition: transform 1.1s var(--ease), border-radius 1.1s v
 .brand { display: inline-flex; align-items: center; gap: 9px; } .brand-mark { width: 22px; height: 13px; opacity: .9; }
 
 /* ---------- timeline scrubber: a hairline at the very bottom ---------- */
-.timeline { position: fixed; left: 28px; right: 28px; bottom: 0; height: 22px; cursor: pointer; touch-action: none; z-index: 6; }
+.timeline { display: none !important; position: fixed; left: 28px; right: 28px; bottom: 0; height: 22px; cursor: pointer; touch-action: none; z-index: 6; }
 .tl-line { position: absolute; left: 0; right: 0; bottom: 10px; height: 1px; background: rgba(var(--ink),.16); transition: height .25s var(--ease), background .25s; }
 .timeline:hover .tl-line, .timeline.active .tl-line { height: 3px; bottom: 9px; background: rgba(var(--ink),.24); border-radius: 2px; }
 .tl-head { position: absolute; bottom: 7px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: var(--solid);
@@ -772,3 +772,20 @@ body.react-open .cmd-terms { display: none !important; }
 .nudge-line a { color: rgb(var(--ink)); text-underline-offset: 3px; }
 .nudge-line button { background: none; border: 0; color: inherit; opacity: .55; cursor: pointer; font-size: 14px; padding: 0 4px; line-height: 1; }
 .nudge-line button:hover { opacity: 1; }
+
+/* desktop: the haptic wheel replaces the scrub bar */
+@media (min-width: 561px) {
+  .hwheel { display: block; position: fixed; left: 50%; transform: translateX(-50%); width: min(720px, 70vw); bottom: 4px; height: 40px; z-index: 22; touch-action: none; cursor: ew-resize;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+    transition: opacity .6s var(--ease); }
+  .hwheel canvas { width: 100%; height: 100%; display: block; }
+  body.idle .hwheel { opacity: 0; }
+  body.idle .hwheel:hover { opacity: .5; }
+  body.intro .hwheel, body.composing .hwheel { opacity: 0; pointer-events: none; }
+  .wheel-label { display: block; position: fixed; left: 50%; bottom: 48px; z-index: 23; pointer-events: none;
+    transform: translate(-50%, 4px); opacity: 0; transition: opacity .25s var(--ease), transform .3s var(--ease);
+    padding: 5px 11px; border-radius: 999px; font-size: 12px; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis;
+    background: var(--glass-strong); border: 1px solid var(--line); color: var(--fg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); font-variant-numeric: tabular-nums; }
+  .wheel-label.on { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (min-width: 561px) { .dock { bottom: 50px; } .wheel-label { bottom: 46px; } body:has(.wheel-label.on) .dock { opacity: 0; pointer-events: none; transition: opacity .2s var(--ease); } }
