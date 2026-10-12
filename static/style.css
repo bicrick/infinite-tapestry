@@ -581,3 +581,8 @@ body.offline-on .offline { opacity: 1; visibility: visible; pointer-events: auto
 .off-sub { font-size: 13px; color: var(--muted); }
 body.offline-on #view { filter: blur(18px) brightness(.8); transition: filter .9s var(--ease); }
 body.offline-on #intro, body.offline-on .ui, body.offline-on .amb { opacity: 0 !important; transition: opacity .5s; }
+
+/* Next sheet: skeleton until the first canonical snapshot */
+#queue-list.skeleton { min-height: 132px; border-radius: 12px; background: linear-gradient(90deg, rgba(127,127,127,.08) 25%, rgba(127,127,127,.16) 37%, rgba(127,127,127,.08) 63%); background-size: 400% 100%; animation: q-shimmer 1.4s ease infinite; }
+@keyframes q-shimmer { 0% { background-position: 100% 0 } 100% { background-position: 0 0 } }
+#queue-list .item.idea .meta { opacity: .7 }

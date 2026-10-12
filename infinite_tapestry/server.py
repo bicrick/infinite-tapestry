@@ -148,6 +148,21 @@ def create_app(
         crowd = Crowd(supa, generator.director, interpreter, generator,
                       broadcast=lambda m: broadcast(m), on_change=lambda: broadcast_director(), mock=config.mock)
     app.state.crowd = crowd
+    if autopilot and crowd:
+        autopilot.pressure = lambda: len(crowd.pending)
+
+    upcoming_box = {"seq": 0, "items": None}
+
+    def build_upcoming(st: dict) -> list[dict]:
+        """Canonical Next list: queued user scenes, then waiting pool ideas, then Auto filler."""
+        items = st.get("items") or []
+        users = [dict(i, kind="scene") for i in items if i.get("origin") != "auto"]
+        autos = [dict(i, kind="scene") for i in items if i.get("origin") == "auto"]
+        woven = {x for i in items for x in (i.get("idea_ids") or [])}
+        pool = [{"id": f"idea-{p['id']}", "kind": "idea", "origin": "user", "title": p["body"][:80],
+                 "prompt": p["body"], "by": "@" + p["handle"] if p.get("handle") else None, "image": p.get("image")}
+                for p in (crowd.pending if crowd else []) if p["id"] not in woven]
+        return users + pool + autos
 
     def director_state() -> dict[str, Any] | None:
         if not generator:
@@ -155,6 +170,11 @@ def create_app(
         st = generator.director.state()
         st["autopilot"] = autopilot.state() if autopilot else None
         st["fuel"] = crowd.state() if crowd else None
+        up = build_upcoming(st)
+        if up != upcoming_box["items"]:
+            upcoming_box["items"] = up
+            upcoming_box["seq"] += 1
+        st["upcoming"], st["upcoming_seq"] = up, upcoming_box["seq"]
         return st
 
     def gpu_stats() -> dict[str, Any] | None:
@@ -544,6 +564,13 @@ def create_app(
                         await ws.send_json({"type": "pong"})
                     elif t in ("pong", "ack"):
                         pass  # acks are server-side now (shared timeline)
+                    elif t in ("upcoming_request", "idea_added"):
+                        if t == "idea_added" and crowd:
+                            try:
+                                await crowd.refresh_pending()
+                            except Exception:
+                                logger.exception("refresh_pending failed")
+                        await ws.send_json({"type": "director", "director": director_state()})
                     elif t == "status_request":
                         await ws.send_json({"type": "status", "buffer": buffer.peek_depth(),
                                             "director": director_state(), "gpu": gpu_stats()})
