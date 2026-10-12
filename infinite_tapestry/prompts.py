@@ -342,6 +342,28 @@ class LiveDirector:
             scene = self._target if (self._target and t >= 0.5) else self._current
             return scene["title"]
 
+    def to_dict(self) -> dict:
+        with self._lock:
+            return {
+                "current": self._current, "target": self._target, "queue": self._queue,
+                "history": self.history[-30:], "blend_start": self._blend_start,
+                "active_since": self._active_since, "hold": self.hold, "blend": self.blend,
+                "loop": self.loop, "next_id": next(_scene_ids),
+            }
+
+    def load_dict(self, d: dict) -> None:
+        global _scene_ids
+        with self._lock:
+            self._current = d.get("current") or self._current
+            self._target = d.get("target")
+            self._queue = list(d.get("queue") or [])
+            self.history = list(d.get("history") or [self._current])
+            self._blend_start = int(d.get("blend_start", 0))
+            self._active_since = int(d.get("active_since", 0))
+            self.hold, self.blend = int(d.get("hold", self.hold)), int(d.get("blend", self.blend))
+            self.loop = bool(d.get("loop", False))
+            _scene_ids = __import__("itertools").count(int(d.get("next_id", 1)) + 1)
+
     def state(self) -> dict:
         with self._lock:
             idx = self._last_index

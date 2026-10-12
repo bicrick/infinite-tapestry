@@ -21,9 +21,9 @@ GPU tests and is **stopped** (not terminated) at the end; secrets never printed 
 ## Checklist
 1. [x] Commit loose less-filtering work (PR #7)
 2. [x] Content line: everything except sexual content + NSFW classifier, minors block kept (PR #8)
-3. [ ] Persistence: strips + queue/state to disk and Supabase Storage, restore on restart, full-history export
+3. [x] Persistence: strips + queue/state to disk and Supabase Storage, restore on restart, full-history export
 4. [ ] Long-session stability: client strip window + pan refetch, WS reconnect backoff, Wake Lock, ambient mode, accelerated mock soak with memory tracking
-5. [ ] Supabase project + schema + RLS + RPCs + audit log
+5. [x] Supabase project + schema + RLS + RPCs + audit log
 6. [ ] Accounts: magic-link login; anonymous watching; login required to submit/vote/chat
 7. [ ] Crowd queue: idea pool, upvotes, one active idea/user, cooldown, Claude merges top ideas, autopilot fallback, handle attribution
 8. [ ] Live chat with rate limits

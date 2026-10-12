@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 import uvicorn
@@ -60,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Anthropic model id for the prompt interpreter "
         "(default: $TAPESTRY_HAIKU_MODEL or claude-haiku-5-5)",
     )
+    p.add_argument("--data-dir", default=os.environ.get("TAPESTRY_DATA_DIR", "data"),
+                   help="where strips/state persist (empty string = no persistence)")
     p.add_argument("-v", "--verbose", action="store_true")
     return p
 
@@ -85,6 +88,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     inpainter = create_inpainter(config)
     generator = StripGenerator(config, inpainter, buffer)
+    if args.data_dir:
+        from .store import HistoryStore, SupabaseMirror
+
+        if args.mock:
+            os.environ.setdefault("TAPESTRY_STORAGE_PREFIX", "mock")
+        generator.attach_store(HistoryStore(args.data_dir, SupabaseMirror.from_env()))
     generator.start()
 
     from .interpreter import PromptInterpreter

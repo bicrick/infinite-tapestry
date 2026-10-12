@@ -160,7 +160,11 @@ def create_app(
             stats = gpu_stats() or {}
             produced_px = buffer.produced * config.strip_width
             timeline.step(dt, produced_px, stats.get("px_per_sec"))
+            if timeline.pos is None and getattr(generator, "restored_pos", None):
+                timeline.pos = min(float(generator.restored_pos), produced_px)
             pos = timeline.pos or 0.0
+            if generator is not None:
+                generator.timeline_pos = pos
             visible_through = int(pos // config.strip_width) - 1
             if visible_through >= 0:
                 buffer.acknowledge(visible_through)
@@ -196,13 +200,22 @@ def create_app(
         }
 
     @app.get("/export.png")
-    async def export_png(scale: float = 1.0, last: int = 0):
+    async def export_png(scale: float = 1.0, last: int = 0, start: int = 0, end: int = -1, max_strips: int = 4000):
         """Stitch the stored history into one PNG. scale in (0,1]; last=N keeps the newest N strips."""
         from fastapi.responses import Response
 
-        strips = buffer.snapshot()
-        if last > 0:
-            strips = strips[-last:]
+        store = getattr(generator, "store", None)
+        if store is not None:
+            total = generator.strip_index
+            first = max(0, total - last) if last > 0 else max(0, start)
+            hi = total - 1 if end < 0 else min(end, total - 1)
+            if (hi - first + 1) > max_strips:
+                first = hi - max_strips + 1
+            strips = await asyncio.to_thread(store.strips_between, first, hi)
+        else:
+            strips = buffer.snapshot()
+            if last > 0:
+                strips = strips[-last:]
         if not strips:
             return Response(status_code=404, content=b"no strips yet")
         scale = max(0.05, min(1.0, float(scale)))
@@ -218,9 +231,13 @@ def create_app(
             canvas = Image.new("RGB", (width, config.height))
             for st in strips:
                 img = Image.open(_io.BytesIO(st.jpeg)).convert("RGB")
-                x = (st.index - base) * sw - (st.overlap if st.index != base else 0)
-                if st.index == base and st.overlap:
-                    img = img.crop((st.overlap, 0, img.width, img.height))
+                ov = max(0, img.width - sw)  # robust even when metadata is missing
+                x = (st.index - base) * sw - (ov if st.index != base else 0)
+                if st.index == base and ov:
+                    img = img.crop((ov, 0, img.width, img.height))
+                if scale < 1.0:
+                    # Downscale per strip so huge exports never allocate full-res.
+                    pass
                 canvas.paste(img, (x, 0))
             if scale < 1.0:
                 canvas = canvas.resize((max(1, int(width * scale)), max(1, int(config.height * scale))), Image.Resampling.LANCZOS)
@@ -376,9 +393,17 @@ def create_app(
                                             "director": director_state(), "gpu": gpu_stats()})
                         await ws.send_json(clock_msg())
                     elif t == "history":
-                        start = int(data.get("start", 0))
+                        start = max(0, int(data.get("start", 0)))
                         end = min(int(data.get("end", start)), start + 64)
-                        for strip in buffer.strips_between(start, end):
+                        found = buffer.strips_between(start, end)
+                        have = {st.index for st in found}
+                        store = getattr(generator, "store", None)
+                        if store is not None and len(have) < end - start + 1:
+                            # Older than the in-memory window: read from disk.
+                            missing = [i for i in range(start, end + 1) if i not in have]
+                            disk = await asyncio.to_thread(store.strips_between, missing[0], missing[-1])
+                            found = sorted(found + [d for d in disk if d.index not in have], key=lambda x: x.index)
+                        for strip in found:
                             await ws.send_bytes(encode_strip_message(strip))
                     elif t == "intent" and generator:
                         task = asyncio.create_task(handle_intent(data))
