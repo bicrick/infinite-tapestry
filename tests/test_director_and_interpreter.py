@@ -39,8 +39,8 @@ def test_scene_transition_and_hold_override_defaults():
     assert d.frame_for(1) == ("b", None, 0.0)
     assert "fog" in d.negative_for(0.0)
     d.add([make_scene("c")])
-    assert d.frame_for(2) == ("b", None, 0.0)  # hold clamped to MAX_HOLD=3
-    assert d.frame_for(5)[1] == "c"
+    assert d.frame_for(7) == ("b", None, 0.0)  # hold clamped to MAX_HOLD=8
+    assert d.frame_for(10)[1] == "c"
 
 
 def test_skip_finishes_transition_and_advances():
@@ -53,7 +53,7 @@ def test_skip_finishes_transition_and_advances():
 
 def test_parse_plan_and_fallback():
     p = parse_plan('ok {"scenes":[{"title":"T","prompt":"neon city","transition":99,"hold":"x"}],"note":"n"}')
-    assert p["scenes"][0]["transition"] == 4 and p["scenes"][0]["hold"] == 2
+    assert p["scenes"][0]["transition"] == 6 and p["scenes"][0]["hold"] == 7
     f = fallback_plan("ocean")
     assert f["source"] == "raw" and "ocean" in f["scenes"][0]["prompt"]
     assert PromptInterpreter(api_key="").plan("ocean")["source"] == "raw"
@@ -165,6 +165,13 @@ def test_user_idea_preempts_auto_hold_and_timings_halved():
     d.add_user([make_scene("user idea", transition=8, origin="user")])
     a, b, t = d.frame_for(2)  # weaving starts immediately, auto scene dropped
     assert b == "user idea" and t > 0
-    assert make_scene("x", transition=64, hold=200)["transition"] == 4
-    assert make_scene("x", transition=1, hold=200)["hold"] == 4  # user cap
-    assert make_scene("x", hold=200, origin="auto")["hold"] == 3
+    assert make_scene("x", transition=64, hold=200)["transition"] == 6
+    assert make_scene("x", transition=1, hold=200)["hold"] == 10  # user cap
+    assert make_scene("x", hold=200, origin="auto")["hold"] == 8
+
+
+def test_scene_beats_unfold_across_hold():
+    d = LiveDirector("a", hold=0, blend=4, loop=False)
+    d._current = make_scene("p0", hold=6, origin="auto", beats=["b1", "b2", "b3"])
+    d._active_since = 0
+    assert [d.frame_for(i)[0] for i in range(6)] == ["b1", "b1", "b2", "b2", "b3", "b3"]
