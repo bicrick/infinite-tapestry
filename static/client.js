@@ -564,7 +564,7 @@
     ctx.translate(0, yOff);
     ctx.scale(s, s);
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet.
-    if (zoom < 0.97 || fast || coverage < 1) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
+    if (!window.__nolod && (zoom < 0.97 || fast || coverage < 1)) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
       const stripLayer = zoom > 0.3;
@@ -575,7 +575,22 @@
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
-        ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
+        if (e.shownAt == null) {   // first time on screen: past the live edge it crystallizes out of the dots
+          e.shownAt = performance.now();
+          e.coalesce = panMode !== "live" && i * SW() >= viewLeft() + viewWorld() - SW() * 0.5;
+        }
+        const ck = e.coalesce ? Math.min(1, (performance.now() - e.shownAt) / 1100) : 1;
+        if (ck < 1) {
+          const k = ck * ck * (3 - 2 * ck), x0 = i * SW() - left, ink = lightMq && lightMq.matches ? "20,20,24" : "255,255,255";
+          ctx.globalAlpha = k; ctx.drawImage(e.bitmap, x0 - e.overlap, 0); ctx.globalAlpha = 1;
+          for (let a = 0; a < SW() / 7; a++) for (let b = 0; b < config.height / 7; b++) {
+            let hh = ((i * 64 + a) * 374761393 + b * 668265263) ^ 0x5bf03635; hh = Math.imul(hh ^ (hh >>> 13), 1274126177); const r = ((hh ^ (hh >>> 16)) >>> 0) / 4294967296;
+            if (r > 0.16 + 0.5 * k) continue;
+            const rad = (0.6 + 2.2 * k) * (0.6 + r);
+            ctx.fillStyle = `rgba(${ink},${(1 - k) * (0.25 + 1.5 * r)})`;
+            ctx.fillRect(x0 + a * 7 + r * 5, b * 7 + r * 31 % 7, rad, rad);
+          }
+        } else ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
       }
       coverage = want ? have / want : 0;
     }
@@ -618,16 +633,9 @@
     // Motion blur that scales with scrub velocity (cheap: smear the frame onto itself).
     const blur = (true ? Math.min(12, Math.max(0, (Math.abs(velS) - 500) / 420))
       : Math.min(28, Math.max(0, (Math.abs(velS) - 1400) / 260))) * (window.devicePixelRatio || 1);
-    if (blur > 0.5) {
-      // Smear through a half-res scratch canvas (a canvas can't reliably draw onto itself).
-      if (!blurCv) { blurCv = document.createElement("canvas"); blurCtx = blurCv.getContext("2d"); }
-      const bw = w >> 1, bh = h >> 1;
-      if (blurCv.width !== bw || blurCv.height !== bh) { blurCv.width = bw; blurCv.height = bh; }
-      blurCtx.drawImage(canvas, 0, 0, bw, bh);
-      const dir = velS > 0 ? -1 : 1;
-      ctx.globalAlpha = 0.35; ctx.drawImage(blurCv, dir * blur, 0, w, h);
-      ctx.globalAlpha = 0.22; ctx.drawImage(blurCv, dir * blur * 2.2, 0, w, h);
-      ctx.globalAlpha = 1;
+    {   // Speed blur as a GPU-composited CSS filter (the old canvas readback smear dropped frames while scrubbing).
+      const px = window.__noblur || !COARSE ? 0 : Math.round(Math.min(6, blur / (window.devicePixelRatio || 1) / 2) * 2) / 2;
+      if (px !== draw.blurPx) { draw.blurPx = px; canvas.style.transition = px > 0.5 ? "none" : ""; canvas.style.filter = px > 0.5 ? `blur(${px}px)` : ""; }
     }
     if (!fast && zoom > 0.9) requestMissing(firstIdx - 8, lastIdx + 2);
     evictFar(firstIdx, lastIdx);
