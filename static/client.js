@@ -750,7 +750,7 @@
   const WHEEL_MIN = 10;          // CSS px of same-direction scroll before engaging (ignores accidental deltas)
   const VMAX = 260000;           // world px/s ceiling in full turbo (~hours of history in seconds)
   const VNORM = 4500;            // ceiling for ordinary scrolling
-  const TURBO_RATE = 2600;       // CSS px/s of wheel input (300ms window) that counts as turbo
+  const TURBO_RATE = 1600;       // CSS px/s of wheel input (300ms window) that counts as turbo
   const wheelHist = [];
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
@@ -778,7 +778,7 @@
     // Reversing direction brakes hard and drops turbo.
     if (panVel !== 0 && Math.sign(panVel) !== Math.sign(d)) { panVel *= 0.2; turbo = 0; }
     // Normal: linear, capped, short glide. Turbo: gain stacks with speed (nonlinear), high ceiling.
-    const gain = 5 * (1 + turbo * turbo * Math.abs(panVel) / 1200);
+    const gain = 9 * (1 + turbo * turbo * Math.abs(panVel) / 1200);
     const cap = VNORM + (VMAX - VNORM) * turbo * turbo;
     panVel = Math.max(-cap, Math.min(cap, panVel + d * gain));
     wheelIdleAt = now;
