@@ -503,7 +503,7 @@ async function boot() {
     donorsTop = (top.data || []).filter((d) => d.handle && d.handle !== "anonymous");
     const rows = donorTab === "recent" ? (rec.data || []) : (top.data || []);
     $("donor-list").innerHTML = rows.map((d, k) =>
-      `<li class="item"><div>${donorTab === "top" ? `<span class="rank">${k + 1}</span>` : ""}<div class="t">${donorName(d.handle)}${donorTab === "recent" ? ` <span class="muted">· ${ago(d.created_at)}</span>` : ""}</div>${shout(d)}</div>` +
+      `<li class="item"><div><div class="t">${donorTab === "top" ? `<span class="rank">${k + 1}</span>` : ""}${donorName(d.handle)}${donorTab === "recent" ? ` <span class="muted">· ${ago(d.created_at)}</span>` : ""}</div>${shout(d)}</div>` +
       `<span class="amt">$${((donorTab === "recent" ? d.amount_cents : d.total_cents) / 100).toFixed(0)}</span></li>`).join("")
       || `<li class="empty">Be the first to keep it painting.</li>`;
     renderKept();
