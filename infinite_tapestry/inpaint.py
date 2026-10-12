@@ -210,7 +210,49 @@ class SDXLInpainter(Inpainter):
         self._active: tuple = ()
         if config.style_loras:
             self._load_styles()
+        self._ip = False
+        self._ref_id, self._ref_scale, self._ref_embeds = None, 0.0, {}
+        if getattr(config, "ip_adapter", True):
+            self._load_ip_adapter()
         logger.info("SDXL inpaint ready (styles: %s)", ", ".join(self.loaded) or "none")
+
+    def _load_ip_adapter(self) -> None:
+        """IP-Adapter (ViT-H SDXL) for image ideas. Optional: failures leave text-only rendering."""
+        try:
+            from transformers import CLIPVisionModelWithProjection
+
+            enc = CLIPVisionModelWithProjection.from_pretrained(
+                "h94/IP-Adapter", subfolder="models/image_encoder", torch_dtype=self._torch.float16).to(self.config.device)
+            self._pipe.image_encoder = enc
+            self._pipe.load_ip_adapter("h94/IP-Adapter", subfolder="sdxl_models",
+                                       weight_name="ip-adapter_sdxl_vit-h.safetensors", image_encoder_folder=None)
+            from transformers import CLIPImageProcessor
+            if getattr(self._pipe, "feature_extractor", None) is None:
+                self._pipe.feature_extractor = CLIPImageProcessor()
+            self._pipe.set_ip_adapter_scale(0.0)
+            self._blank = self._embed(Image.new("RGB", (224, 224), (127, 127, 127)))
+            self._ip = True
+            logger.info("IP-Adapter ready (image ideas)")
+        except Exception as e:
+            logger.warning("IP-Adapter unavailable: %s", str(e)[:200])
+
+    def _embed(self, img):
+        with self._torch.no_grad():
+            return self._pipe.prepare_ip_adapter_image_embeds(
+                ip_adapter_image=[img], ip_adapter_image_embeds=None, device=self.config.device,
+                num_images_per_prompt=1, do_classifier_free_guidance=True)
+
+    def set_ref(self, ref_id, image, scale: float) -> None:
+        if not self._ip:
+            return
+        if image is None or scale <= 0.01:
+            self._ref_id, self._ref_scale = None, 0.0
+            return
+        if ref_id not in self._ref_embeds:
+            if len(self._ref_embeds) > 16:
+                self._ref_embeds.clear()
+            self._ref_embeds[ref_id] = self._embed(image)
+        self._ref_id, self._ref_scale = ref_id, float(scale)
 
     @staticmethod
     def _adapter(name: str) -> str:
@@ -262,11 +304,16 @@ class SDXLInpainter(Inpainter):
                 pe = pe * (1 - tt) + pe_b * tt
                 pp = pp * (1 - tt) + pp_b * tt
         image = prefill_masked(image, mask)
+        ip_kw = {}
+        if self._ip:
+            self._pipe.set_ip_adapter_scale(self._ref_scale)
+            ip_kw["ip_adapter_image_embeds"] = self._ref_embeds.get(self._ref_id, self._blank) if self._ref_scale > 0 else self._blank
         out = self._pipe(
             prompt_embeds=pe, negative_prompt_embeds=ne, pooled_prompt_embeds=pp, negative_pooled_prompt_embeds=npp,
             image=image.convert("RGB"), mask_image=mask.convert("L"),
             num_inference_steps=self.config.steps, guidance_scale=self.config.guidance_scale,
             width=image.width, height=image.height, generator=gen, strength=0.999,
+            **ip_kw,
         )
         return out.images[0]
 

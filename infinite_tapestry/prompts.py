@@ -375,6 +375,11 @@ class LiveDirector:
             b = lora(self._target) if self._target else None
             return a, (b or "none") if self._target else None
 
+    def ref_ids(self) -> tuple[int | None, int | None]:
+        """Scene ids (current, target) for reference-image lookup — call right after frame_for."""
+        with self._lock:
+            return (self._current or {}).get("id"), (self._target or {}).get("id") if self._target else None
+
     def negative_for(self, t: float) -> str:
         with self._lock:
             scene = self._target if (self._target and t >= 0.5) else self._current
