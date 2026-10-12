@@ -105,3 +105,18 @@ def test_seam_score_flags_hard_vertical_cut():
     cut = base.copy()
     cut[:, 70:] = np.clip(cut[:, 70:].astype(int) + 90, 0, 255).astype(np.uint8)
     assert seam_score(smooth, 0, 128) < 6 < seam_score(Image.fromarray(cut), 0, 128)
+
+
+def test_seam_score_tolerates_interrupted_vertical_edges():
+    import numpy as np
+    from PIL import Image
+    from infinite_tapestry.generator import seam_score
+
+    rng = np.random.default_rng(1)
+    img = np.clip(rng.normal(110, 6, (64, 128, 3)), 0, 255).astype(np.uint8)
+    # A pillar: strong vertical edges, but crossed by a shelf/floor band.
+    ramp = np.array([140, 180, 220], dtype=np.uint8)
+    img[:, 57:60] = ramp[None, :, None]
+    img[:, 60:70] = 220
+    img[:, 70:73] = ramp[::-1][None, :, None]  # anti-aliased like a VAE decode
+    assert seam_score(Image.fromarray(img), 0, 128) < 6

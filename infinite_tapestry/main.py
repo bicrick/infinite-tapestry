@@ -17,7 +17,7 @@ from .server import create_app
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Infinite Tapestry — endlessly scrolling AI panorama"
+        description="Infinite Tapestry — endlessly scrolling AI tapestry"
     )
     p.add_argument(
         "--mock",
