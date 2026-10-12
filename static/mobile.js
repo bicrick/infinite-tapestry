@@ -127,7 +127,7 @@
     const sync = () => { const t = fmt ? fmt(a.textContent) : a.textContent; if (b.textContent !== t) { b.style.opacity = "0"; setTimeout(() => { b.textContent = t; b.style.opacity = ""; }, b.textContent ? 350 : 0); } };
     new MutationObserver(sync).observe(a, { childList: true, characterData: true, subtree: true }); sync();
   };
-  mirror("status-text", "amb-status");
+  mirror("status-text", "status-mini", (t) => t.replace(/\s*watching$/, ""));
   mirror("now-title", "amb-title", (t) => (t === "—" ? "" : t));
 })();
 (() => {
