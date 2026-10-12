@@ -161,3 +161,33 @@ scripts/setup.sh  # GPU box bootstrap
 - [x] `--mock` CPU mode, setup script, GPU README
 - [x] Tests for stitch/buffer logic
 - [ ] Later: sliding MultiDiffusion seams, SDXL-Lightning, ControlNet horizon lock
+
+## Live controls (v0.2)
+
+The browser UI (bottom-left **Controls** panel) talks to the server over the same WebSocket:
+
+| Control | WS message | Effect |
+|---|---|---|
+| Prompt box + Blend slider | `{"type":"set_prompt","prompt":"…","blend":8}` | Next strips interpolate text embeddings from the current scene to the new one over N strips |
+| Playlist | `{"type":"queue","prompts":[…],"hold":16,"blend":8,"loop":true}` | After `hold` strips on a scene, blend to the next playlist entry |
+| Next ⏭ | `{"type":"skip"}` | Advance the playlist now |
+| 1x/2x/4x/8x | `{"type":"speed","multiplier":4}` | View scrolls faster; server lets the generator run further ahead (buffer target × multiplier). Scrolling eases off at the generated edge |
+| Drag / wheel | `{"type":"history","start":i,"end":j}` | Pan back through stored strips (server keeps `history_limit`=5000 in memory); **Return to live** snaps back |
+
+Prompt changes apply to the next *generated* strip, which is a few strips ahead of the view (buffer depth).
+
+## Hosting the frontend separately (Vercel etc.)
+
+`static/` is a self-contained static site (`index.html`, `client.js`, `config.js`, `style.css`).
+Point it at a backend either with a query param, `https://your-site.vercel.app/?ws=wss://<podid>-8000.proxy.runpod.net/ws`,
+or by editing `static/config.js` (`window.TAPESTRY_CONFIG = { wsUrl: "wss://…/ws" }`). On Vercel, set the project root to `static/`
+(no build step). The server enables CORS for `/config` and `/health`.
+
+## Generation quality notes
+
+Default is now **DreamShaper-8 inpainting + DPM++ 2M Karras, 20 steps, CFG 6, full VAE** (~1 s/strip on an RTX A4000).
+The original LCM-LoRA + TAESD 4-step path is ~3x faster but produced smeared, oversaturated strips with visible seams;
+opt back in with `--steps 4 --guidance-scale 1.0 --lcm-lora latent-consistency/lcm-lora-sdv1-5 --taesd-model madebyollin/taesd`.
+Other fixes: `strength=1.0` (0.99 left the masked strip black with LCM), color-drift correction fitted on the regenerated context,
+a 32px throwaway margin at the window's right edge (models paint a frame there), and the procedural seed is repainted by the model first.
+Pinned `diffusers<0.32` etc. because newer diffusers needs `torch.accelerator` (torch ≥ 2.6) and RunPod's PyTorch 2.4 image fails on import.

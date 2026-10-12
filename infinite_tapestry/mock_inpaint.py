@@ -34,8 +34,12 @@ class MockInpainter(Inpainter):
         prompt: str,
         negative_prompt: str = "",
         seed: int | None = None,
+        prompt_b: str | None = None,
+        t: float = 0.0,
     ) -> Image.Image:
         del negative_prompt  # unused in mock
+        if prompt_b and t >= 0.5:
+            prompt = prompt_b
         self._calls += 1
         # Simulate a little work so timing paths aren't unrealistically instant.
         time.sleep(0.05)

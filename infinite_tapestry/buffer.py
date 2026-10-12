@@ -137,6 +137,20 @@ class StripBuffer:
                 self._acknowledged = index + 1
                 self._cond.notify_all()
 
+    def set_target(self, target: int) -> None:
+        with self._cond:
+            self.target = max(self.minimum, int(target))
+            self._cond.notify_all()
+
+    def strips_between(self, start: int, end: int) -> list[Strip]:
+        with self._cond:
+            if not self._history:
+                return []
+            first = self._history[0].index
+            lo = max(0, start - first)
+            hi = max(0, end - first + 1)
+            return [s for s in list(self._history)[lo:hi] if start <= s.index <= end]
+
     def snapshot(self) -> list[Strip]:
         with self._cond:
             return list(self._history)
