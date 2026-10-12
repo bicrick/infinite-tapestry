@@ -81,7 +81,8 @@ class SupabaseMirror:
 
     def save_strip_row(self, s: Strip) -> None:
         row = {"session": self.prefix, "idx": s.index, "width": s.width, "height": s.height,
-               "overlap": s.overlap, "prompt": s.prompt[:500], "path": f"{self.prefix}/strips/{s.index:08d}.jpg"}
+               "overlap": s.overlap, "prompt": s.prompt[:500], "path": f"{self.prefix}/strips/{s.index:08d}.jpg",
+               "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(s.created_at or time.time()))}
         self.db_async(lambda: self._rest("POST", "strips?on_conflict=session,idx", [row],
                                          "resolution=merge-duplicates,return=minimal"))
 
@@ -102,6 +103,17 @@ class SupabaseMirror:
     def load_strip_rows(self, lo: int, hi: int) -> dict[int, dict]:
         rows = self._rest("GET", f"strips?session=eq.{self.prefix}&idx=gte.{lo}&idx=lte.{hi}&select=idx,width,height,overlap,prompt")
         return {r["idx"]: {"index": r["idx"], **r} for r in rows or []}
+
+    def strip_times(self, idxs: list[int]) -> dict[int, float]:
+        import calendar
+        out: dict[int, float] = {}
+        for k in range(0, len(idxs), 200):
+            part = ",".join(str(i) for i in idxs[k:k + 200])
+            rows = self._rest("GET", f"strips?session=eq.{self.prefix}&idx=in.({part})&select=idx,created_at") or []
+            for r in rows:
+                ts = r["created_at"][:19]
+                out[r["idx"]] = calendar.timegm(time.strptime(ts, "%Y-%m-%dT%H:%M:%S"))
+        return out
 
     def get(self, path: str) -> bytes | None:
         try:
@@ -149,6 +161,8 @@ class HistoryStore:
         if self.mirror:
             self.mirror.put(f"strips/{s.index:08d}.jpg", s.jpeg, "image/jpeg")
             self.mirror.save_strip_row(s)
+        if getattr(self, "lod", None):
+            self.lod.on_strip(s.index)
 
     def load_meta(self) -> dict[int, dict]:
         out: dict[int, dict] = {}

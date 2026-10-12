@@ -257,3 +257,19 @@ body.loaded #view { transition: transform 1.1s var(--ease), border-radius 1.1s v
 .woven .links a { color: var(--muted); text-decoration: none; cursor: pointer; }
 .woven .links a:hover { color: var(--fg); }
 .brand { display: inline-flex; align-items: center; gap: 9px; } .brand-mark { width: 22px; height: 13px; opacity: .9; }
+
+/* ---------- timeline scrubber: a hairline at the very bottom ---------- */
+.timeline { position: fixed; left: 28px; right: 28px; bottom: 0; height: 22px; cursor: pointer; touch-action: none; z-index: 6; }
+.tl-line { position: absolute; left: 0; right: 0; bottom: 10px; height: 1px; background: rgba(255,255,255,.16); transition: height .25s var(--ease), background .25s; }
+.timeline:hover .tl-line, .timeline.active .tl-line { height: 3px; bottom: 9px; background: rgba(255,255,255,.24); border-radius: 2px; }
+.tl-head { position: absolute; bottom: 7px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 10px rgba(255,255,255,.55); transition: transform .25s var(--ease); }
+.timeline:not(.away) .tl-head { opacity: .55; }
+.timeline.active .tl-head { transform: scale(1.5); }
+.tl-tip { position: absolute; bottom: 20px; transform: translateX(-50%); font-size: 11px; color: var(--fg); white-space: nowrap; opacity: 0;
+  padding: 4px 8px; border-radius: 8px; background: var(--glass-strong); border: 1px solid var(--line); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  transition: opacity .2s; pointer-events: none; font-variant-numeric: tabular-nums; }
+.timeline:hover .tl-tip, .timeline.active .tl-tip { opacity: 1; }
+.tl-label { position: absolute; bottom: 14px; font-size: 10px; color: rgba(255,255,255,.35); opacity: 0; transition: opacity .25s; pointer-events: none; }
+.tl-label.left { left: 0; } .tl-label.right { right: 0; }
+.timeline:hover .tl-label { opacity: 1; }

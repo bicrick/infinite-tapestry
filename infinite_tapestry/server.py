@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 if TYPE_CHECKING:
@@ -218,6 +218,47 @@ def create_app(
             "viewers": len(clients),
             "interpreter": bool(interpreter.enabled),
         }
+
+    @app.get("/lod/{level}/{chunk}.jpg")
+    async def lod_tile(level: int, chunk: int) -> Response:
+        from .lod import STRIPS_PER_TILE
+
+        store = getattr(generator, "store", None)
+        lod = getattr(store, "lod", None)
+        if lod is None or level not in STRIPS_PER_TILE or chunk < 0:
+            return Response(status_code=404)
+        n = STRIPS_PER_TILE[level]
+        idx = generator.strip_index
+        if (chunk + 1) * n > idx:  # chunk still filling: not cacheable yet
+            return Response(status_code=404)
+        data = await asyncio.to_thread(lod.get, level, chunk, True)
+        if not data:
+            return Response(status_code=404)
+        return Response(data, media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*"})
+
+    @app.get("/timeline")
+    async def timeline_points(points: int = 300) -> dict[str, Any]:
+        """Sampled (strip index, unix time) pairs so the client can label its scrubber with wall-clock time."""
+        idx = max(0, generator.strip_index - 1)
+        points = max(2, min(600, points))
+        step = max(1, idx // points)
+        want = sorted(set(list(range(0, idx + 1, step)) + [idx]))
+        store = getattr(generator, "store", None)
+        out: dict[int, float] = {}
+        if store is not None:
+            meta = await asyncio.to_thread(store.load_meta)
+            for i in want:
+                t = (meta.get(i) or {}).get("created_at")
+                if t:
+                    out[i] = float(t)
+            miss = [i for i in want if i not in out]
+            if miss and getattr(store, "mirror", None):
+                try:
+                    out.update(await asyncio.to_thread(store.mirror.strip_times, miss))
+                except Exception:
+                    pass
+        return {"max": idx, "points": sorted([i, t] for i, t in out.items()), "now": time.time()}
 
     @app.get("/export.png")
     async def export_png(scale: float = 1.0, last: int = 0, start: int = 0, end: int = -1, max_strips: int = 4000):

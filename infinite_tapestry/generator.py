@@ -306,6 +306,9 @@ class StripGenerator:
     def attach_store(self, store) -> None:
         """Restore from `store` if it has state, then save every new strip."""
         self.store = store
+        from .lod import LodBuilder
+
+        store.lod = LodBuilder(store, self.config.strip_width, self.config.height)
         state, canvas = store.load_state()
         if state:
             try:
