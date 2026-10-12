@@ -39,7 +39,7 @@ function friendly(e) {
 }
 const toast = (h, ms) => W().toast(h, ms);
 
-// ---------- guests: anyone can add ideas; signing in is an upgrade, not a gate ----------
+// ---------- guests: anyone can add ideas; signing in just adds more steering, never a gate ----------
 const isGuestHandle = (h) => /^[a-z]+-\d{4}$/.test(String(h || ""));
 let fpCache = null;
 async function fingerprint() {   // privacy-light: a hash of coarse, stable traits (no canvas/audio probing)
@@ -320,7 +320,7 @@ async function boot() {
     sb.from("ideas").select("id,handle,body,image_path,start_strip,end_strip,played_at").eq("status", "played")
       .not("start_strip", "is", null).order("played_at", { ascending: false }).limit(20).then(({ data }) => renderWoven(data || []));
     const { data } = await sb.from("ideas").select("id,handle,body,votes,boost_cents,status,user_id,created_at,image_path")
-      .in("status", ["pending", "playing"]).order("status", { ascending: false }).order("boost_cents", { ascending: false })
+      .in("status", ["pending", "playing"]).order("status", { ascending: false })
       .order("votes", { ascending: false }).order("created_at").limit(60);
     ideas = data || [];
     // Adaptive voting: few pending ideas play first-come-first-served; votes only matter when busy.
@@ -351,10 +351,10 @@ async function boot() {
       li.innerHTML =
         `<button class="votes${myVotes.has(it.id) ? " on" : ""}" title="Vote">${UP}<span>${it.votes}</span></button>` +
         `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}<div class="t">${esc(it.body)}</div><div class="who">${isGuestHandle(it.handle) ? `<span class="who-guest">@${esc(it.handle)}</span>` : `<a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a>`}${it.status === "playing" ? " · weaving in now" : ""}` +
-        `${it.boost_cents ? ` · <span class="boosted">boosted $${(it.boost_cents / 100).toFixed(0)}</span>` : ""}</div></div>` +
+        `</div></div>` +
         `<div class="acts">` +
         `<button class="icon" data-a="remix" title="Remix">↻</button>` +
-        (it.status === "pending" ? `<button class="icon" data-a="boost" title="Boost with fuel">⚡︎</button>` : "") +
+        
         (mine && it.status === "pending" ? `<button class="icon" data-a="withdraw" title="Withdraw">✕</button>` : "") +
         (S.isAdmin() ? `<button class="icon" data-a="reject" title="Reject (admin)">⊘</button>` : "") + `</div>`;
       if (it.local) { li.querySelector(".acts").innerHTML = ""; li.querySelector(".votes").disabled = true; li.classList.add("local"); list.appendChild(li); return; }
@@ -369,7 +369,6 @@ async function boot() {
       li.querySelectorAll(".acts button").forEach((b) => b.addEventListener("click", async () => {
         const a = b.dataset.a;
         if (a === "remix") return window.TapestryRemix && window.TapestryRemix(it.body);
-        if (a === "boost") return donate(500, { ideaId: it.id });
         const fn = a === "withdraw" ? "withdraw_idea" : "admin_reject_idea";
         const { error } = await sb.rpc(fn, { p_id: it.id });
         if (error) return toast(friendly(error));
@@ -490,71 +489,34 @@ async function boot() {
   refreshFuel();
   setInterval(refreshFuel, 60000);
 
-  // Donor wall: recent gifts and the all-time board; shout-out banners link out (nofollow ugc).
-  let donorTab = "recent", donorsTop = [];
-  const ago = (iso) => { const m = (Date.now() - new Date(iso).getTime()) / 60000; return m < 1 ? "just now" : m < 60 ? `${Math.floor(m)}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`; };
-  const safeHref = (u) => (/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/|$|\?|#)/i.test(u || "") ? u : null);
-  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return ""; } };
-  const donorName = (h) => (h === "anonymous" || !h ? "Anonymous" : `<a href="/u/${encodeURIComponent(h)}">@${esc(h)}</a>`);
-  const shout = (d) => (d.tagline ? `<div class="p">“${esc(d.tagline)}”</div>` : "") +
-    (safeHref(d.url) ? `<a class="d-link" href="${esc(d.url)}" target="_blank" rel="nofollow ugc noopener noreferrer">${esc(hostOf(d.url))} ↗</a>` : "");
-  async function refreshDonors() {
-    const [rec, top] = await Promise.all([sb.from("donors_recent").select("*").limit(20), sb.from("donors_top").select("*").limit(30)]);
-    donorsTop = (top.data || []).filter((d) => d.handle && d.handle !== "anonymous");
-    const rows = donorTab === "recent" ? (rec.data || []) : (top.data || []);
-    $("donor-list").innerHTML = rows.map((d, k) =>
-      `<li class="item"><div><div class="t">${donorTab === "top" ? `<span class="rank">${k + 1}</span>` : ""}${donorName(d.handle)}${donorTab === "recent" ? ` <span class="muted">· ${ago(d.created_at)}</span>` : ""}</div>${shout(d)}</div>` +
-      `<span class="amt">$${((donorTab === "recent" ? d.amount_cents : d.total_cents) / 100).toFixed(0)}</span></li>`).join("")
-      || `<li class="empty">Be the first to keep it painting.</li>`;
-    renderKept();
-  }
-  document.querySelectorAll(".donor-tabs [data-dl]").forEach((b) => b.addEventListener("click", () => {
-    donorTab = b.dataset.dl; document.querySelectorAll(".donor-tabs [data-dl]").forEach((x) => x.classList.toggle("on", x === b)); refreshDonors();
-  }));
-  // "kept alive by @x": a quiet ticker that cycles through donors.
-  let keptI = 0, keptT = 0;
-  function renderKept() {
-    const el = $("kept"), names = donorsTop.slice(0, 12);
-    el.classList.toggle("hidden", !names.length);
-    if (!names.length) return;
-    const show = () => {
-      const d = names[keptI++ % names.length], a = $("kept-name");
-      a.classList.remove("in"); void a.offsetWidth;
-      a.textContent = "@" + d.handle; a.href = "/u/" + encodeURIComponent(d.handle); a.title = d.tagline || "";
-      a.classList.add("in");
-    };
-    if (!keptT) { show(); if (names.length > 1) keptT = setInterval(show, 7000); }
-  }
-  refreshDonors();
-  setInterval(refreshDonors, 120000);
+  const refreshDonors = () => {};   // donor wall lives only on /about
 
-  // Low-fuel nudge: soft, a few seconds after load, at most once per session.
+  // Low-fuel line: one quiet, dismissible line, only when fuel is genuinely low, at most once per visitor per day.
   let nudged = false;
   function maybeNudge() {
     if (nudged) return;
-    const force = /[?&]lowfuel\b/.test(location.search);
-    let seen = false; try { seen = sessionStorage.getItem("it:nudged") === "1"; } catch (_) {}
+    const force = /[?&]lowfuel\b/.test(location.search), day = new Date().toISOString().slice(0, 10);
+    let seen = false; try { seen = localStorage.getItem("it:nudged") === day; } catch (_) {}
     if (!force && seen) return;
     const low = Number(fuel.low_cents || 500), cents = Number(fuel.balance_cents);
     if (!force && !(fuel.balance_cents != null && cents < low)) return;
-    nudged = true; try { sessionStorage.setItem("it:nudged", "1"); } catch (_) {}
+    nudged = true; if (!force) try { localStorage.setItem("it:nudged", day); } catch (_) {}
     const hrs = Math.max(0, cents) / (hourCents || 17);
-    $("nudge-left").textContent = Number.isFinite(hrs) ? (hrs < 1 ? "Less than an hour of painting left." : `About ${Math.round(hrs)} hours of painting left.`) : "";
+    $("nudge-left").textContent = Number.isFinite(hrs) && hrs >= 1 ? `Fuel's low, about ${Math.round(hrs)} h of painting left` : "Fuel's low";
     $("nudge").classList.remove("hidden"); requestAnimationFrame(() => $("nudge").classList.add("on"));
     try { window.va && window.va("event", { name: "nudge_shown" }); } catch (_) {}
   }
   const closeNudge = () => { $("nudge").classList.remove("on"); setTimeout(() => $("nudge").classList.add("hidden"), 300); };
   $("nudge-x").addEventListener("click", closeNudge);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("nudge").classList.contains("hidden")) closeNudge(); });
-  document.querySelectorAll(".nudge-tiers button").forEach((b) => b.addEventListener("click", () => { closeNudge(); donate(Number(b.dataset.cents)); }));
+  $("nudge-go").addEventListener("click", (e) => { e.preventDefault(); closeNudge(); openTab("fuel"); });
   window.addEventListener("tapestry:revealed", () => setTimeout(maybeNudge, 4000), { once: true });
-  setTimeout(maybeNudge, 9000);   // in case the intro already finished
+  setTimeout(maybeNudge, 9000);
 
   async function donate(cents, { ideaId } = {}) {
     try {
       const r = await fetch("/api/checkout", {
         method: "POST", headers: { "content-type": "application/json", ...(S.token() ? { authorization: "Bearer " + S.token() } : {}) },
-        body: JSON.stringify({ cents, ideaId: ideaId || null, note: ($("donor-note").value || "").slice(0, 140), returnTo: location.origin + location.pathname }),
+        body: JSON.stringify({ cents, ideaId: ideaId || null, note: (($("donor-note") || {}).value || "").slice(0, 140), returnTo: location.origin + location.pathname }),
       });
       const j = await r.json();
       if (!r.ok || !j.url) throw new Error(j.error || "checkout failed");

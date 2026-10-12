@@ -1,3 +1,4 @@
+const OWNER = (h) => String(h || "").toLowerCase() === "bicrick";   // never credited in previews
 const { rest } = require("../lib/common");
 
 // Same pages, per-link previews: /?at=A&to=B and /u/<handle> get their own og/twitter tags
@@ -28,7 +29,7 @@ module.exports = async (req, res) => {
   try {
     if (kind === "u") {
       const handle = String(req.query.handle || "").replace(/^@/, "");
-      if (/^[A-Za-z0-9_]{2,20}$/.test(handle)) {
+      if (/^[A-Za-z0-9_]{2,20}$/.test(handle) && !OWNER(handle)) {
         const p = (await rest("GET", `profiles?handle=ilike.${encodeURIComponent(handle)}&select=handle`))[0];
         if (p) {
           const n = (await rest("GET", `ideas?handle=ilike.${encodeURIComponent(p.handle)}&status=in.(playing,played)&start_strip=not.is.null&select=id&limit=200`)).length;
@@ -44,7 +45,7 @@ module.exports = async (req, res) => {
         const idea = (await rest("GET", `ideas?status=in.(playing,played)&start_strip=lte.${a + 3}&order=start_strip.desc&limit=1&select=handle,body,start_strip,end_strip,status`).catch(() => []))[0];
         const by = idea && (idea.end_strip != null ? a <= idea.end_strip : idea.status === "playing" && a <= idea.start_strip + 16) ? idea : null;
         m = { title: by ? clip(String(by.body).replace(/\s+/g, " ").trim(), 70) : "A moment from the Infinite Tapestry",
-              desc: by ? `by @${by.handle} · Infinite Tapestry` : "An endless painting, steered by everyone watching.",
+              desc: by && !OWNER(by.handle) ? `by @${by.handle} · Infinite Tapestry` : "An endless painting, steered by everyone watching.",
               img: `${host}/api/og?card=at&a=${a}&b=${to}`, url: `${host}/?at=${a}&to=${to}` };
       }
     }

@@ -61,16 +61,7 @@
     <div id="tl-tip" class="tl-tip"></div>
     <span id="tl-start" class="tl-label left"></span><span class="tl-label right">Live</span>
   </div>
-  <div id="kept" class="kept hidden" aria-live="off"><span class="kept-l">kept alive by</span> <a id="kept-name" href="#"></a></div>
-  <div id="nudge" class="nudge hidden" role="dialog" aria-modal="false" aria-labelledby="nudge-t">
-    <div class="nudge-card">
-      <img class="nudge-mark" src="/brand/mark-plain.svg" alt="" />
-      <div id="nudge-t" class="nudge-t">The tapestry runs on donations.</div>
-      <div class="nudge-s">Keep it alive and your name stays on it. <span id="nudge-left" class="muted"></span></div>
-      <div class="tiers nudge-tiers"><button data-cents="300">$3</button><button data-cents="1000">$10</button><button data-cents="2500">$25</button></div>
-      <button id="nudge-x" class="nudge-x" type="button">Not now</button>
-    </div>
-  </div>
+  <div id="nudge" class="nudge-line hidden" role="status"><span id="nudge-left"></span> · <a id="nudge-go" href="/?fuel=1">add fuel</a><button id="nudge-x" type="button" aria-label="Dismiss">×</button></div>
   <div id="toast" class="toast"></div>
 
   <div id="chat" class="chat ui hidden">
@@ -225,7 +216,7 @@
     </div>
     </section>
     <section class="panel hidden" id="panel-ideas">
-      <p class="fine pad">Ideas from everyone. The most-loved (and boosted) are woven in next.</p>
+      <p class="fine pad">Ideas from everyone. The most-loved are woven in next.</p>
       <ol id="idea-list" class="list"></ol>
       <div id="idea-empty" class="empty hidden">The pool is empty. Auto is improvising.</div>
       <div class="drawer-sub">Woven in</div>
@@ -241,9 +232,7 @@
         <button data-cents="2500">$25<small>~6 days</small></button>
       </div>
       <input id="donor-note" class="vibe pad-x" maxlength="140" placeholder="A note for the wall (optional)" />
-      <div class="drawer-sub donor-tabs"><button data-dl="recent" class="on">Recent</button><button data-dl="top">All-time</button></div>
-      <ol id="donor-list" class="list donors"></ol>
-      <p class="fine pad">Donors get a shout-out on their profile: a short line and a link. Test mode for now.</p>
+      <p class="fine pad">Totally optional. Donors are thanked on the <a href="/about">about page</a>.</p>
     </section>
     <section class="panel hidden" id="panel-audit">
       <div class="pad"><input id="audit-filter" class="vibe" placeholder="Filter by action (e.g. chat, vote, admin_ban)" /></div>
