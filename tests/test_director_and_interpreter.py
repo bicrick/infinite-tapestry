@@ -194,3 +194,14 @@ def test_priority_interleave_keeps_free_ideas_moving():
         r = c._pick(pool, 1, True, 2)[0]; order.append(r["id"]); pool.remove(r)
     assert order[:6] == [3, 5, 1, 6, 8, 2]
     assert c._pick([{"id": 1, "_prio": False}, {"id": 2, "_prio": True}], 1, False, 2)[0]["id"] == 1   # quiet: untouched
+
+
+def test_reactions_stretch_the_scene_on_stage():
+    d = LiveDirector("a", hold=6, blend=4, loop=False)
+    d._current = make_scene("x", hold=6, origin="auto"); d._active_since = 100
+    assert d._hold_len(d._current) == 4
+    d.heat = lambda since: 13 if since == 100 else 0
+    assert d._hold_len(d._current) == 6          # +2 for ~13 reactions
+    d.heat = lambda since: 500
+    assert d._hold_len(d._current) == 7          # +3 max
+    assert d._hold_len(make_scene("y", hold=6, origin="auto")) == 4   # only the scene on stage
