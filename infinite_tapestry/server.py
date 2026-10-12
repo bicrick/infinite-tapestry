@@ -307,6 +307,11 @@ def create_app(
                 if len(text) > MAX_INTENT_CHARS:
                     await notice(f"Keep it under {MAX_INTENT_CHARS} characters.")
                     return
+                from .guard import is_blocked
+
+                if is_blocked(text):
+                    await notice("That prompt is blocked (sexual content involving minors is never allowed).")
+                    return
                 d = generator.director
                 if len(d.state()["items"]) >= MAX_QUEUE:
                     await notice("The queue is full. Try again in a bit.")
@@ -331,7 +336,11 @@ def create_app(
                     make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""),
                                s.get("transition"), s.get("hold"), source=text, origin="user")
                     for s in plan["scenes"]
+                    if not is_blocked(s["prompt"], text)
                 ]
+                if not scenes:
+                    await notice("That prompt is blocked.")
+                    return
                 if autopilot:
                     autopilot.user_acted()
                 if when == "now":
@@ -397,7 +406,12 @@ def create_app(
                         elif t == "move":
                             d.move(int(sid), int(data.get("to", 0)))
                         elif t == "edit":
+                            from .guard import is_blocked
+
                             prompt = data.get("prompt")
+                            if prompt and is_blocked(str(prompt)):
+                                await notice("That prompt is blocked.")
+                                continue
                             d.edit(int(sid), prompt=str(prompt)[:MAX_INTENT_CHARS * 2] if prompt else None,
                                    title=data.get("title"), transition=data.get("transition"), hold=data.get("hold"))
                         elif t == "play":
