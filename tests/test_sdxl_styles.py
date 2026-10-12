@@ -68,3 +68,21 @@ def test_prefill_masked_is_not_black():
     mask.paste(255, (40, 0, 64, 32))
     out = np.asarray(prefill_masked(img, mask)).astype(float)
     assert out[:, 40:].mean(axis=(0, 1))[2] > 150 and (out[:, :40] == np.asarray(img)[:, :40]).all()
+
+
+def test_loras_only_on_explicit_user_request():
+    from infinite_tapestry.styles import explicit_lora, ramp
+    from infinite_tapestry.prompts import LiveDirector, make_scene
+    assert explicit_lora("a pixel art castle") == "pixel art"
+    assert explicit_lora("hyperrealistic pixel art castle") is None
+    assert explicit_lora("misty forest") is None
+    d = LiveDirector("seed")
+    d.play_now(make_scene("x", origin="auto", style="watercolor"))
+    d.frame_for(0)
+    a, b = d.styles_for(0.5)
+    assert ramp(a, b, 0.5) == {}
+    d2 = LiveDirector("seed")
+    d2.play_now(make_scene("x", origin="user", style="pixel", lora="pixel art"))
+    d2.frame_for(0)
+    assert "pixel art" in ramp(*d2.styles_for(0.5), 0.5)
+    assert ramp("pixel art", "none", 1.0) == {}

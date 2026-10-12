@@ -183,7 +183,14 @@ class SDXLInpainter(Inpainter):
         self.config = config
         self._torch = torch
         logger.info("Loading SDXL inpaint model %s …", config.sdxl_model)
-        pipe = AutoPipelineForInpainting.from_pretrained(config.sdxl_model, torch_dtype=torch.float16, variant="fp16")
+        try:
+            pipe = AutoPipelineForInpainting.from_pretrained(config.sdxl_model, torch_dtype=torch.float16, variant="fp16")
+        except Exception as e:
+            fb = getattr(config, "sdxl_fallback_model", "")
+            if not fb or fb == config.sdxl_model:
+                raise
+            logger.warning("SDXL model %s failed (%s); falling back to %s", config.sdxl_model, str(e)[:160], fb)
+            pipe = AutoPipelineForInpainting.from_pretrained(fb, torch_dtype=torch.float16, variant="fp16")
         pipe.scheduler = DPMSolverMultistepScheduler.from_config(
             pipe.scheduler.config, use_karras_sigmas=True, algorithm_type="dpmsolver++")
         # The stock SDXL VAE overflows in fp16; use the fp16-fixed one.

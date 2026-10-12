@@ -46,3 +46,22 @@ def ramp(style_a: str | None, style_b: str | None, t: float) -> dict[str, float]
     if STYLES[b]["lora"]:
         w[b] = w.get(b, 0.0) + STYLES[b]["weight"] * e
     return {k: round(v, 3) for k, v in w.items() if v > 0.01}
+
+
+# LoRAs are reserved for looks the photoreal base can't do well, and only when a
+# person explicitly asks for them. Autopilot never loads a LoRA.
+_ASK = {"pixel art": ("pixel art", "pixel-art", "pixelart", "8-bit", "8 bit", "16-bit", "16 bit"),
+        "watercolor": ("watercolor", "watercolour"),
+        "papercut": ("papercut", "paper cut", "paper-cut", "cut paper")}
+_REAL = ("hyperreal", "realistic", "photoreal", "photo", "realism", "cinematic")
+
+
+def explicit_lora(text: str | None) -> str | None:
+    """LoRA style a user's own words explicitly ask for (None if none, or if they ask for realism)."""
+    t = (text or "").lower()
+    if any(w in t for w in _REAL):
+        return None
+    for name, words in _ASK.items():
+        if any(w in t for w in words) and STYLES[name]["lora"]:
+            return name
+    return None
