@@ -582,8 +582,11 @@
   // Gentle spring: easeOutBack with a small overshoot.
   const easeSpring = (t) => { const c = 0.9, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
 
+  let driftVel = 0, driftAcc = 0, driftArm = 0;
+  function holdDrift() { driftVel = 0; driftAcc = 0; driftArm = 0; }
   function stepPan(dt) {
     if (panMode === "live") return;
+    if (panMode !== "glide" || gesture || tlScrub) holdDrift();   // held / scrubbing / seeking: no drift
     const lo = minPan(), hi = maxPan();
     if (panMode === "seek") {
       const t = Math.min(1, (performance.now() - seek.t0) / seek.dur);
@@ -614,6 +617,18 @@
         panVel *= Math.exp(-(Math.abs(panVel) > 8000 ? 1.4 : FRICTION) * dt);
         panPos += panVel * dt;
         if (Math.abs(panVel) < 4) panVel = 0;
+        // Drift: once settled and the high-res strips are in, resume the slow forward drift with a
+        // gelatinous spring ramp (0 → drift speed over ~1-1.5s, slight overshoot), never a jump.
+        if (Math.abs(panVel) < 4 && !gesture && !tlScrub) {
+          if (!driftArm && coverage >= 0.95) driftArm = performance.now();
+          if (driftArm && performance.now() - driftArm > 300) {
+            const target = Math.max(0, srvSpeed || 0), k = 9, c = 2 * 0.72 * Math.sqrt(k);
+            driftAcc += (k * (target - driftVel) - c * driftAcc) * dt;
+            driftVel += driftAcc * dt;
+            panPos += Math.max(0, driftVel) * dt;
+            if (panPos >= hi) { panPos = hi; holdDrift(); panMode = "live"; live = true; liveBtn.classList.add("hidden"); return; }
+          }
+        } else holdDrift();
         // Gliding into the live edge with speed: just hand over to live.
         if (panPos >= hi && panVel > 0) { panPos = hi; panVel = 0; panMode = "live"; live = true; liveBtn.classList.add("hidden"); }
       }
