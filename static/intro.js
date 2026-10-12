@@ -5,7 +5,7 @@
 //     while the points swell and dissolve into the full-res image; the card eases to full-bleed meanwhile.
 (() => {
   const body = document.body;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches || /[?&]nointro/.test(location.search)) { body.classList.add("loaded"); return; }
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches || /[?&]nointro/.test(location.search)) { body.classList.remove("intro"); body.classList.add("loaded"); return; }
   body.classList.add("intro");
   const view = document.getElementById("view");
   const V = () => window.TapestryView;
@@ -19,10 +19,12 @@
   const hash = (i, j) => { let h = (i * 374761393 + j * 668265263) ^ 0x5bf03635; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
   const t0 = performance.now();
+  const LIGHT = !!(window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches);
+  const CARD = LIGHT ? "247,243,237" : "5,5,6", MOTE = LIGHT ? "60,50,40" : "255,255,255";
   let synth = 0, lastT = t0, offsetFix = null;   // synthetic world scroll until the real one exists
   let resolveAt = 0, finished = false;
   const RESOLVE = 2600;
-  let revealed = false;
+  let revealed = false, readyAt = null;
 
   function worldLeft(now) {
     const v = V();
@@ -51,7 +53,10 @@
       pg.drawImage(view, 0, 0, cols, rows);
       const d = pg.getImageData(0, 0, cols, rows).data;
       let lum = 0; for (let i = 0; i < d.length; i += 16) lum += d[i] + d[i + 1] + d[i + 2];
-      if (!resolveAt && lum / (d.length / 16) / 3 > 12 && now - t0 > 500) { resolveAt = now; }
+      if (readyAt == null) readyAt = now;
+      // Resolve once the visible span is (nearly) painted, so points densify everywhere at once, not from the live edge.
+      const cov = v.coverage ? v.coverage() : 1;
+      if (!resolveAt && now - t0 > 500 && ((cov >= 0.75 && lum / (d.length / 16) / 3 > 12) || now - readyAt > 1200)) { resolveAt = now; }
       src = { d, cols, rows };
     }
     const p = resolveAt ? Math.min(1, (now - resolveAt) / RESOLVE) : 0;
@@ -67,7 +72,7 @@
     // Portrait: everything happens inside the centred band; the surround glow comes in after.
     const band = v && v.band && v.portrait && v.portrait() ? v.band() : { top: 0, height: H };
     const bandTop = band.top, bandH = band.height;
-    g.fillStyle = `rgba(5,5,6,${1 - he})`; g.fillRect(0, bandTop, W, bandH);
+    g.fillStyle = `rgba(${CARD},${1 - he})`; g.fillRect(0, bandTop, W, bandH);
     const sp = 7;                                             // world px between lattice points
     const i0 = Math.floor(left / sp) - 1, i1 = Math.ceil((left + W / s) / sp) + 1;
     const rowsN = Math.ceil(bandH / s / sp) + 1;
@@ -82,7 +87,7 @@
       if (src && dens > 0 && h1 < dens) {
         const pi = ((Math.min(src.rows - 1, Math.max(0, (y / H * src.rows) | 0)) * src.cols) + Math.min(src.cols - 1, Math.max(0, (x / W * src.cols) | 0))) * 4;
         let r = src.d[pi], gg = src.d[pi + 1], b = src.d[pi + 2];
-        if (r + gg + b < 24) continue;
+        if (!LIGHT && r + gg + b < 24) continue;
         const m = (r + gg + b) / 3, k = 1.55 - 0.5 * he;
         r = clamp(m + (r - m) * k + 12); gg = clamp(m + (gg - m) * k + 12); b = clamp(m + (b - m) * k + 12);
         const age = Math.min(1, (dens - h1) * 6);             // each point blooms in over a moment
@@ -90,8 +95,8 @@
         g.fillStyle = `rgba(${r},${gg},${b},${(0.35 + 0.6 * age) * (1 - he)})`;
         g.beginPath(); g.arc(x, y, rad, 0, 6.283); g.fill();
       }
-      if (moteA > 0.01 && h1 < 0.12) {
-        g.fillStyle = `rgba(255,255,255,${moteA * (0.14 + 0.25 * h2)})`;
+      if (moteA > 0.01 && h1 < 0.16) {
+        g.fillStyle = `rgba(${MOTE},${moteA * (0.22 + 0.3 * h2)})`;
         g.fillRect(x, y, 1.5 * devicePixelRatio, 1.5 * devicePixelRatio);
       }
     }
@@ -112,6 +117,7 @@
     }
     body.classList.add("loaded");
     body.classList.remove("intro");
+    window.dispatchEvent(new Event("tapestry:revealed"));
     setTimeout(() => body.classList.add("settled"), 2400);
   }
   function finish() {
