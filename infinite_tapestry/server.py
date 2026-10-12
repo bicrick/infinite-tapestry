@@ -190,13 +190,17 @@ def create_app(
                 since_bcast = 0.0
                 broadcast(clock_msg())
 
+    def ensure_crowd() -> None:
+        """Start (or restart) the crowd meter/pull loop. Safe when crowd is None."""
+        c = clock_task.get("crowd")
+        if crowd and (c is None or c.done()):
+            clock_task["crowd"] = asyncio.get_running_loop().create_task(crowd.run())
+
     def ensure_clock() -> None:
         t = clock_task["t"]
         if t is None or t.done():
             clock_task["t"] = asyncio.get_running_loop().create_task(clock_loop())
-        c = clock_task.get("crowd")
-        if crowd and (c is None or c.done()):
-            clock_task["crowd"] = asyncio.get_running_loop().create_task(crowd.run())
+        ensure_crowd()
         a = clock_task.get("auto")
         if autopilot and (a is None or a.done()):
             clock_task["auto"] = asyncio.get_running_loop().create_task(autopilot.run())
@@ -205,6 +209,13 @@ def create_app(
     app.state.buffer = buffer
     app.state.generator = generator
     app.state.ensure_clock = ensure_clock
+    app.state.ensure_crowd = ensure_crowd
+
+    @app.on_event("startup")
+    async def _startup_crowd() -> None:
+        # Fuel burn + idea pull must run with 0 viewers (pod is still billing).
+        # Clock/timeline stays viewer-driven via ensure_clock on WS connect.
+        ensure_crowd()
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -362,9 +373,12 @@ def create_app(
             await ws.send_json({"type": "notice", "text": text, **extra})
 
         try:
+            from .crowd import GPU_CENTS_PER_HOUR
+
             await ws.send_json(
                 {"type": "config", **config.client_dict(), "interpreter": bool(interpreter.enabled),
-                 "limits": {"intent_chars": MAX_INTENT_CHARS, "intent_cooldown": intent_cooldown}}
+                 "limits": {"intent_chars": MAX_INTENT_CHARS, "intent_cooldown": intent_cooldown},
+                 "gpu_cents_per_hour": GPU_CENTS_PER_HOUR}
             )
             await ws.send_json(clock_msg())
             for strip in buffer.snapshot()[-RECENT_ON_CONNECT:]:

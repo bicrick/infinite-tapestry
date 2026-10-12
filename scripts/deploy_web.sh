@@ -7,7 +7,11 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-/workspace/tapestry-app}
 set -a; . ~/.tapestry/supabase.env; . ~/.tapestry/app.env; set +a
 mkdir -p /tmp/keep && cp -r "$OUT/.vercel" /tmp/keep/ 2>/dev/null || true
-WS_URL=${WS_URL:-wss://sv4wo8fnizuhtn-8000.proxy.runpod.net/ws} "$ROOT/scripts/build_web.sh" "$OUT" >/dev/null
+if [ -z "${WS_URL:-}" ]; then
+  echo "error: WS_URL must be set explicitly (e.g. wss://<pod>-8000.proxy.runpod.net/ws)" >&2
+  exit 1
+fi
+"$ROOT/scripts/build_web.sh" "$OUT" >/dev/null
 cp -r /tmp/keep/.vercel "$OUT/" && printf '.env*\n' > "$OUT/.vercelignore"
 cd "$OUT"
 URL=$(npx -y vercel@latest deploy --yes --token "$VERCEL_TOKEN" 2>/dev/null | grep -o 'https://[a-z0-9.-]*vercel.app' | tail -1)

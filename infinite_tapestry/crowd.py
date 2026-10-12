@@ -82,7 +82,8 @@ class Crowd:
         if self.fuel_cents is not None:
             hours = max(0.0, self.fuel_cents / GPU_CENTS_PER_HOUR)
         return {"cents": None if self.fuel_cents is None else round(self.fuel_cents, 2),
-                "hours": None if hours is None else round(hours, 2), "out": self.out_of_fuel}
+                "hours": None if hours is None else round(hours, 2), "out": self.out_of_fuel,
+                "gpu_cents_per_hour": GPU_CENTS_PER_HOUR}
 
     def _audience_pending(self) -> bool:
         st = self.director.state()
@@ -126,14 +127,21 @@ class Crowd:
         scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"), s.get("hold"),
                              source=" · ".join(r["body"] for r in rows)[:200], origin="user", style=s.get("style"))
                   for s in plan["scenes"] if not is_disallowed(s["prompt"])]
+        if not scenes:
+            # Nothing survived the guard — don't leave ideas stuck as playing.
+            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})",
+                                    {"status": "rejected"}, "return=minimal")
+            await asyncio.to_thread(self.supa.audit, "director_reject", ids, {"reason": "all_scenes_disallowed"})
+            return
         for sc in scenes:
             sc["by"] = by
             sc["idea_ids"] = [r["id"] for r in rows]
-        if scenes:
-            self.director.add_user(scenes)
+        self.director.add_user(scenes)
+        # Stay `playing` until track_landing sees the idea leave the stage; only
+        # store the plan here so a restart before landing can recover (see recover_interrupted).
         await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})",
-                                {"status": "played", "played_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                                 "plan": {"titles": [s["title"] for s in scenes], "source": plan.get("source")}}, "return=minimal")
+                                {"plan": {"titles": [s["title"] for s in scenes], "source": plan.get("source")}},
+                                "return=minimal")
         await asyncio.to_thread(self.supa.audit, "director_merge", ids, {"titles": [s["title"] for s in scenes], "by": by})
         self.broadcast({"type": "activity", "text": intent[:200], "titles": [s["title"] for s in scenes], "by": by})
         self.on_change()
@@ -198,7 +206,12 @@ class Crowd:
             return None
 
     async def track_landing(self) -> None:
-        """Record where each idea landed on the tapestry (strip range) for permalinks."""
+        """Record where each idea landed on the tapestry (strip range) for permalinks.
+
+        Marks status=played + played_at when the idea leaves the stage (end_strip
+        is written). Ideas stay `playing` from pull_ideas until then so a restart
+        before landing can re-queue them.
+        """
         st = self.director.state()
         idx = int(getattr(self.director, "_last_index", 0))
         live = set()
@@ -209,13 +222,72 @@ class Crowd:
         for i in live - set(started):
             started[i] = idx
             await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{i}&start_strip=is.null", {"start_strip": idx}, "return=minimal")
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         for i in set(started) - live:
             started.pop(i)
-            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{i}", {"end_strip": idx}, "return=minimal")
+            await asyncio.to_thread(
+                self.supa.rest, "PATCH", f"ideas?id=eq.{i}",
+                {"end_strip": idx, "status": "played", "played_at": now}, "return=minimal")
         self._landing = started
+
+    # Fallback span when an idea reached the stage (has start_strip) but the server
+    # restarted before end_strip was written. Matches the frontend share/profile
+    # fallback of start_strip + 12.
+    _ORPHAN_SPAN = 12
+
+    def _director_idea_ids(self) -> set:
+        """idea_ids still on the restored director (current + target + queue)."""
+        st = self.director.state()
+        ids: set = set()
+        scenes = list(st.get("items") or [])
+        for sc in (st.get("current_scene"), st.get("target_scene")):
+            if sc:
+                scenes.append(sc)
+        for sc in scenes:
+            for i in (sc or {}).get("idea_ids") or []:
+                ids.add(i)
+        return ids
+
+    async def recover_interrupted(self) -> None:
+        """On Crowd startup: fix ideas left mid-flight by a previous process.
+
+        Skip any idea whose id is still on the restored director (state.json
+        persists queue/current/target with idea_ids) — those will keep playing
+        and track_landing will finish them.
+
+        - playing + start_strip IS NULL → pending (was queued, never reached stage)
+        - playing + start_strip set + end_strip IS NULL → played with
+          end_strip = start_strip + 12 (reached the stage; close the range)
+        """
+        live = self._director_idea_ids()
+        never_landed = await asyncio.to_thread(
+            self.supa.rest, "GET",
+            "ideas?status=eq.playing&start_strip=is.null&select=id") or []
+        for r in never_landed:
+            if r["id"] in live:
+                continue
+            await asyncio.to_thread(
+                self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
+                {"status": "pending"}, "return=minimal")
+        orphaned = await asyncio.to_thread(
+            self.supa.rest, "GET",
+            "ideas?status=eq.playing&start_strip=not.is.null&end_strip=is.null&select=id,start_strip") or []
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        for r in orphaned:
+            if r["id"] in live:
+                continue
+            start = int(r["start_strip"])
+            await asyncio.to_thread(
+                self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
+                {"status": "played", "played_at": now, "end_strip": start + self._ORPHAN_SPAN},
+                "return=minimal")
 
     async def run(self) -> None:
         last_meter = 0.0
+        try:
+            await self.recover_interrupted()
+        except Exception:
+            logger.exception("crowd recover failed")
         while True:
             try:
                 if time.monotonic() - last_meter >= 60 or self.fuel_cents is None:

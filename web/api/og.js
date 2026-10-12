@@ -1,16 +1,23 @@
-const { env, rest, POD } = require("../lib/common");
+const { env, rest, POD, storagePrefixes } = require("../lib/common");
 
 // A crop of the tapestry where an idea landed (share cards + profile thumbnails).
-// Sections are immutable once woven, so this is cached at the edge for a long time.
+// Final ranges (explicit a/b, or idea with end_strip) are immutable and cached long;
+// guessed ranges while still weaving (end_strip null → a..a+12) use a short cache.
 // Source order: Supabase Storage (mirrored by the GPU server) -> live GPU server -> brand OG fallback.
 module.exports = async (req, res) => {
   const thumb = req.query.size === "thumb";
   const [w, h] = thumb ? [600, 315] : [1200, 630];
   let a = parseInt(req.query.a, 10), b = parseInt(req.query.b, 10);
+  const explicitRange = Number.isFinite(a) && Number.isFinite(b);
+  let rangeFinal = explicitRange;
   try {
     if (req.query.id) {
       const r = await rest("GET", `ideas?id=eq.${parseInt(req.query.id, 10) || 0}&status=in.(playing,played)&select=start_strip,end_strip`);
-      if (r.length) { a = r[0].start_strip; b = r[0].end_strip ?? r[0].start_strip + 12; }
+      if (r.length) {
+        a = r[0].start_strip;
+        rangeFinal = r[0].end_strip != null;
+        b = r[0].end_strip ?? r[0].start_strip + 12;
+      }
     }
   } catch (_) {}
   const send = (buf, long) => {
@@ -23,18 +30,17 @@ module.exports = async (req, res) => {
     // A 1.9:1 card shows ~8 strips: take them where the new scene has settled in (40% into the landing).
     if (b - a > 7) { const mid = Math.round(a + (b - a) * 0.4); a = Math.max(a, mid - 4); b = a + 7; }
     const key = `crops/${a}-${b}-${w}x${h}.jpg`;
-    const prefixes = [...new Set([env("TAPESTRY_STORAGE_PREFIX", "live-sdxl"), "live-sdxl", "live"])];
-    for (const pre of prefixes) {
+    for (const pre of storagePrefixes()) {
       const r = await fetch(`${env("SUPABASE_URL").replace(/\/$/, "")}/storage/v1/object/tapestry/${pre}/${key}`, {
         headers: { apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") },
       }).catch(() => null);
-      if (r && r.ok) return send(Buffer.from(await r.arrayBuffer()), true);
+      if (r && r.ok) return send(Buffer.from(await r.arrayBuffer()), rangeFinal);
     }
     if (POD()) {
       const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 9000);
       const r = await fetch(`https://${POD()}-8000.proxy.runpod.net/crop/${a}/${b}.jpg?w=${w}&h=${h}`, { signal: ctl.signal }).catch(() => null);
       clearTimeout(t);
-      if (r && r.ok) return send(Buffer.from(await r.arrayBuffer()), true);
+      if (r && r.ok) return send(Buffer.from(await r.arrayBuffer()), rangeFinal);
     }
   }
   const host = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
