@@ -321,3 +321,5 @@ body.page .toast { position: fixed; }
 .page-top { pointer-events: auto; background: linear-gradient(to bottom, rgba(5,5,6,.85), rgba(5,5,6,0)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 body.page .toast { bottom: 32px; }
 a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
+.p-title { margin: -6px 0 12px; color: var(--muted); font-size: 12px; } .p-title::before { content: "✦ "; opacity: .6; }
+.s-upnext::before { background: #9ad0ff; }

@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const handle = decodeURIComponent((location.pathname.match(/^\/u\/([^/?#]+)/) || [])[1] || new URLSearchParams(location.search).get("h") || "");
 
-const LABEL = { woven: "Woven in", weaving: "Weaving now", pending: "Pending", rejected: "Not used", withdrawn: "Withdrawn" };
+const LABEL = { upnext: "Up next", woven: "Woven in", weaving: "Weaving now", pending: "Pending", rejected: "Not used", withdrawn: "Withdrawn" };
 let toastT = 0;
 function toast(html, ms = 2200) {
   const t = $("toast"); t.innerHTML = html; t.classList.add("show");
@@ -60,7 +60,7 @@ function render() {
   const bg = d.ideas.find((i) => i.start_strip != null);
   if (bg) $("page-bg").style.backgroundImage = `url(/api/og?id=${bg.id}&size=thumb)`;
 
-  const items = d.ideas.filter((i) => filter === "all" || i.status === filter || (filter === "woven" && i.status === "weaving") || (filter === "rejected" && i.status === "withdrawn"));
+  const items = d.ideas.filter((i) => filter === "all" || i.status === filter || (filter === "woven" && i.status === "weaving") || (filter === "pending" && i.status === "upnext") || (filter === "rejected" && i.status === "withdrawn"));
   $("p-list").innerHTML = items.map(card).join("");
   const empty = $("p-empty");
   empty.classList.toggle("hidden", items.length > 0);
@@ -74,13 +74,13 @@ function card(i) {
   const at = landed ? `/?at=${i.start_strip}&to=${to}` : null;
   const thumb = landed
     ? `<a class="p-thumb" href="${at}" title="View where it landed"><img src="/api/og?id=${i.id}&size=thumb" alt="" loading="lazy" onload="this.classList.add('ok')" /></a>`
-    : `<div class="p-thumb empty">${i.image_path ? `<img class="ok ref" src="${esc(refUrl(i.image_path))}" alt="" loading="lazy" />` : ""}<span>${i.status === "pending" ? "In the queue" : ""}</span></div>`;
+    : `<div class="p-thumb empty">${i.image_path ? `<img class="ok ref" src="${esc(refUrl(i.image_path))}" alt="" loading="lazy" />` : ""}<span>${i.status === "pending" ? "In the queue" : i.status === "upnext" ? "Being woven in soon" : ""}</span></div>`;
   const when = i.status === "woven" && i.played_at ? `woven ${ago(i.played_at)}` : ago(i.created_at);
   return `<li class="p-card" data-id="${i.id}">
     ${thumb}
     <div class="p-body">
       <div class="p-row"><span class="p-status s-${i.status}">${LABEL[i.status] || esc(i.status)}</span><time title="${esc(exact(i.created_at))}">${when}</time></div>
-      <p class="p-text">${esc(i.body)}</p>
+      <p class="p-text">${esc(i.body)}</p>${i.title && i.status !== "pending" ? `<div class="p-title">${esc(i.title)}</div>` : ""}
       <div class="p-actions">
         ${landed ? `<a href="${at}">View where it landed <span aria-hidden="true">→</span></a>` : ""}
         ${i.status === "rejected" || i.status === "withdrawn" ? "" : `<button data-share="${i.id}" type="button">Share</button>`}
