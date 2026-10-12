@@ -807,6 +807,7 @@
     while (wheelHist.length && now - wheelHist[0][0] > 300) wheelHist.shift();
     const rate = wheelHist.reduce((a, x) => a + x[1], 0) / 0.3;          // CSS px/s of wheel input
     if (rate > TURBO_RATE) turbo = Math.min(1, turbo + 0.07 * Math.min(3, rate / TURBO_RATE));   // sustained/rapid → builds
+    if (turbo > 0.8 && performance.now() - (window.__vaTurboAt || -1e9) > 60000) { window.__vaTurboAt = performance.now(); try { window.va && window.va("event", { name: "scroll_turbo" }); } catch (_) {} }
     // Reversing direction brakes hard and drops turbo.
     if (panVel !== 0 && Math.sign(panVel) !== Math.sign(d)) { panVel *= 0.2; turbo = 0; }
     // Normal: linear, capped, short glide. Turbo: gain stacks with speed (nonlinear), high ceiling.
