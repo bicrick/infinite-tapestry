@@ -84,7 +84,8 @@ class LodBuilder:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
         if getattr(self.store, "mirror", None):
-            self.store.mirror.put(f"lod/{level}/{chunk:06d}.jpg", data, "image/jpeg")
+            # Public CDN bucket: viewers load overview tiles from there, not from the pod.
+            self.store.mirror.put(f"public:lod/{level}/{chunk:06d}.jpg", data, "image/jpeg")
         return data
 
     def get(self, level: int, chunk: int, build: bool = False) -> bytes | None:
@@ -92,7 +93,7 @@ class LodBuilder:
         if p.exists():
             return p.read_bytes()
         m = getattr(self.store, "mirror", None)
-        data = m.get(f"lod/{level}/{chunk:06d}.jpg") if m else None
+        data = (m.get(f"public:lod/{level}/{chunk:06d}.jpg") or m.get(f"lod/{level}/{chunk:06d}.jpg")) if m else None
         if data:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(data)

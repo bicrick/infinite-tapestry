@@ -46,10 +46,21 @@ class SupabaseMirror:
         return cls(url, key, os.environ.get("TAPESTRY_STORAGE_BUCKET", "tapestry"),
                    os.environ.get("TAPESTRY_STORAGE_PREFIX", "live"))
 
+    # Public, CDN-cached copy of every strip so viewers fetch images from the
+    # Supabase CDN instead of the pod (the WS only carries small JSON refs).
+    public_bucket = os.environ.get("TAPESTRY_PUBLIC_BUCKET", "strips")
+
+    def public_base(self) -> str:
+        return f"{self.url}/storage/v1/object/public/{self.public_bucket}/{self.prefix}/strips/"
+
     def _req(self, method: str, path: str, data: bytes | None = None, ctype: str = "application/octet-stream") -> bytes:
+        bucket = self.bucket
+        headers = {"Authorization": f"Bearer {self.key}", "apikey": self.key, "Content-Type": ctype, "x-upsert": "true"}
+        if path.startswith("public:"):
+            path, bucket = path[len("public:"):], self.public_bucket
+            headers["cache-control"] = "max-age=31536000"  # strip keys are immutable
         req = urllib.request.Request(
-            f"{self.url}/storage/v1/object/{self.bucket}/{self.prefix}/{path}", data=data, method=method,
-            headers={"Authorization": f"Bearer {self.key}", "apikey": self.key, "Content-Type": ctype, "x-upsert": "true"},
+            f"{self.url}/storage/v1/object/{bucket}/{self.prefix}/{path}", data=data, method=method, headers=headers,
         )
         with urllib.request.urlopen(req, timeout=30) as r:
             return r.read()
@@ -160,7 +171,8 @@ class HistoryStore:
             with open(self.dir / "strips.jsonl", "a") as f:
                 f.write(json.dumps(meta) + "\n")
         if self.mirror:
-            self.mirror.put(f"strips/{s.index:08d}.jpg", s.jpeg, "image/jpeg")
+            # One durable copy, in the public CDN bucket (viewers fetch it directly).
+            self.mirror.put(f"public:strips/{s.index:08d}.jpg", s.jpeg, "image/jpeg")
             self.mirror.save_strip_row(s)
         if getattr(self, "lod", None):
             self.lod.on_strip(s.index)
@@ -181,7 +193,9 @@ class HistoryStore:
         p = self._strip_path(index)
         if not p.exists():
             # Cache miss: fetch from durable Storage and re-cache.
-            data = self.mirror.get(f"strips/{index:08d}.jpg") if self.mirror else None
+            data = None
+            if self.mirror:  # newer strips live in the public bucket, older ones in the private one
+                data = self.mirror.get(f"public:strips/{index:08d}.jpg") or self.mirror.get(f"strips/{index:08d}.jpg")
             if not data:
                 return None
             p.write_bytes(data)
