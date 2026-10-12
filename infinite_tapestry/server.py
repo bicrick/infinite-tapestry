@@ -574,10 +574,12 @@ def create_app(
     @app.websocket("/ws")
     async def stream_endpoint(ws: WebSocket) -> None:
         ip = client_ip(ws)
+        # Accept first — Starlette cannot usefully close a WS before accept — then
+        # immediately drop over-cap peers so the 8/IP limit is enforced.
+        await ws.accept()
         if conn_per_ip.get(ip, 0) >= MAX_CONN_PER_IP or len(clients) >= MAX_CONNECTIONS:
             await ws.close(code=1013)
             return
-        await ws.accept()
         conn_per_ip[ip] = conn_per_ip.get(ip, 0) + 1
         ensure_clock()
         user: dict | None = None
