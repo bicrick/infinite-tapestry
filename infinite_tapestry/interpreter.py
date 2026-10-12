@@ -37,9 +37,9 @@ SYSTEM = f"""You direct an endless, horizontally scrolling image that {_BACKEND_
 The user types a loose intention for where the journey goes next. Turn it into a short plan of 1-2 scenes. The FIRST scene must already be the user's destination (no bridging or in-between scenes); the transition blend handles continuity.
 Each scene prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, written so it can extend sideways indefinitely (describe a continuous space or pattern, not a single centered object). {_COMPOSITION_NOTE} Avoid text, frames, borders and split images.
 Content line: this is a WILD, irreverent, adults-only-humor art toy. Paint the idea EXACTLY as asked, as literally and vividly as possible: gross, crude, stupid, absurd, scatological (poop, feces, vomit, snot, sewage), cartoonish gore, horror, violence, disturbing, grotesque, edgy and offensive-humor ideas are all welcome. NEVER sanitize, soften, euphemize, tame, swap for a 'tasteful' version, or add disclaimers; 'feces land' means a world literally made of feces. The ONLY things you never depict: (1) nudity or sexual content of any kind (keep only the non-sexual parts of such an idea), (2) children/minors in any form, (3) hateful slurs or symbols targeting a group, (4) a real, identifiable person shown doing something defamatory or degrading.
-Independence: the user's idea REPLACES whatever is on screen. Do NOT bridge from, merge with, or adapt it to the current scene (no canals, rooms or props carried over); the renderer handles the transition. transition = strips used to blend into that scene (4-6). hold = strips to stay on it (5-10; user ideas 8-10). Each scene lasts ~25-40 seconds.
+Independence: the user's idea REPLACES whatever is on screen. Do NOT bridge from, merge with, or adapt it to the current scene (no canals, rooms or props carried over); the renderer handles the transition. transition = strips used to blend into that scene (1-2). hold = strips to stay on it (3-4). Each scene lasts ~10-15 seconds.
 Reply with ONLY a JSON object, no prose:
-{{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":5,"hold":7,"style":"photo","beats":["approach beat prompt","reveal beat prompt","climax beat prompt"]}}],"note":"one short sentence"}}"""
+{{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":2,"hold":3,"style":"photo","beats":["first beat prompt","second beat prompt"]}}],"note":"one short sentence"}}"""
 
 
 _STYLE_NOTE = (
@@ -54,8 +54,8 @@ _STYLE_NOTE = (
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide where the journey drifts next, forever.
 Given the recent scenes (oldest first), invent the NEXT scenes (as many as asked). Be genuinely interesting: topical riffs on today's news, funny visual gags, and striking specific cinematic places; never safe screensaver filler (no coral reefs, meadows, generic forests, sunset beaches, nebulae). Follow the THEME given in the request. Never repeat or closely revisit a recent scene. Irreverent, gross and absurd humor is welcome. No recognizable real people, nothing sexual, nothing involving minors.
 Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). {_COMPOSITION_NOTE} No text, frames, borders or split images. Never include nudity or sexual content.
-transition = strips to blend in (4-6), hold = strips to stay (5-8). Each scene lasts ~25-40 seconds.
-Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":5,"hold":7,"style":"photo","beats":["approach beat prompt","reveal beat prompt","climax beat prompt"]}}],"note":"one short sentence"}}"""
+transition = strips to blend in (2-3), hold = strips to stay (2-4). Each scene lasts ~10-15 seconds.
+Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":2,"hold":3,"style":"photo","beats":["first beat prompt","second beat prompt"]}}],"note":"one short sentence"}}"""
 _IMMERSIVE_NOTE = (
     "\nImmersion (most important): every prompt is ENVIRONMENT-FIRST and puts the camera INSIDE the place, never "
     "looking at a tabletop or display. Start with the camera position and the space, then depth, a clear subject and "
@@ -71,8 +71,8 @@ _CINEMA_NOTE = (
     "handheld in a market. Choose lens (14mm ultra-wide, 24mm, 35mm, 85mm), time of day, lighting and weather on purpose. "
     "Write a rich prompt with ONE clear focal subject, crowds and people when the place would have them, visible motion "
     "(motion blur, flying sparks, waving flags, rain streaks), and depth layers (foreground / midground / background). "
-    "Mini narrative: give each scene \"beats\": 2-4 full prompts that play in order across its strips, e.g. approach -> "
-    "reveal -> climax, same subject and place, different framing or moment (wide establishing -> closer in the crowd -> "
+    "Mini narrative: give each scene \"beats\": 1-2 full prompts that play in order across its strips, e.g. wide -> "
+    "closer, same subject and place, different framing or moment (wide establishing -> closer in the crowd -> "
     "the peak moment). \"prompt\" = the first beat. Avoid flat textures, wallpaper-like repetition and still life."
 )
 SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE + _CINEMA_NOTE
@@ -226,9 +226,9 @@ def parse_plan(text: str) -> dict[str, Any]:
                 "prompt": prompt[:600],
                 "negative": str(s.get("negative", "") or "")[:400],
                 "style": (str(s.get("style") or "photo").strip().lower()[:24] or "photo"),
-                "transition": _clamp(s.get("transition"), 4, 6, 5),
-                "hold": _clamp(s.get("hold"), 5, 10, 7),
-                "beats": [str(b).strip()[:600] for b in (s.get("beats") or []) if str(b).strip()][:4] if isinstance(s.get("beats"), list) else [],
+                "transition": _clamp(s.get("transition"), 1, 3, 2),
+                "hold": _clamp(s.get("hold"), 2, 4, 3),
+                "beats": [str(b).strip()[:600] for b in (s.get("beats") or []) if str(b).strip()][:2] if isinstance(s.get("beats"), list) else [],
             }
         )
     if not scenes:
@@ -311,8 +311,8 @@ def fallback_plan(intent: str, reason: str = "") -> dict[str, Any]:
                 "title": intent[:40],
                 "prompt": intent,
                 "negative": "",
-                "transition": 10,
-                "hold": 10,
+                "transition": 2,
+                "hold": 4,
             }
         ],
         "note": "used your words directly" + (f" ({reason})" if reason else ""),

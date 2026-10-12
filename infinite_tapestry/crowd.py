@@ -20,6 +20,16 @@ from typing import Any, Callable
 
 from .prompts import make_scene
 
+
+def direct_plan(bodies: list[str]) -> dict:
+    """One scene per idea, the user's own words + light cinematic framing (klein follows natural language)."""
+    scenes = []
+    for b in bodies:
+        b = " ".join(str(b).split())[:400]
+        scenes.append({"title": b[:40], "prompt": f"{b}, cinematic wide shot, rich detail, natural light",
+                       "negative": "", "transition": 1, "hold": 4})
+    return {"scenes": scenes, "note": "straight to your idea", "source": "direct", "model": None}
+
 logger = logging.getLogger(__name__)
 
 GPU_CENTS_PER_HOUR = float(os.environ.get("TAPESTRY_GPU_CENTS_PER_HOUR", "17"))
@@ -195,7 +205,11 @@ class Crowd:
             intent = "Weave these audience ideas into one continuous journey, in this order: " + \
                      " ; ".join(f"{i + 1}) {r['body']}" for i, r in enumerate(rows))
         st = self.director.state()
-        plan = await asyncio.to_thread(self.interpreter.plan, intent, st["target"] or st["current"], None, images or None)
+        if images:  # image ideas still need vision moderation + description
+            plan = await asyncio.to_thread(self.interpreter.plan, intent, st["target"] or st["current"], None, images or None)
+        else:
+            # Text ideas go straight to the screen: one prompt per idea, no LLM planning, beats or bridges.
+            plan = direct_plan([r["body"] for r in rows])
         from . import refs as _refs
 
         if images and (_refs.blocked(plan.get("image_flags")) or plan.get("source") != "haiku"):
