@@ -570,7 +570,7 @@ html.page, html:has(body.page) { overflow: auto; height: auto; overscroll-behavi
 html.page body, body.page { overflow: visible; height: auto; min-height: 100%; touch-action: auto; }
 
 /* ---------- offline splash ---------- */
-.offline { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; pointer-events: none;
+.offline { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; pointer-events: none;
   opacity: 0; visibility: hidden; transition: opacity .9s var(--ease), visibility 0s linear .9s; background: var(--bg-deep); }
 body.offline-on .offline { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .9s var(--ease), visibility 0s; }
 .off-bg { position: absolute; inset: -40px; background: center/cover no-repeat; filter: blur(40px) saturate(1.1); opacity: .35; }
