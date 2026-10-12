@@ -98,3 +98,47 @@ class LodBuilder:
             p.write_bytes(data)
             return data
         return self.build(level, chunk) if build else None
+
+
+MAX_CROP_STRIPS = 64
+
+
+def crop_section(store, sw: int, height: int, a: int, b: int, w: int, h: int) -> bytes | None:
+    """Stitch strips a..b and cover-fit them into w x h (used for profile thumbnails and share cards).
+
+    The tapestry is append-only, so a finished section never changes: callers cache the result forever.
+    """
+    a, b = max(0, a), max(a, min(b, a + MAX_CROP_STRIPS - 1))
+    key = f"crops/{a}-{b}-{w}x{h}.jpg"
+    p = Path(store.dir) / key
+    if p.exists():
+        return p.read_bytes()
+    m = getattr(store, "mirror", None)
+    data = m.get(key) if m else None
+    if not data:
+        meta = store.load_meta()
+        full = Image.new("RGB", ((b - a + 1) * sw, height))
+        got = 0
+        for i in range(a, b + 1):
+            s = store.load_strip(i, meta.get(i))
+            if not s:
+                continue
+            im = Image.open(io.BytesIO(s.jpeg)).convert("RGB")
+            full.paste(im, ((i - a) * sw - (im.width - sw), 0))
+            got += 1
+        if not got:
+            return None
+        # cover-fit around the section centre
+        scale = max(w / full.width, h / full.height)
+        rw, rh = max(w, round(full.width * scale)), max(h, round(full.height * scale))
+        im = full.resize((rw, rh), Image.Resampling.LANCZOS)
+        x, y = (rw - w) // 2, (rh - h) // 2
+        im = im.crop((x, y, x + w, y + h))
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=84, optimize=True, progressive=True)
+        data = buf.getvalue()
+        if m:
+            m.put(key, data, "image/jpeg")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+    return data

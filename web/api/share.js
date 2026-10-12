@@ -1,0 +1,35 @@
+const { rest } = require("../lib/common");
+
+// /s/<id>: a share page with a rich preview of where the idea landed, then straight into the tapestry.
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+module.exports = async (req, res) => {
+  const id = parseInt(req.query.id, 10) || 0;
+  let idea = null;
+  try {
+    const r = await rest("GET", `ideas?id=eq.${id}&status=in.(pending,playing,played)&select=id,handle,body,status,start_strip,end_strip`);
+    idea = r[0] || null;
+  } catch (_) {}
+  const host = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
+  if (!idea) { res.setHeader("location", "/"); return res.status(302).end(); }
+  const landed = idea.start_strip != null;
+  const target = landed ? `/?at=${idea.start_strip}&to=${idea.end_strip ?? idea.start_strip + 12}` : `/u/${encodeURIComponent(idea.handle)}`;
+  const title = `“${idea.body.length > 70 ? idea.body.slice(0, 68) + "…" : idea.body}”`;
+  const desc = landed ? `@${idea.handle} steered the Infinite Tapestry here.` : `@${idea.handle}'s idea is waiting to be woven into the Infinite Tapestry.`;
+  const img = landed ? `${host}/api/og?id=${idea.id}` : `${host}/brand/og.jpg`;
+  res.setHeader("content-type", "text/html; charset=utf-8");
+  res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=600");
+  res.status(200).send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" />
+<title>${esc(title)} · Infinite Tapestry</title>
+<meta name="description" content="${esc(desc)}" />
+<meta property="og:type" content="website" /><meta property="og:site_name" content="Infinite Tapestry" />
+<meta property="og:title" content="${esc(title)}" /><meta property="og:description" content="${esc(desc)}" />
+<meta property="og:image" content="${esc(img)}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
+<meta property="og:url" content="${esc(host + "/s/" + idea.id)}" />
+<meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(desc)}" /><meta name="twitter:image" content="${esc(img)}" />
+<meta http-equiv="refresh" content="0; url=${esc(target)}" />
+<link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+<style>body{background:#050505;color:#888;font:13px Inter,system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0}a{color:#ddd}</style>
+</head><body><a href="${esc(target)}">Open the tapestry</a><script>location.replace(${JSON.stringify(target)})</script></body></html>`);
+};

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Infinite Tapestry</title>
+  <meta name="theme-color" content="#0b0b0d" />
+  <meta property="og:image" content="/brand/og.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="/brand/favicon.ico" sizes="any" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="page">
+  <div id="page-bg" class="page-bg"></div>
+  <header class="top page-top">
+    <a class="brand" href="/"><img class="brand-mark" src="/brand/mark-plain.svg" alt="" />Infinite Tapestry</a>
+    <div class="top-right">
+      <a class="quiet-link" href="/">Back to live <span aria-hidden="true">→</span></a>
+      <button id="signout" class="quiet hidden" type="button">Sign out</button>
+    </div>
+  </header>
+  <main class="profile">
+    <section class="p-head">
+      <h1 id="p-handle">&nbsp;</h1>
+      <div id="p-meta" class="p-meta">&nbsp;</div>
+      <nav id="p-filter" class="p-filter hidden">
+        <button data-f="all" class="on">All</button><button data-f="woven">Woven in</button><button data-f="pending">Pending</button><button data-f="rejected" class="own-only hidden">Not used</button>
+      </nav>
+    </section>
+    <ol id="p-list" class="p-list"></ol>
+    <div id="p-empty" class="p-empty hidden"></div>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="/config.js"></script>
+  <script type="module" src="/profile.js"></script>
+</body>
+</html>
