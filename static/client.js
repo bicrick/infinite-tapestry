@@ -124,13 +124,9 @@
   const ribbonTop = (h, bh) => (h * (1 - 0.06 * (1 - ribbon) / (1 - RIBBON)) - bh) / 2;
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
   window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(); if (portrait()) { const bh = config.height * s0; return { top: bandTopFor(canvas.height, bh), height: bh }; } const bh = config.height * s0 * ribbon; return { top: ribbonTop(canvas.height, bh), height: bh }; }, drawScale: () => scale() * (portrait() ? 1 : ribbon), setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, coverage: () => coverage, zoom: () => zoom, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
-  function readyEdge() {   // right edge the live view may reach: 2 strips behind the newest, and only over decoded strips
-    let r = maxIndex - 2;
-    const lim = Math.max(0, r - 12);
-    let k = r; while (k > lim && !(strips.get(k) && strips.get(k).bitmap)) k--;
-    if (k > lim) r = k;
-    return Math.max(0, (r + 1) * SW());
-  }
+  // Live may run right up to the newest strip (the server keeps a buffer ahead). Gating livePos on decode/hold-back
+  // made it stop-and-go every strip (the jerk/pop-in reported after 0b04308), so the boundary is the painted edge again.
+  const readyEdge = () => panoramaWidth();
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -556,7 +552,7 @@
       // and never run past what we've actually received.
       const fix = corr * Math.min(1, dt * 1.5);
       corr -= fix;
-      livePos = Math.min(readyEdge(), livePos + srvSpeed * dt + fix);   // 2 real strips always held back off-screen, and never past an undecoded strip
+      livePos = Math.min(panoramaWidth(), livePos + srvSpeed * dt + fix);
       liveScroll = livePos - viewWorld();
     }
     stepPan(dt);

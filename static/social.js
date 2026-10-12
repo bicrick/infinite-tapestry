@@ -571,7 +571,7 @@ async function boot() {
     const cur = localStorage.getItem("it:theme") || "";
     document.querySelectorAll(".drawer-theme button").forEach((b) => {
       b.classList.toggle("on", b.dataset.theme === cur);
-      b.addEventListener("click", () => { if (b.dataset.theme) localStorage.setItem("it:theme", b.dataset.theme); else localStorage.removeItem("it:theme"); location.reload(); });
+      b.addEventListener("click", () => { if (window.TapestryTheme) TapestryTheme.set(b.dataset.theme); document.querySelectorAll(".drawer-theme button").forEach((x) => x.classList.toggle("on", x === b)); });
     });
   }
 

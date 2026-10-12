@@ -498,7 +498,7 @@ button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { op
     display: flex; flex-direction: column; align-items: center; gap: 9px; }
   .amb-mark { width: 26px; opacity: .55; }
   #amb-status { font-size: 11px; letter-spacing: .06em; color: rgba(var(--ink),.36); transition: opacity .35s; }
-  .amb-title { position: absolute; left: 24px; right: 24px; top: calc(var(--band-bot, 70vh) + 22px); text-align: center;
+  .amb-title { position: absolute; left: 24px; right: 24px; top: calc(var(--band-top, 30vh) - 34px); text-align: center;
     font-size: 13px; letter-spacing: -.005em; color: rgba(var(--ink),.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .35s; }
   /* the ambient layer replaces the header mark/status and the dock caption */
   /* corners: mark top-left; "live · N", fuel, Sign in top-right. Mark + status stay visible when idle. */
@@ -527,7 +527,7 @@ button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { op
 body.hist-cap .dock .now .bar { visibility: hidden; }
 .amb-time { display: none; }
 @media all {
-  .amb-time { display: block; position: absolute; left: 0; right: 0; top: calc(var(--band-bot, 70vh) + 44px); text-align: center;
+  .amb-time { display: block; position: absolute; left: 0; right: 0; top: calc(var(--band-top, 30vh) - 18px); text-align: center;
     font-size: 11px; color: rgba(var(--ink),.32); font-variant-numeric: tabular-nums; letter-spacing: .04em; transition: opacity .35s; }
 }
 
@@ -803,9 +803,9 @@ body.react-open .cmd-terms { display: none !important; }
   .drawer-head .tabs { display: flex; gap: 2px; }
   .drawer-head .tabs button { font-size: 13px; padding: 6px 10px; border-radius: 999px; }
   .drawer .panel { padding: 0 6px; }
-  .drawer-theme { display: flex; align-items: center; gap: 4px; margin: 0 24px 8px; font-size: 12px; color: var(--muted); }
-  .drawer-theme span { margin-right: auto; }
-  .drawer-theme button { background: none; border: 1px solid transparent; color: var(--muted); font: inherit; padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+  .drawer-theme { position: absolute; right: 14px; bottom: 14px; z-index: 2; display: flex; gap: 0; padding: 2px; border-radius: 999px; border: 1px solid var(--line); background: var(--glass-strong); font-size: 11px; color: var(--muted); }
+  .drawer-theme span { display: none; }
+  .drawer-theme button { background: none; border: 1px solid transparent; color: var(--muted); font: inherit; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
   .drawer-theme button:hover { color: var(--fg); }
   .drawer-theme button.on { color: var(--fg); border-color: var(--line); background: rgba(var(--ink),.05); }
 }
