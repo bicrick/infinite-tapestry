@@ -37,7 +37,7 @@
     tabs.appendChild(a);
   }, 1500);
 
-  // 3) Composer is just text (+ image); Claude reads style from the words.
+  // 3) Composer is just text (+ image); the director reads style from the words.
   const cmd = $("cmd"), input = $("cmd-input");
   if (cmd && input) {
     // keep the sheet above the on-screen keyboard

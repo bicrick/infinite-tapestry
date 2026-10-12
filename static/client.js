@@ -1,7 +1,7 @@
 /**
  * Infinite Tapestry browser client.
  * - Backend WS URL: ?ws=... > window.TAPESTRY_CONFIG.wsUrl > page origin (/ws).
- * - Auto speed follows GPU throughput; Claude-planned scene queue; drag to pan.
+ * - Auto speed follows GPU throughput; auto-planned scene queue; drag to pan.
  */
 (function () {
   "use strict";
@@ -299,7 +299,7 @@
       const [, title, by, style, origin] = r;
       $("now-title").textContent = title || "—";
       const src = $("now-src");
-      src.textContent = (origin === "auto" ? "✦ Claude" : by ? by : origin === "user" ? "Audience" : "Earlier") + (style && style !== "none" ? " · " + style : "");
+      src.textContent = (origin === "auto" ? "✦ Auto" : by ? by : origin === "user" ? "Audience" : "Earlier") + (style && style !== "none" ? " · " + style : "");
       src.className = "src" + (origin === "auto" ? " auto" : "");
       $("now-arrow").classList.add("hidden"); $("next-title").textContent = "";
       cap && cap.classList.remove("swap");
@@ -944,7 +944,7 @@
     const items = d.items || [];
     $("queue-count").textContent = items.length;
     $("queue-empty").classList.toggle("hidden", items.length > 0);
-    $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>Claude is dreaming up what comes next.' : "Nothing queued. Type a destination below.";
+    $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>Auto is dreaming up what comes next.' : "Nothing queued. Type a destination below.";
     const cur = d.current_scene || { title: d.current, prompt: d.current };
     const tgt = d.target_scene;
     $("current-card").innerHTML =
@@ -995,7 +995,7 @@
 
   function srcTag(sc) {
     const o = sc && sc.origin;
-    return o === "auto" ? '<span class="tag auto">✦ Claude</span>' : o === "user" ? `<span class="tag">${sc.by ? esc(sc.by) : "You"}</span>` : "";
+    return o === "auto" ? '<span class="tag auto">✦ Auto</span>' : o === "user" ? `<span class="tag">${sc.by ? esc(sc.by) : "You"}</span>` : "";
   }
   function showDirector(d) {
     if (!d) return;
@@ -1016,11 +1016,11 @@
     if (ap) {
       $("autopilot").checked = !!ap.enabled;
       if (document.activeElement !== $("vibe")) $("vibe").value = ap.vibe || "";
-      $("auto-status").textContent = !ap.enabled ? "off" : ap.busy ? "dreaming up what's next…" : ap.error ? "Claude unavailable, improvising" : "";
+      $("auto-status").textContent = !ap.enabled ? "off" : ap.busy ? "dreaming up what's next…" : ap.error ? "improvising" : "";
     }
     const shown = tgt && (d.transition_progress || 0) >= 0.5 ? tgt : cur;
     const srcEl = $("now-src");
-    if (histKey === null) srcEl.textContent = shown.origin === "auto" ? "✦ Claude" : shown.origin === "user" ? (shown.by || "You") : "Now";
+    if (histKey === null) srcEl.textContent = shown.origin === "auto" ? "✦ Auto" : shown.origin === "user" ? (shown.by || "You") : "Now";
     if (histKey === null) srcEl.className = "src" + (shown.origin === "auto" ? " auto" : "");
     renderQueue(d);
   }
