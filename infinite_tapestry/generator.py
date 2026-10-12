@@ -241,6 +241,13 @@ class StripGenerator:
 
             rid, rscale = _refs.schedule(*self.director.ref_ids(), blend_t if prompt_b else 0.0)
             self.inpainter.set_ref(rid, _refs.get(rid), rscale)
+            if rid is None and getattr(cfg, "context_ref", False) and not cfg.mock and self._strip_index > 0:
+                # Full-composition awareness: a downscaled view of what's on screen (last ~8 strips)
+                # rides along as a klein reference image; the thin band still pins the seam.
+                cw = min(canvas.width, cfg.strip_width * 8)
+                view = canvas.crop((canvas.width - cw, 0, canvas.width, canvas.height))
+                view = view.resize((max(64, cw * 384 // canvas.height // 16 * 16), 384), Image.Resampling.BILINEAR)
+                self.inpainter.set_ref("ctx", view, 1.0)
 
         # SD sometimes paints a hard vertical "panel" edge instead of growing
         # out of the context (most often mid-transition). Score each attempt by

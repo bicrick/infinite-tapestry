@@ -205,3 +205,19 @@ def test_reactions_stretch_the_scene_on_stage():
     d.heat = lambda since: 500
     assert d._hold_len(d._current) == 5          # +2 max
     assert d._hold_len(make_scene("y", hold=6, origin="auto")) == 4   # only the scene on stage
+
+
+def test_transitioner_inserts_bridge():
+    from PIL import Image
+    from infinite_tapestry.transitions import Transitioner
+    d = LiveDirector("a", hold=3, blend=2, loop=False)
+    nxt = make_scene("stadium", origin="auto", title="Stadium")
+    d.add([nxt])
+    g = type("G", (), {"canvas": Image.new("RGB", (1024, 1024))})()
+    t = Transitioner(d, g, None)
+    t._plan = lambda cur, n, jpeg: {"mode": "passthrough", "bridge": ["fog bank", "gate"]}
+    t.step()
+    assert [s["prompt"] for s in d._queue] == ["fog bank", "gate", "stadium"]
+    assert d._queue[0]["bridge"] and nxt["transition"] == 1
+    t.step()  # already handled
+    assert len(d._queue) == 3

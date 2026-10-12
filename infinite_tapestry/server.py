@@ -408,6 +408,13 @@ def create_app(
         a = clock_task.get("auto")
         if autopilot and (a is None or a.done()):
             clock_task["auto"] = asyncio.get_running_loop().create_task(autopilot.run())
+        tr = clock_task.get("trans")
+        if (generator is not None and getattr(config, "vision_transitions", False) and not config.mock
+                and interpreter.enabled and (tr is None or tr.done())):
+            from .transitions import Transitioner
+
+            app.state.transitioner = getattr(app.state, "transitioner", None) or Transitioner(generator.director, generator, interpreter)
+            clock_task["trans"] = asyncio.get_running_loop().create_task(app.state.transitioner.run())
 
     app.state.config = config
     app.state.buffer = buffer
