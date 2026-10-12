@@ -46,6 +46,8 @@ class Config:
     sdxl_fallback_model: str = "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
     ip_adapter: bool = True  # SDXL only: image ideas steer strips via IP-Adapter (refs.py); face mode not shipped
     style_loras: bool = True  # SDXL only: load style LoRAs (styles.py) and ramp them across transitions
+    scene_change_repaint: float = 0.7  # fraction of context repainted while blending into a new scene
+    user_cfg_boost: float = 1.5  # extra CFG for user ideas
     harmonize_seams: bool = True  # remove colour steps at the mask edge
     taesd_model: str = ""
     dtype: str = "float16"

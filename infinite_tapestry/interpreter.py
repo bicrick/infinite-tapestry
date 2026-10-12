@@ -55,8 +55,17 @@ Given the recent scenes (oldest first), invent the NEXT scenes (as many as asked
 Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). {_COMPOSITION_NOTE} No text, frames, borders or split images. Never include nudity or sexual content.
 transition = strips to blend in (2-4), hold = strips to stay (1-3). Scenes last only ~10-15 seconds, so make each one instantly readable.
 Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":3,"hold":2,"style":"photo"}}],"note":"one short sentence"}}"""
-SYSTEM += _STYLE_NOTE
-AUTO_SYSTEM += _STYLE_NOTE
+_IMMERSIVE_NOTE = (
+    "\nImmersion (most important): every prompt is ENVIRONMENT-FIRST and puts the camera INSIDE the place, never "
+    "looking at a tabletop or display. Start with the camera position and the space, then depth, a clear subject and "
+    "vivid action, e.g. 'wide-angle shot from inside a vast cavern carved from aged cheddar, looking down a glowing "
+    "tunnel of dripping cheese stalactites, explorers with headlamps wading through molten fondue, deep perspective'. "
+    "Take the idea LITERALLY and fully: if the idea is a cave, we are deep inside the cave; if it is made of something, "
+    "everything around us is made of it. Use sideways-panorama phrasing (wide panoramic view, the space continuing "
+    "left and right). NEVER still life, product shots, close-ups of objects, miniatures, dioramas or items on a surface."
+)
+SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE
+AUTO_SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE
 
 
 

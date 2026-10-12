@@ -211,6 +211,7 @@ class SDXLInpainter(Inpainter):
         if config.style_loras:
             self._load_styles()
         self._ip = False
+        self.guidance = config.guidance_scale
         self._ref_id, self._ref_scale, self._ref_embeds = None, 0.0, {}
         if getattr(config, "ip_adapter", True):
             self._load_ip_adapter()
@@ -311,7 +312,7 @@ class SDXLInpainter(Inpainter):
         out = self._pipe(
             prompt_embeds=pe, negative_prompt_embeds=ne, pooled_prompt_embeds=pp, negative_pooled_prompt_embeds=npp,
             image=image.convert("RGB"), mask_image=mask.convert("L"),
-            num_inference_steps=self.config.steps, guidance_scale=self.config.guidance_scale,
+            num_inference_steps=self.config.steps, guidance_scale=self.guidance,
             width=image.width, height=image.height, generator=gen, strength=0.999,
             **ip_kw,
         )

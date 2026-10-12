@@ -169,18 +169,27 @@ class StripGenerator:
         )
         # Let the model repaint a band of the existing context too, so the new
         # content grows out of it instead of meeting it at a hard mask edge.
+        prompt_a, prompt_b, blend_t = self.director.frame_for(self._strip_index)
+        try:
+            scene_meta = self.director.caption() if hasattr(self.director, "caption") else None
+        except Exception:
+            scene_meta = None
         band = min(cfg.repaint_band, ctx_w // 2) if self._strip_index > 0 else 0
+        # Scene change: repaint most of the visible context (keep only a narrow seam
+        # band) so the new idea isn't trapped inside the old composition.
+        if band and prompt_b and not cfg.mock:
+            band = max(band, int(ctx_w * getattr(cfg, "scene_change_repaint", 0.7)))
+        self.last_band = band
         if band:
             import numpy as np
 
             m = np.asarray(mask).copy()
             m[:, ctx_w - band:] = 255
             mask = Image.fromarray(m, mode="L")
-        prompt_a, prompt_b, blend_t = self.director.frame_for(self._strip_index)
-        try:
-            scene_meta = self.director.caption() if hasattr(self.director, "caption") else None
-        except Exception:
-            scene_meta = None
+        # User ideas steer harder than Auto filler.
+        if hasattr(self.inpainter, "guidance"):
+            user_scene = (scene_meta or {}).get("origin") == "user"
+            self.inpainter.guidance = cfg.guidance_scale + (getattr(cfg, "user_cfg_boost", 1.5) if user_scene else 0.0)
         from .guard import is_disallowed
 
         if is_disallowed(prompt_a):
