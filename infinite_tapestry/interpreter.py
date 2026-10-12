@@ -36,9 +36,9 @@ SYSTEM = f"""You direct an endless, horizontally scrolling image that {_BACKEND_
 The user types a loose intention for where the journey goes next. Turn it into a short plan of 1-2 scenes. The FIRST scene must already be the user's destination (no bridging or in-between scenes); the transition blend handles continuity.
 Each scene prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, written so it can extend sideways indefinitely (describe a continuous space or pattern, not a single centered object). {_COMPOSITION_NOTE} Avoid text, frames, borders and split images.
 Content line: preserve the user's intent faithfully, including dark, gory, violent, horror, disturbing, grotesque and surreal themes; don't soften or sanitize those. The ONE exception is sexual content: never include nudity, sexual acts, erotic or suggestive content; if an intention asks for it, keep only its non-sexual elements (setting, mood, palette).
-Continuity: continue the existing composition, perspective and lighting; let the transition carry the change. transition = strips used to blend into that scene (6-20; prefer 8-12, up to 16 for big changes). hold = strips to stay on it before the next queued scene (4-20; prefer 8-12).
+Continuity: continue the existing composition, perspective and lighting; let the transition carry the change. transition = strips used to blend into that scene (2-4; prefer 3). hold = strips to stay on it before the next queued scene (1-3; prefer 2). Scenes change every ~10-15 seconds.
 Reply with ONLY a JSON object, no prose:
-{{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":10,"hold":10,"style":"photo"}}],"note":"one short sentence"}}"""
+{{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":3,"hold":2,"style":"photo"}}],"note":"one short sentence"}}"""
 
 
 _STYLE_NOTE = (
@@ -51,10 +51,10 @@ _STYLE_NOTE = (
 )
 
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide where the journey drifts next, forever.
-Given the recent scenes (oldest first), invent the NEXT 1-3 scenes. Be genuinely interesting: topical riffs on today's news, funny visual gags, and striking specific cinematic places; never safe screensaver filler (no coral reefs, meadows, generic forests, sunset beaches, nebulae). Follow the THEME given in the request. Never repeat or closely revisit a recent scene. No recognizable real people, nothing sexual, nothing involving minors.
+Given the recent scenes (oldest first), invent the NEXT scenes (as many as asked). Be genuinely interesting: topical riffs on today's news, funny visual gags, and striking specific cinematic places; never safe screensaver filler (no coral reefs, meadows, generic forests, sunset beaches, nebulae). Follow the THEME given in the request. Never repeat or closely revisit a recent scene. No recognizable real people, nothing sexual, nothing involving minors.
 Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). {_COMPOSITION_NOTE} No text, frames, borders or split images. Never include nudity or sexual content.
-transition = strips to blend in (8-14), hold = strips to stay (5-14). Keep scenes short; the journey should switch often.
-Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":10,"hold":8,"style":"photo"}}],"note":"one short sentence"}}"""
+transition = strips to blend in (2-4), hold = strips to stay (1-3). Scenes last only ~10-15 seconds, so make each one instantly readable.
+Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":3,"hold":2,"style":"photo"}}],"note":"one short sentence"}}"""
 SYSTEM += _STYLE_NOTE
 AUTO_SYSTEM += _STYLE_NOTE
 
@@ -109,7 +109,7 @@ class PromptInterpreter:
             user += f"\nViewer's standing vibe to lean toward (loosely): {vibe[:200]}"
         if brief:
             user += "\n" + brief
-        user += f"\nGive the next {max(1, min(3, count))} scene(s)."
+        user += f"\nGive the next {max(1, min(5, count))} scene(s)."
         last: Exception | None = None
         for model in dict.fromkeys([self.model, FALLBACK_MODEL]):
             try:
@@ -196,8 +196,8 @@ def parse_plan(text: str) -> dict[str, Any]:
                 "prompt": prompt[:600],
                 "negative": str(s.get("negative", "") or "")[:400],
                 "style": (str(s.get("style") or "photo").strip().lower()[:24] or "photo"),
-                "transition": _clamp(s.get("transition"), 6, 20, 10),
-                "hold": _clamp(s.get("hold"), 0, 30, 10),
+                "transition": _clamp(s.get("transition"), 2, 4, 3),
+                "hold": _clamp(s.get("hold"), 1, 3, 2),
             }
         )
     if not scenes:

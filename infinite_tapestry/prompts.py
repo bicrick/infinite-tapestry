@@ -66,9 +66,9 @@ class PromptScheduler:
         )
 
 
-MIN_TRANSITION = 6  # strips; shorter blends read as hard cuts
-MAX_TRANSITION = 20
-MAX_HOLD = 30  # scenes should switch often; long holds read as stalls
+MIN_TRANSITION = 2  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
+MAX_TRANSITION = 4
+MAX_HOLD = 3  # scenes should switch often; long holds read as stalls
 _scene_ids = __import__("itertools").count(1)
 
 
@@ -151,7 +151,7 @@ class LiveDirector:
         (no looping). Autopilot fills the queue from there."""
         sched = sorted(schedule, key=lambda x: x[0])
         return cls(sched[0][1], negative_prompt, queue=[p for _, p in sched[1:]],
-                   hold=8, blend=blend, loop=False)
+                   hold=2, blend=min(blend, MAX_TRANSITION), loop=False)
 
     # --- compat properties ---
     @property
@@ -391,8 +391,8 @@ class LiveDirector:
             self._blend_start = int(d.get("blend_start", 0))
             self._active_since = int(d.get("active_since", 0))
             # Clamp persisted timings to the current (shorter) limits.
-            self.hold = min(self.hold, int(d.get("hold", self.hold)))
-            self.blend = min(self.blend, int(d.get("blend", self.blend)))
+            self.hold = min(self.hold, MAX_HOLD, int(d.get("hold", self.hold)))
+            self.blend = max(MIN_TRANSITION, min(self.blend, MAX_TRANSITION, int(d.get("blend", self.blend))))
             for s in self._queue + ([self._target] if self._target else []):
                 if s.get("transition"):
                     s["transition"] = max(MIN_TRANSITION, min(MAX_TRANSITION, int(s["transition"])))

@@ -28,10 +28,10 @@ class Autopilot:
         director: Any,
         interpreter: Any,
         on_change: Callable[[], None] = lambda: None,
-        low_water: int = 2,
-        min_interval: float = 10.0,
+        low_water: int = 6,
+        min_interval: float = 2.0,
         token_budget: int | None = None,
-        max_calls_per_hour: int = 90,
+        max_calls_per_hour: int = 300,
     ) -> None:
         self.director = director
         self.interpreter = interpreter
@@ -41,7 +41,7 @@ class Autopilot:
         self.low_water = low_water
         self.min_interval = min_interval
         self.token_budget = token_budget if token_budget is not None else int(
-            os.environ.get("TAPESTRY_AUTOPILOT_TOKEN_BUDGET", "400000"))
+            os.environ.get("TAPESTRY_AUTOPILOT_TOKEN_BUDGET", "6000000"))
         self.max_calls_per_hour = max_calls_per_hour
         self._calls: list[float] = []
         self._next_allowed = 0.0
@@ -110,7 +110,7 @@ class Autopilot:
             heads = await asyncio.to_thread(self.headlines.sample, 6)
             mode = pick_mode(have_news=bool(heads))
             self.last_mode = mode
-            plan = await asyncio.to_thread(self.interpreter.autoplan, d.recent(8), self.vibe, 2,
+            plan = await asyncio.to_thread(self.interpreter.autoplan, d.recent(8), self.vibe, 4,
                                            brief(mode, heads, self.memory))
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
