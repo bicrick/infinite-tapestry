@@ -101,9 +101,12 @@
   }
   function drawSurround(w, h, yOff, bandH) {
     // Soft extension of the band into the dark space: downsample the band, upscale it (free blur), darken.
-    if (yOff < 4) return;
+    if (yOff < 4 || window.__nr) return;
     if (!ambCv) { ambCv = document.createElement("canvas"); ambCv.width = 24; ambCv.height = 12; ambCtx = ambCv.getContext("2d"); }
-    ambCtx.drawImage(canvas, 0, yOff, w, bandH, 0, 0, 24, 12);   // every frame (the 8th-frame throttle made the reflection jump)
+    // Every frame, but from the strip bitmaps (GPU→GPU), not a readback of the main canvas (~7 ms/frame flush).
+    const V = drawSurround.v; ambCtx.clearRect(0, 0, 24, 12);
+    if (V) for (let i = V.fi; i <= V.li; i++) { const e = strips.get(i); if (!e || !e.bitmap) continue;
+      ambCtx.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, (i * SW() - V.left) / V.ww * 24, 0, SW() / V.ww * 24, 12); }
     ctx.save();
     ctx.imageSmoothingQuality = "high";
     ctx.globalAlpha = SURR_GLOW * surroundA;
@@ -128,7 +131,7 @@
   // made it stop-and-go every strip (the jerk/pop-in reported after 0b04308), so the boundary is the painted edge again.
   const readyEdge = () => panoramaWidth();
   // Off-screen staging buffer: 2 strips + the inpaint context band, so repaints and arrivals happen out of view.
-  const STAGE = () => 2 * SW() + 128;
+  const STAGE = () => 3 * SW() + 128;   // 3 full strips + the inpaint band
   const panoramaWidth = () => (maxIndex + 1) * SW();
   let nudge = 0, nudgeVel = 0;   // small elastic offset while live: jiggles move the view a little, never leave live
   const viewLeft = () => (panMode === "live" ? liveScroll + nudge : shownPan());
@@ -291,7 +294,7 @@
     syncSpeedUi();
     // Server pos is as of m.ts; project to now.
     const projected = m.pos + m.speed * Math.max(0, m.now - m.ts);
-    if (livePos === null || Math.abs(projected - livePos) > SW() * 2) livePos = projected;
+    if (livePos === null || Math.abs(projected - livePos) > SW() * 6) livePos = projected;
     else corr = projected - livePos;
     lastClockAt = localNow;
   }
@@ -677,7 +680,12 @@
       // and never run past what we've actually received.
       const fix = corr * Math.min(1, dt * 1.5);
       corr -= fix;
-      livePos = Math.min(panoramaWidth(), livePos + srvSpeed * dt + fix);
+      // Soft limit: the visible edge may only reach strips that are received AND decoded (+ the staging zone).
+      // Ease the speed down as the buffer thins instead of stopping, so new pixels never surface on screen.
+      let k = Math.max(0, Math.floor((livePos - STAGE()) / SW())); while (k <= maxIndex) { const e = strips.get(k); if (!e || !e.bitmap) break; k++; }
+      const limit = Math.min(panoramaWidth(), k * SW() + STAGE());
+      const ease = Math.max(0, Math.min(1, (limit - livePos) / (0.75 * SW())));
+      if (livePos < limit) livePos = Math.min(limit, livePos + srvSpeed * dt * ease + Math.min(fix, Math.max(0, limit - livePos)));
       liveScroll = livePos - viewWorld();
     }
     stepPan(dt);
@@ -707,7 +715,8 @@
       else { const k = 90, c = 1.6 * Math.sqrt(k); zoomVel += (k * (zt - zoom) - c * zoomVel) * dt; zoom = Math.min(1.015, zoom + zoomVel * dt); }
       if (Math.abs(zoom - 1) < 0.001 && Math.abs(zoomVel) < 0.01) { zoom = 1; zoomVel = 0; }
     }
-    draw();
+    // During the load-in the view is hidden behind the loader (opacity 0 until it resolves): paint it every other frame.
+    if (!(document.body.classList.contains("intro") && canvas.style.opacity === "" && (frame.k = (frame.k || 0) + 1) % 2)) draw();
     updateTimeline();
     hudTimer += dt;
     if (hudTimer > 0.5) { hudTimer = 0; updateHud(srvSpeed, livePos === null ? 0 : panoramaWidth() - livePos); }
@@ -767,7 +776,7 @@
         ctx.globalAlpha = 1;
       }
       coverage = want ? have / want : 0;
-      glStream(!window.__ns && liveB !== Infinity && liveB < left + w / s ? liveB : null, left, s, yOff, w, h);
+      glStream(window.__gs && liveB !== Infinity && liveB < left + w / s ? liveB : null, left, s, yOff, w, h);
     }
     if (mark) {
       const age = (performance.now() - mark.t0) / 1000;
@@ -804,6 +813,7 @@
         }
       }
     }
+    drawSurround.v = { left, ww: w / s, fi: Math.max(0, firstIdx), li: Math.min(lastIdx, maxIndex) };
     if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
     else if (ribbon < 0.999) {   // desktop ribbon: same reflection/glow as the phone band, fading out as it expands
       const sa = surroundA, k = (1 - ribbon) / (1 - RIBBON); surroundA = sa * k * k * (3 - 2 * k);

@@ -18,6 +18,13 @@
   const clamp = (v) => (v < 0 ? 0 : v > 255 ? 255 : v | 0);
   const hash = (i, j) => { let h = (i * 374761393 + j * 668265263) ^ 0x5bf03635; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 
+  // Column hash cache (typed arrays): the lattice only gains a column as it scrolls, so hashes are computed once.
+  const HC = new Map();
+  function colHash(i, rows) {
+    let a = HC.get(i);
+    if (!a || a.length < rows * 2) { a = new Float32Array(rows * 2); for (let j = 0; j < rows; j++) { a[j * 2] = hash(i, j); a[j * 2 + 1] = hash(j, i + 7919); } HC.set(i, a); if (HC.size > 1200) HC.delete(HC.keys().next().value); }
+    return a;
+  }
   const t0 = performance.now();
   const LIGHT = !!(window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches);
   const CARD = LIGHT ? "255,255,255" : "0,0,0", MOTE = LIGHT ? "20,20,24" : "255,255,255";
@@ -78,12 +85,13 @@
     g.fillStyle = `rgba(${CARD},${1 - he})`; g.fillRect(0, 0, W, H);   // full-bleed field, no card
     const sp = 7;                                             // world px between lattice points
     const i0 = Math.floor(left / sp) - 1, i1 = Math.ceil((left + W / s) / sp) + 1;
-    const rowsN = Math.ceil(H / s / sp) + 1;
+    const rowsN = Math.ceil(H / s / sp) + 1; frame.ci = null;
     const rowOff = 0;   // motes fill the whole viewport, above and below the band
     const moteA = Math.max(0, 1 - (resolveAt ? (now - resolveAt) / 500 : 0));
     g.globalCompositeOperation = "source-over";
     for (let i = i0; i <= i1; i++) for (let j = -rowOff; j < rowsN; j++) {
-      const h1 = hash(i, j), h2 = hash(j, i + 7919);
+      if (i !== frame.ci) { frame.ci = i; frame.hc = colHash(i, rowsN); }
+      const hc = frame.hc, h1 = hc[j * 2], h2 = hc[j * 2 + 1];
       const wx = (i + h1) * sp, wy = (j + h2) * sp;
       const x = (wx - left) * s, y = wy * s + bandTop;
       if (y > bandTop + bandH) continue;
