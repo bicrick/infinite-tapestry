@@ -550,6 +550,11 @@
     try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
     lastPX = ev.clientX;
     const armed = panMode === "live";
+    // Touch: the painting is never a scrubber. Taps toggle the UI; scrubbing is the timeline's job.
+    if (ev.pointerType === "touch") {
+      gesture = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), moved: 0, wasIdle: document.body.classList.contains("idle"), armed: true, touch: true, hist: [[performance.now(), ev.clientX]] };
+      return;
+    }
     gesture = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), moved: 0, wasIdle: document.body.classList.contains("idle"), armed, hist: [[performance.now(), ev.clientX]] };
     if (armed) return;
     panPos = shownPan();
@@ -563,6 +568,7 @@
     gesture.moved = Math.max(gesture.moved, Math.hypot(ev.clientX - gesture.x0, ev.clientY - gesture.y0));
     gesture.hist.push([now, ev.clientX]);
     while (gesture.hist.length > 2 && now - gesture.hist[0][0] > 80) gesture.hist.shift();
+    if (gesture.touch) return;
     if (gesture.armed) {
       const back = ev.clientX - gesture.x0;   // dragging right = looking back in time
       const h0 = gesture.hist[0], v = (ev.clientX - h0[1]) / Math.max(1, now - h0[0]);
@@ -597,6 +603,7 @@
       // A tap toggles the chrome. (Pointerdown already revealed it if it was hidden.)
       if (!g.wasIdle) setTimeout(() => document.body.classList.add("idle"), 0);
     }
+    if (g && g.touch) return;
     if (g && g.armed) {
       // A fast backward flick released before reaching LEAVE_PX still counts.
       const h = g.hist, a = h[0], b = h[h.length - 1];
