@@ -13,10 +13,11 @@ from .buffer import Strip, StripBuffer
 from .canvas import (
     build_inpaint_inputs,
     histogram_match_strip,
+    correct_drift,
     make_seed_image,
     stitch_generated_window,
 )
-from .prompts import PromptScheduler
+from .prompts import LiveDirector, PromptScheduler
 
 if TYPE_CHECKING:
     from .config import Config
@@ -38,6 +39,9 @@ class StripGenerator:
         self.inpainter = inpainter
         self.buffer = buffer
         self.scheduler = PromptScheduler(config.prompts, config.negative_prompt)
+        self.director = LiveDirector.from_schedule(
+            config.prompts, config.negative_prompt, blend=config.blend_strips
+        )
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._lock = threading.Lock()
@@ -45,7 +49,31 @@ class StripGenerator:
             config.height, config.context_width, seed=config.seed
         )
         self._strip_index = 0
-        self._match_histogram = True
+        # Global mean/std matching compounded strip-over-strip and blew out
+        # saturation on GPU; off by default.
+        self._match_histogram = bool(config.mock)
+        if not config.mock:
+            self._canvas = self._paint_seed_canvas(self._canvas)
+
+    def _paint_seed_canvas(self, seed: Image.Image) -> Image.Image:
+        """Repaint the procedural seed with the model so strips don't inherit
+        its synthetic stripes (GPU mode only)."""
+        cfg = self.config
+        frame = self.scheduler.frame_for(0)
+        window = seed.resize((cfg.window_width, cfg.height))
+        mask = Image.new("L", window.size, 255)
+        try:
+            painted = self.inpainter.generate(
+                image=window,
+                mask=mask,
+                prompt=frame.prompt,
+                negative_prompt=frame.negative_prompt,
+                seed=cfg.seed,
+            ).resize(window.size)
+        except Exception:  # pragma: no cover - fall back to procedural seed
+            logger.exception("Seed repaint failed; using procedural seed")
+            return seed
+        return painted.crop((0, 0, cfg.context_width, cfg.height))
 
     @property
     def canvas(self) -> Image.Image:
@@ -85,36 +113,48 @@ class StripGenerator:
         with self._lock:
             canvas = self._canvas
 
+        # GPU models tend to paint a frame/border at the image's right edge,
+        # so paint `margin` extra px past the strip and throw them away.
+        margin = 0 if cfg.mock else 32
+        ctx_w = cfg.window_width - cfg.strip_width - margin
         window, mask, _context_x = build_inpaint_inputs(
             canvas,
             window_width=cfg.window_width,
-            strip_width=cfg.strip_width,
+            strip_width=cfg.strip_width + margin,
             height=cfg.height,
         )
-        frame = self.scheduler.frame_for(self._strip_index)
+        prompt_a, prompt_b, blend_t = self.director.frame_for(self._strip_index)
+        shown_prompt = prompt_b if (prompt_b and blend_t >= 0.5) else prompt_a
         seed = cfg.seed + self._strip_index
 
         generated = self.inpainter.generate(
             image=window,
             mask=mask,
-            prompt=frame.prompt,
-            negative_prompt=frame.negative_prompt,
+            prompt=prompt_a,
+            negative_prompt=self.director.negative_prompt,
             seed=seed,
+            prompt_b=prompt_b,
+            t=blend_t,
         )
 
         if generated.size != window.size:
             generated = generated.resize(window.size, Image.Resampling.LANCZOS)
 
+        if not cfg.mock:
+            generated = correct_drift(generated, window, ctx_w)
+
         if self._match_histogram:
             # Match colors to the unmasked context region.
-            context = window.crop((0, 0, cfg.context_width, cfg.height))
+            context = window.crop((0, 0, ctx_w, cfg.height))
             # Only adjust the newly painted area's window for stability.
             generated = histogram_match_strip(generated, context)
 
+        if margin:
+            generated = generated.crop((0, 0, cfg.window_width - margin, cfg.height))
         new_canvas, emitted, _paste_x = stitch_generated_window(
             canvas,
             generated,
-            window_width=cfg.window_width,
+            window_width=cfg.window_width - margin,
             strip_width=cfg.strip_width,
             overlap=cfg.overlap,
         )
@@ -143,7 +183,7 @@ class StripGenerator:
             height=emitted.height,
             overlap=overlap_meta,
             jpeg=jpeg,
-            prompt=frame.prompt,
+            prompt=shown_prompt,
         )
 
         with self._lock:

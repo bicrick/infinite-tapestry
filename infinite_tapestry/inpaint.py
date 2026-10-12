@@ -23,6 +23,8 @@ class Inpainter:
         prompt: str,
         negative_prompt: str = "",
         seed: int | None = None,
+        prompt_b: str | None = None,
+        t: float = 0.0,
     ) -> Image.Image:
         raise NotImplementedError
 
@@ -70,15 +72,27 @@ class DiffusersInpainter(Inpainter):
                 safety_checker=None,
             )
 
-        logger.info("Loading LCM-LoRA %s …", self.config.lcm_lora)
-        pipe.load_lora_weights(self.config.lcm_lora)
-        pipe.fuse_lora()
-        pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
+        if self.config.lcm_lora:
+            logger.info("Loading LCM-LoRA %s …", self.config.lcm_lora)
+            pipe.load_lora_weights(self.config.lcm_lora)
+            pipe.fuse_lora()
+            pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
+        else:
+            from diffusers import DPMSolverMultistepScheduler
 
-        logger.info("Loading TAESD %s …", self.config.taesd_model)
-        pipe.vae = AutoencoderTiny.from_pretrained(
-            self.config.taesd_model, torch_dtype=dtype
-        )
+            logger.info("No LCM-LoRA: using DPM++ 2M Karras")
+            pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+                pipe.scheduler.config,
+                use_karras_sigmas=True,
+                algorithm_type="dpmsolver++",
+                solver_type="midpoint",
+            )
+
+        if self.config.taesd_model:
+            logger.info("Loading TAESD %s …", self.config.taesd_model)
+            pipe.vae = AutoencoderTiny.from_pretrained(
+                self.config.taesd_model, torch_dtype=dtype
+            )
 
         pipe.to(device)
         if device == "cuda":
@@ -103,15 +117,30 @@ class DiffusersInpainter(Inpainter):
         prompt: str,
         negative_prompt: str = "",
         seed: int | None = None,
+        prompt_b: str | None = None,
+        t: float = 0.0,
     ) -> Image.Image:
         torch = self._torch
         generator = None
         if seed is not None:
             generator = torch.Generator(device=self.config.device).manual_seed(seed)
 
+        do_cfg = self.config.guidance_scale > 1.0
+        dev = self.config.device
+        with torch.no_grad():
+            pe, ne = self._pipe.encode_prompt(
+                prompt, dev, 1, do_cfg, negative_prompt or None
+            )
+            if prompt_b and t > 0.0:
+                pe_b, _ = self._pipe.encode_prompt(
+                    prompt_b, dev, 1, do_cfg, negative_prompt or None
+                )
+                tt = float(min(1.0, max(0.0, t)))
+                pe = pe * (1.0 - tt) + pe_b * tt
+
         result = self._pipe(
-            prompt=prompt,
-            negative_prompt=negative_prompt or None,
+            prompt_embeds=pe,
+            negative_prompt_embeds=ne if do_cfg else None,
             image=image.convert("RGB"),
             mask_image=mask.convert("L"),
             num_inference_steps=self.config.steps,

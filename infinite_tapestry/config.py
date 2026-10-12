@@ -20,20 +20,24 @@ class Config:
     # Buffer / scroll
     buffer_target: int = 6  # strips to keep ahead
     buffer_min: int = 2  # below this, client should slow down
+    blend_strips: int = 8  # strips to interpolate between prompts
+    history_limit: int = 5000  # strips kept in memory for pan-back (~25KB each)
     scroll_speed: float = 30.0  # px/s (nominal)
     scroll_speed_min: float = 8.0  # when buffer is low
 
     # Generation
     mock: bool = False
     seed: int = 42
-    steps: int = 4
-    guidance_scale: float = 1.0  # LCM prefers ~1.0–2.0
-    strength: float = 0.99
+    steps: int = 20
+    guidance_scale: float = 6.0  # DPM++ default; use ~1.0-1.5 with LCM-LoRA
+    strength: float = 1.0  # <1.0 truncates the LCM schedule; masked area stays black
 
     # Model IDs (community mirrors; runwayml inpaint repo is gone)
-    inpaint_model: str = "botp/stable-diffusion-v1-5-inpainting"
-    lcm_lora: str = "latent-consistency/lcm-lora-sdv1-5"
-    taesd_model: str = "madebyollin/taesd"
+    inpaint_model: str = "Lykon/dreamshaper-8-inpainting"  # base SD1.5-inpaint + LCM blew out colors
+    # LCM-LoRA + TAESD is ~3x faster but smeared/seamed badly in testing;
+    # opt in with --lcm-lora latent-consistency/lcm-lora-sdv1-5 --taesd-model madebyollin/taesd
+    lcm_lora: str = ""
+    taesd_model: str = ""
     dtype: str = "float16"
     device: str = "cuda"
 
@@ -55,7 +59,7 @@ class Config:
     )
     negative_prompt: str = (
         "blurry, low quality, distorted, watermark, text, frame, border, "
-        "ugly, duplicate, mutant"
+        "ugly, duplicate, mutant, collage, split screen, panel, seam"
     )
 
     def __post_init__(self) -> None:
@@ -106,6 +110,7 @@ def config_from_args(args: Any) -> Config:
         guidance_scale=args.guidance_scale,
         inpaint_model=args.inpaint_model,
         lcm_lora=args.lcm_lora,
+        taesd_model=args.taesd_model,
         host=args.host,
         port=args.port,
         prompts=prompts,

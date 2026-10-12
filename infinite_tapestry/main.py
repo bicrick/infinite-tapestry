@@ -35,8 +35,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scroll-speed", type=float, default=30.0, help="px/s")
     p.add_argument("--scroll-speed-min", type=float, default=8.0, help="px/s when low")
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--steps", type=int, default=4)
-    p.add_argument("--guidance-scale", type=float, default=1.0)
+    p.add_argument("--steps", type=int, default=Config.steps)
+    p.add_argument("--guidance-scale", type=float, default=Config.guidance_scale)
     p.add_argument(
         "--prompt",
         default=None,
@@ -47,7 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=Config.inpaint_model,
         help="HF id for SD1.5 inpainting checkpoint (community mirror)",
     )
-    p.add_argument("--lcm-lora", default=Config.lcm_lora)
+    p.add_argument("--lcm-lora", default=Config.lcm_lora, help="empty = off (DPM++)")
+    p.add_argument("--taesd-model", default=Config.taesd_model, help="empty = full VAE")
     p.add_argument(
         "--device",
         default="cuda",
@@ -71,7 +72,11 @@ def main(argv: list[str] | None = None) -> int:
         config.buffer_target,
     )
 
-    buffer = StripBuffer(target=config.buffer_target, minimum=config.buffer_min)
+    buffer = StripBuffer(
+        target=config.buffer_target,
+        minimum=config.buffer_min,
+        history_limit=config.history_limit,
+    )
     inpainter = create_inpainter(config)
     generator = StripGenerator(config, inpainter, buffer)
     generator.start()

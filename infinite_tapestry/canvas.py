@@ -203,3 +203,25 @@ def histogram_match_strip(
         r_mean, r_std = r[:, :, c].mean(), r[:, :, c].std() + 1e-6
         out[:, :, c] = (s[:, :, c] - s_mean) * (r_std / s_std) + r_mean
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")
+
+
+def correct_drift(
+    generated: Image.Image, window: Image.Image, context_width: int
+) -> Image.Image:
+    """Undo the color shift the model/VAE round-trip applied to the context.
+
+    Per-channel affine transform fitted between the regenerated context
+    (generated[:, :context_width]) and the original context, applied to the
+    whole generated window. Prevents strip-over-strip drift.
+    """
+    g = np.asarray(generated.convert("RGB")).astype(np.float32)
+    w = np.asarray(window.convert("RGB")).astype(np.float32)
+    gc = g[:, :context_width]
+    wc = w[:, :context_width]
+    out = g.copy()
+    for c in range(3):
+        gs = gc[:, :, c].std() + 1e-6
+        ws = wc[:, :, c].std()
+        scale = float(np.clip(ws / gs, 0.7, 1.3))
+        out[:, :, c] = (g[:, :, c] - gc[:, :, c].mean()) * scale + wc[:, :, c].mean()
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")
