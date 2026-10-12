@@ -11,7 +11,7 @@ window.TapestrySocial = S;
 
 const UP = '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>';
 const ERR = {
-  not_signed_in: "Sign in to add ideas, vote and chat.",
+  not_signed_in: "Sign in to vote and add more ideas.",
   handle_required: "Pick a handle first.",
   one_active_idea: "You have a few ideas waiting already. Give them a moment to play.",
   too_many_pending: "You have a few ideas waiting already. Give them a moment to play.",
@@ -21,6 +21,7 @@ const ERR = {
   handle_taken: "That handle is taken.",
   bad_image: "That image could not be attached. Try another.",
   bad_handle: "Handles are 2–20 letters, numbers or underscores.",
+  handle_not_allowed: "That handle isn't available. Try another.",
   signin_required: "Ideas are sign-in only for a little while. Sign in to add one.",
   not_allowed: "Ideas from here are paused.",
   human_check: "One quick check didn't pass. Try again.",
@@ -77,14 +78,19 @@ async function submitAsGuest(text) {
   const r = await fetch("/api/idea", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
     body: JSON.stringify({ text, fp: await fingerprint(), turnstile: token }) });
   const d = await r.json().catch(() => ({}));
-  if (r.ok) { if (token) guest.human = true; if (d.handle) guest.handle = d.handle; return { ok: true }; }
+  if (r.ok) { if (token) guest.human = true; if (d.handle) guest.handle = d.handle; return { ok: true, id: d.id || null }; }
   const map = { rate_limited: "guest_rate", too_many_pending: "guest_pending" };
   return { ok: false, err: map[d.error] || d.error || "server" };
 }
 // Local echo so a guest always sees what they sent (also covers ideas that never reach the pool).
 const LOCAL_KEY = "it:my-guest-ideas";
 const localIdeas = () => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]").filter((x) => Date.now() - x.t < 30 * 60e3); } catch (_) { return []; } };
-const addLocal = (body, handle) => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify([...localIdeas(), { body, handle, t: Date.now() }].slice(-6))); } catch (_) {} };
+const addLocal = (body, handle, id) => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify([...localIdeas(), { body, handle, id: id || null, t: Date.now() }].slice(-6))); } catch (_) {} };
+// Ideas I sent (guest ids kept locally for a day so the 'on now' share works without an account).
+const MINE_KEY = "it:my-idea-ids";
+const mineIds = () => { try { return JSON.parse(localStorage.getItem(MINE_KEY) || "[]").filter((x) => Date.now() - x.t < 864e5); } catch (_) { return []; } };
+const addMine = (id) => { if (!id || id < 0) return; try { localStorage.setItem(MINE_KEY, JSON.stringify([...mineIds(), { id, t: Date.now() }].slice(-20))); } catch (_) {} };
+S.isMine = (row) => !!row && ((S.session && row.user_id && row.user_id === S.session.user.id) || mineIds().some((x) => x.id === row.id));
 
 if (CFG.supabaseUrl && CFG.supabaseAnonKey) boot().catch((e) => console.warn("social disabled", e));
 
@@ -118,7 +124,7 @@ async function boot() {
     document.body.classList.toggle("is-admin", S.isAdmin());
     document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !S.isAdmin()));
     $("account-btn").textContent = S.profile ? (S.profile.handle ? "@" + S.profile.handle : "Pick a handle") : "Sign in";
-    $("chat-input").placeholder = S.profile ? "Say something…" : "Sign in to chat";
+    $("chat-input").placeholder = "Say something…";
     if (S.token()) W().send({ type: "auth", token: S.token() });
     loadVotes();
   }
@@ -147,6 +153,7 @@ async function boot() {
     $("auth-handle").textContent = S.profile && S.profile.handle ? "@" + S.profile.handle : "";
     document.querySelector("#auth-pop .sheet-title").textContent = needHandle ? "Almost there" : signed ? "Your account" : "Join the tapestry";
     $("auth-pop").classList.remove("hidden");
+    if (needHandle && !$("handle-input").value && guest.handle) $("handle-input").value = guest.handle.replace("-", "_");
     setTimeout(() => (needHandle ? $("handle-input") : $("auth-email")).focus(), 50);
   }
   S.openAuth = openAuth;
@@ -275,7 +282,7 @@ async function boot() {
       if (!guest.enabled) { toast(ERR.signin_required); openAuth(); return false; }
       const res = await submitAsGuest(text);
       if (!res.ok) { toast(ERR[res.err] || "Something went wrong. Try again."); if (res.err === "signin_required") openAuth(); return false; }
-      addLocal(text, guest.handle);
+      addLocal(text, guest.handle, res.id); addMine(res.id);
       try { window.va && window.va("event", { name: "idea_submitted", data: { who: "guest" } }); } catch (_) {}
             window.dispatchEvent(new CustomEvent("tapestry:submitted"));
       toast(`Added to the pool as <b>@${esc(guest.handle || "guest")}</b> <span class="muted">“${esc(text)}”</span><br><span class="muted">Sign in anytime to keep your ideas and add more.</span>`, 4200);
@@ -290,8 +297,9 @@ async function boot() {
       const up = await sb.storage.from("idea-refs").upload(image, refFile, { contentType: "image/jpeg", upsert: false });
       if (up.error) { toast("Couldn't upload the image. " + esc(up.error.message || "")); return false; }
     }
-    const { error } = await sb.rpc("submit_idea", { p_body: text, p_image: image });
+    const { data: newId, error } = await sb.rpc("submit_idea", { p_body: text, p_image: image });
     if (error) { toast(friendly(error)); return false; }
+    addMine(typeof newId === "number" ? newId : null);
     try { window.va && window.va("event", { name: "idea_submitted", data: { who: "signed_in", image: !!image } }); } catch (_) {}
     clearRef();
     window.dispatchEvent(new CustomEvent("tapestry:submitted"));
@@ -320,6 +328,8 @@ async function boot() {
     queueMode = pending > 3 ? "vote" : "fifo";
     if (queueMode === "fifo") ideas.sort((a, b) => (a.status === "playing" ? -1 : b.status === "playing" ? 1 : 0) || String(a.created_at).localeCompare(String(b.created_at)));
     renderIdeas();
+    S.ideas = ideas;
+    window.dispatchEvent(new CustomEvent("tapestry:ideas", { detail: ideas }));
   }
   function renderIdeas() {
     const list = $("idea-list");
@@ -343,6 +353,7 @@ async function boot() {
         `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}<div class="t">${esc(it.body)}</div><div class="who">${isGuestHandle(it.handle) ? `<span class="who-guest">@${esc(it.handle)}</span>` : `<a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a>`}${it.status === "playing" ? " · weaving in now" : ""}` +
         `${it.boost_cents ? ` · <span class="boosted">boosted $${(it.boost_cents / 100).toFixed(0)}</span>` : ""}</div></div>` +
         `<div class="acts">` +
+        `<button class="icon" data-a="remix" title="Remix">↻</button>` +
         (it.status === "pending" ? `<button class="icon" data-a="boost" title="Boost with fuel">⚡︎</button>` : "") +
         (mine && it.status === "pending" ? `<button class="icon" data-a="withdraw" title="Withdraw">✕</button>` : "") +
         (S.isAdmin() ? `<button class="icon" data-a="reject" title="Reject (admin)">⊘</button>` : "") + `</div>`;
@@ -357,6 +368,7 @@ async function boot() {
       });
       li.querySelectorAll(".acts button").forEach((b) => b.addEventListener("click", async () => {
         const a = b.dataset.a;
+        if (a === "remix") return window.TapestryRemix && window.TapestryRemix(it.body);
         if (a === "boost") return donate(500, { ideaId: it.id });
         const fn = a === "withdraw" ? "withdraw_idea" : "admin_reject_idea";
         const { error } = await sb.rpc(fn, { p_id: it.id });
@@ -422,15 +434,25 @@ async function boot() {
   sb.channel("chat").on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (p) => addChat(p.new))
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (p) => { if (p.new.hidden) { const el = chatList.querySelector(`li[data-id="${p.new.id}"]`); el && el.remove(); } })
     .subscribe();
-  $("chat-input").addEventListener("focus", () => { if (!S.session || !(S.profile && S.profile.handle)) { $("chat-input").blur(); openAuth(); } });
+
   $("chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const body = $("chat-input").value.trim();
-    if (!body || needLogin()) return;
-    const { data, error } = await sb.rpc("send_chat", { p_body: body });
-    if (error) return toast(friendly(error));
+    if (!body) return;
+    if (S.session && S.profile && S.profile.handle) {
+      const { data, error } = await sb.rpc("send_chat", { p_body: body });
+      if (error) return toast(friendly(error));
+      $("chat-input").value = "";
+      return addChat({ id: data, user_id: S.session.user.id, handle: S.profile.handle, body });
+    }
+    if (S.session && !(S.profile && S.profile.handle)) return openAuth();
+    const r = await fetch("/api/chat", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: body, fp: await fingerprint() }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.error) return toast(d.error === "rate_limited" ? "Easy there. Give it a few seconds." : ERR[d.error] || "Something went wrong. Try again.");
     $("chat-input").value = "";
-    addChat({ id: data, user_id: S.session.user.id, handle: S.profile.handle, body });
+    if (d.handle) guest.handle = d.handle;
+    addChat({ id: d.id || "local-" + Date.now(), user_id: null, handle: d.handle || guest.handle, body });
   });
 
   // ---------- fuel & donations ----------
