@@ -20,6 +20,11 @@ const ERR = {
   handle_taken: "That handle is taken.",
   bad_image: "That image could not be attached. Try another.",
   bad_handle: "Handles are 2–20 letters, numbers or underscores.",
+  signin_required: "Ideas are sign-in only for a little while. Sign in to add one.",
+  not_allowed: "Ideas from here are paused.",
+  human_check: "One quick check didn't pass. Try again.",
+  guest_rate: "That's a few ideas already. Give it a few minutes, or sign in for more.",
+  guest_pending: "You have ideas waiting. Once one plays you can add another, or sign in for more.",
 };
 function friendly(e) {
   const m = String((e && (e.message || e.details)) || e || "");
@@ -31,6 +36,49 @@ function friendly(e) {
   return "Something went wrong. Try again.";
 }
 const toast = (h, ms) => W().toast(h, ms);
+
+// ---------- guests: anyone can add ideas; signing in is an upgrade, not a gate ----------
+const isGuestHandle = (h) => /^[a-z]+-\d{4}$/.test(String(h || ""));
+let fpCache = null;
+async function fingerprint() {   // privacy-light: a hash of coarse, stable traits (no canvas/audio probing)
+  if (fpCache) return fpCache;
+  const n = navigator, sc = screen;
+  const raw = [n.userAgent, n.language, (n.languages || []).join(","), Intl.DateTimeFormat().resolvedOptions().timeZone,
+    sc.width + "x" + sc.height + "x" + sc.colorDepth, n.hardwareConcurrency || 0, n.deviceMemory || 0, n.platform || "", n.maxTouchPoints || 0].join("|");
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
+  return (fpCache = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join(""));
+}
+const guest = { handle: null, enabled: true, turnstile: false, human: false };
+async function loadGuest() {
+  try {
+    const r = await fetch("/api/guest", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fp: await fingerprint() }), credentials: "same-origin" });
+    if (!r.ok) return;
+    const d = await r.json(); guest.handle = d.handle; guest.enabled = d.guestsEnabled; guest.turnstile = d.turnstile;
+  } catch (_) {}
+}
+let tsReady = null;
+function turnstileToken() {   // invisible Cloudflare Turnstile, only when configured server-side
+  if (!guest.turnstile || !CFG.turnstileSiteKey || guest.human) return Promise.resolve(null);
+  tsReady = tsReady || new Promise((ok) => { const sc = document.createElement("script"); sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; sc.onload = ok; sc.onerror = ok; document.head.appendChild(sc); });
+  return tsReady.then(() => new Promise((ok) => {
+    if (!window.turnstile) return ok(null);
+    const box = document.createElement("div"); box.style.cssText = "position:fixed;bottom:0;left:0;opacity:0;pointer-events:none"; document.body.appendChild(box);
+    window.turnstile.render(box, { sitekey: CFG.turnstileSiteKey, size: "invisible", callback: (t) => { box.remove(); ok(t); }, "error-callback": () => { box.remove(); ok(null); } });
+  }));
+}
+async function submitAsGuest(text) {
+  const token = await turnstileToken();
+  const r = await fetch("/api/idea", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text, fp: await fingerprint(), turnstile: token }) });
+  const d = await r.json().catch(() => ({}));
+  if (r.ok) { if (token) guest.human = true; if (d.handle) guest.handle = d.handle; return { ok: true }; }
+  const map = { rate_limited: "guest_rate", too_many_pending: "guest_pending" };
+  return { ok: false, err: map[d.error] || d.error || "server" };
+}
+// Local echo so a guest always sees what they sent (also covers ideas that never reach the pool).
+const LOCAL_KEY = "it:my-guest-ideas";
+const localIdeas = () => { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || "[]").filter((x) => Date.now() - x.t < 30 * 60e3); } catch (_) { return []; } };
+const addLocal = (body, handle) => { try { localStorage.setItem(LOCAL_KEY, JSON.stringify([...localIdeas(), { body, handle, t: Date.now() }].slice(-6))); } catch (_) {} };
 
 if (CFG.supabaseUrl && CFG.supabaseAnonKey) boot().catch((e) => console.warn("social disabled", e));
 
@@ -181,8 +229,21 @@ async function boot() {
   }
   const refUrl = (p) => `${CFG.supabaseUrl}/storage/v1/object/public/idea-refs/${p}`;
 
+  loadGuest();
+  S.guest = guest;
   S.submitIdea = async (text) => {
-    if (needLogin()) return false;
+    if (!S.session || !(S.profile && S.profile.handle)) {
+      if (refFile) { needLogin(); return false; }          // reference images need an account
+      if (!guest.enabled) { toast(ERR.signin_required); openAuth(); return false; }
+      const res = await submitAsGuest(text);
+      if (!res.ok) { toast(ERR[res.err] || "Something went wrong. Try again."); if (res.err === "signin_required") openAuth(); return false; }
+      addLocal(text, guest.handle);
+      window.dispatchEvent(new CustomEvent("tapestry:submitted"));
+      toast(`Added to the pool as <b>@${esc(guest.handle || "guest")}</b> <span class="muted">“${esc(text)}”</span><br><span class="muted">Sign in anytime to keep your ideas and add more.</span>`, 4200);
+      refreshIdeas();
+      if (window.TapestryWS) window.TapestryWS.send({ type: "idea_added" });
+      return true;
+    }
     let image = null;
     if (refFile) {
       image = `${S.session.user.id}/${Date.now().toString(36)}.jpg`;
@@ -228,20 +289,24 @@ async function boot() {
     if (!hint) { hint = document.createElement("p"); hint.id = "idea-mode-hint"; hint.className = "idea-mode-hint"; list.before(hint); }
     hint.textContent = queueMode === "vote" ? "Busy right now · vote to choose what's painted next" : "";
     hint.classList.toggle("hidden", queueMode !== "vote");
-    $("idea-empty").classList.toggle("hidden", ideas.length > 0);
+    const echo = S.session ? [] : localIdeas().filter((x) => !ideas.some((i) => i.body === x.body && i.handle === x.handle))
+      .map((x) => ({ id: null, body: x.body, handle: x.handle, votes: 0, status: "pending", local: true }));
+    const shown = [...ideas, ...echo];
+    $("idea-empty").classList.toggle("hidden", shown.length > 0);
     list.innerHTML = "";
-    ideas.forEach((it) => {
+    shown.forEach((it) => {
       const li = document.createElement("li");
       li.className = "item idea";
       const mine = S.session && it.user_id === S.session.user.id;
       li.innerHTML =
         `<button class="votes${myVotes.has(it.id) ? " on" : ""}" title="Vote">${UP}<span>${it.votes}</span></button>` +
-        `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}<div class="t">${esc(it.body)}</div><div class="who"><a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a>${it.status === "playing" ? " · weaving in now" : ""}` +
+        `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}<div class="t">${esc(it.body)}</div><div class="who">${isGuestHandle(it.handle) ? `<span class="who-guest">@${esc(it.handle)}</span>` : `<a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a>`}${it.status === "playing" ? " · weaving in now" : ""}` +
         `${it.boost_cents ? ` · <span class="boosted">boosted $${(it.boost_cents / 100).toFixed(0)}</span>` : ""}</div></div>` +
         `<div class="acts">` +
         (it.status === "pending" ? `<button class="icon" data-a="boost" title="Boost with fuel">⚡︎</button>` : "") +
         (mine && it.status === "pending" ? `<button class="icon" data-a="withdraw" title="Withdraw">✕</button>` : "") +
         (S.isAdmin() ? `<button class="icon" data-a="reject" title="Reject (admin)">⊘</button>` : "") + `</div>`;
+      if (it.local) { li.querySelector(".acts").innerHTML = ""; li.querySelector(".votes").disabled = true; li.classList.add("local"); list.appendChild(li); return; }
       li.querySelector(".votes").addEventListener("click", async () => {
         if (needLogin()) return;
         const { data, error } = await sb.rpc("toggle_vote", { p_idea: it.id });
@@ -273,7 +338,7 @@ async function boot() {
       const li = document.createElement("li");
       li.className = "item";
       li.innerHTML = `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}` +
-        `<div class="t">${esc(it.body)}</div><div class="who"><a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a> · strip ${it.start_strip}</div>` +
+        `<div class="t">${esc(it.body)}</div><div class="who">${isGuestHandle(it.handle) ? `<span class="who-guest">@${esc(it.handle)}</span>` : `<a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a>`} · strip ${it.start_strip}</div>` +
         `<div class="links"><a data-a="view">View where it landed</a><a data-a="copy">Copy link</a></div></div>`;
       li.addEventListener("click", async (e) => {
         if (e.target.dataset.a === "copy") {

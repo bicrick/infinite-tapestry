@@ -586,3 +586,17 @@ body.offline-on #intro, body.offline-on .ui, body.offline-on .amb { opacity: 0 !
 #queue-list.skeleton { min-height: 132px; border-radius: 12px; background: linear-gradient(90deg, rgba(127,127,127,.08) 25%, rgba(127,127,127,.16) 37%, rgba(127,127,127,.08) 63%); background-size: 400% 100%; animation: q-shimmer 1.4s ease infinite; }
 @keyframes q-shimmer { 0% { background-position: 100% 0 } 100% { background-position: 0 0 } }
 #queue-list .item.idea .meta { opacity: .7 }
+
+/* ---------- terms note + doc pages ---------- */
+.cmd-terms { margin: 0 0 6px; text-align: center; font-size: 11px; color: var(--muted); opacity: 0; max-height: 0; overflow: hidden;
+  transition: opacity .25s var(--ease), max-height .25s var(--ease); pointer-events: none; }
+.dock:focus-within .cmd-terms, body.composing .cmd-terms { opacity: .85; max-height: 24px; pointer-events: auto; }
+.cmd-terms a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.who-guest { color: rgba(var(--ink),.45); }
+.item.idea.local { opacity: .75; }
+.doc-page .p-top { display: flex; justify-content: space-between; align-items: center; padding: 22px 28px; font-size: 13px; }
+.doc { max-width: 640px; margin: 48px auto 96px; padding: 0 24px; line-height: 1.6; font-size: 15px; color: rgba(var(--ink),.82); }
+.doc h1 { font-size: 34px; font-weight: 500; letter-spacing: -.02em; color: var(--fg); margin: 0 0 14px; }
+.doc .lede { font-size: 17px; color: var(--muted); margin-bottom: 36px; }
+.doc h2 { font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 36px 0 8px; }
+.doc ul { padding-left: 18px; } .doc li { margin: 4px 0; }

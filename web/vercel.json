@@ -34,6 +34,14 @@
  ],
  "rewrites": [
   {
+   "source": "/terms",
+   "destination": "/terms.html"
+  },
+  {
+   "source": "/admin",
+   "destination": "/admin.html"
+  },
+  {
    "source": "/auth/confirm",
    "destination": "/confirm.html"
   },
