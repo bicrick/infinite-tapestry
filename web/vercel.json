@@ -2,6 +2,10 @@
  "functions": {
   "api/*.js": {
    "maxDuration": 15
+  },
+  "api/og.js": {
+   "maxDuration": 20,
+   "includeFiles": "lib/fonts/**"
   }
  },
  "headers": [
@@ -34,6 +38,21 @@
  ],
  "rewrites": [
   {
+   "source": "/",
+   "has": [
+    {
+     "type": "query",
+     "key": "at",
+     "value": "(?<at>\\d+)"
+    }
+   ],
+   "destination": "/api/page?kind=at&at=:at"
+  },
+  {
+   "source": "/u/:handle",
+   "destination": "/api/page?kind=u&handle=:handle"
+  },
+  {
    "source": "/terms",
    "destination": "/terms.html"
   },
@@ -44,10 +63,6 @@
   {
    "source": "/auth/confirm",
    "destination": "/confirm.html"
-  },
-  {
-   "source": "/u/:handle",
-   "destination": "/profile.html"
   },
   {
    "source": "/s/:id",
