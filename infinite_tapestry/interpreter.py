@@ -33,12 +33,12 @@ _COMPOSITION_NOTE = (
 )
 
 SYSTEM = f"""You direct an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. The world can be ANYTHING: landscapes, interiors, endless rooms or corridors, cities, crowds, machines, abstract or geometric art, microscopic worlds, outer space, underwater, surreal or dreamlike scenes, any illustration or painting style.
-The user types a loose intention for where the journey goes next. Turn it into a short plan of 1-4 scenes that travel there gradually and coherently from the current scene.
+The user types a loose intention for where the journey goes next. Turn it into a short plan of 1-2 scenes. The FIRST scene must already be the user's destination (no bridging or in-between scenes); the transition blend handles continuity.
 Each scene prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, written so it can extend sideways indefinitely (describe a continuous space or pattern, not a single centered object). {_COMPOSITION_NOTE} Avoid text, frames, borders and split images.
 Content line: preserve the user's intent faithfully, including dark, gory, violent, horror, disturbing, grotesque and surreal themes; don't soften or sanitize those. The ONE exception is sexual content: never include nudity, sexual acts, erotic or suggestive content; if an intention asks for it, keep only its non-sexual elements (setting, mood, palette).
-Continuity: continue the existing composition, perspective and lighting; change subject, palette and style gradually. For big jumps, invent bridging scenes that morph one into the other. transition = strips used to blend into that scene (12-40; prefer 16-24, larger for big changes). hold = strips to stay on it before the next queued scene (8-60).
+Continuity: continue the existing composition, perspective and lighting; let the transition carry the change. transition = strips used to blend into that scene (6-20; prefer 8-12, up to 16 for big changes). hold = strips to stay on it before the next queued scene (4-20; prefer 8-12).
 Reply with ONLY a JSON object, no prose:
-{{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":18,"hold":20,"style":"none"}}],"note":"one short sentence"}}"""
+{{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":10,"hold":10,"style":"none"}}],"note":"one short sentence"}}"""
 
 
 _STYLE_NOTE = (
@@ -53,8 +53,8 @@ _STYLE_NOTE = (
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide where the journey drifts next, forever.
 Given the recent scenes (oldest first), invent the NEXT 1-3 scenes. Make the chain evolve continuously and keep surprising: dreamlike, absurd, nonsensical and impossible worlds are welcome (any subject, place, scale or art style). Each step should grow plausibly out of the previous one through shared shapes, colors, materials or lighting, then mutate; get gradually wilder over time. Never repeat or closely revisit a recent scene.
 Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). {_COMPOSITION_NOTE} No text, frames, borders or split images. Never include nudity or sexual content.
-transition = strips to blend in (16-32), hold = strips to stay (10-30).
-Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":20,"hold":16,"style":"none"}}],"note":"one short sentence"}}"""
+transition = strips to blend in (8-14), hold = strips to stay (5-14). Keep scenes short; the journey should switch often.
+Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":10,"hold":8,"style":"none"}}],"note":"one short sentence"}}"""
 SYSTEM += _STYLE_NOTE
 AUTO_SYSTEM += _STYLE_NOTE
 
@@ -194,8 +194,8 @@ def parse_plan(text: str) -> dict[str, Any]:
                 "prompt": prompt[:600],
                 "negative": str(s.get("negative", "") or "")[:400],
                 "style": __import__("infinite_tapestry.styles", fromlist=["normalize"]).normalize(s.get("style")),
-                "transition": _clamp(s.get("transition"), 12, 40, 18),
-                "hold": _clamp(s.get("hold"), 0, 120, 20),
+                "transition": _clamp(s.get("transition"), 6, 20, 10),
+                "hold": _clamp(s.get("hold"), 0, 30, 10),
             }
         )
     if not scenes:
@@ -276,8 +276,8 @@ def fallback_plan(intent: str, reason: str = "") -> dict[str, Any]:
                 "title": intent[:40],
                 "prompt": intent,
                 "negative": "",
-                "transition": 18,
-                "hold": 20,
+                "transition": 10,
+                "hold": 10,
             }
         ],
         "note": "used your words directly" + (f" ({reason})" if reason else ""),

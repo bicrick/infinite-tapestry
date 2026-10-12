@@ -66,7 +66,9 @@ class PromptScheduler:
         )
 
 
-MIN_TRANSITION = 12  # strips; shorter blends read as hard cuts
+MIN_TRANSITION = 6  # strips; shorter blends read as hard cuts
+MAX_TRANSITION = 20
+MAX_HOLD = 30  # scenes should switch often; long holds read as stalls
 _scene_ids = __import__("itertools").count(1)
 
 
@@ -87,8 +89,8 @@ def make_scene(
         "title": (str(title).strip() or prompt.split(",")[0])[:80],
         "prompt": prompt,
         "negative": str(negative or "").strip()[:400],
-        "transition": None if transition is None else max(MIN_TRANSITION, min(64, int(transition))),
-        "hold": None if hold is None else max(0, min(500, int(hold))),
+        "transition": None if transition is None else max(MIN_TRANSITION, min(MAX_TRANSITION, int(transition))),
+        "hold": None if hold is None else max(0, min(MAX_HOLD, int(hold))),
         "source": source[:200],
         "origin": origin if origin in ("user", "auto", "seed") else "user",
         "style": _norm_style(style),
@@ -114,7 +116,7 @@ class LiveDirector:
         initial: str,
         negative_prompt: str = "",
         queue: list[str] | None = None,
-        hold: int = 24,
+        hold: int = 12,
         blend: int = 8,
         loop: bool = False,
     ) -> None:
@@ -141,7 +143,7 @@ class LiveDirector:
         (no looping). Autopilot fills the queue from there."""
         sched = sorted(schedule, key=lambda x: x[0])
         return cls(sched[0][1], negative_prompt, queue=[p for _, p in sched[1:]],
-                   hold=16, blend=blend, loop=False)
+                   hold=8, blend=blend, loop=False)
 
     # --- compat properties ---
     @property
@@ -183,6 +185,10 @@ class LiveDirector:
         with self._lock:
             users = [s for s in self._queue if s.get("origin") != "auto"]
             dropped = len(self._queue) - len(users)
+            if not users and self._target is None and (self._current or {}).get("origin") != "user":
+                # Nothing user-made ahead: cut the current auto hold short so the
+                # idea starts weaving in on the very next strip.
+                self._active_since = -10**9
             if position == "next":
                 users[0:0] = scenes
             else:
@@ -374,7 +380,16 @@ class LiveDirector:
             self.history = list(d.get("history") or [self._current])
             self._blend_start = int(d.get("blend_start", 0))
             self._active_since = int(d.get("active_since", 0))
-            self.hold, self.blend = int(d.get("hold", self.hold)), int(d.get("blend", self.blend))
+            # Clamp persisted timings to the current (shorter) limits.
+            self.hold = min(self.hold, int(d.get("hold", self.hold)))
+            self.blend = min(self.blend, int(d.get("blend", self.blend)))
+            for s in self._queue + ([self._target] if self._target else []):
+                if s.get("transition"):
+                    s["transition"] = max(MIN_TRANSITION, min(MAX_TRANSITION, int(s["transition"])))
+                if s.get("hold") is not None:
+                    s["hold"] = max(0, min(MAX_HOLD, int(s["hold"])))
+            if self._current.get("hold") is not None:
+                self._current["hold"] = max(0, min(MAX_HOLD, int(self._current["hold"])))
             self.loop = bool(d.get("loop", False))
             _scene_ids = __import__("itertools").count(int(d.get("next_id", 1)) + 1)
 

@@ -561,3 +561,7 @@ body.hist-cap .dock .now .bar { visibility: hidden; }
   .chat-list li, .now #now-title { text-shadow: none; }
 }
 .brand-mark, .amb-mark { filter: var(--mark-filter); }
+
+/* Adaptive voting: hide vote/boost affordances while the queue is short (FIFO). */
+#idea-list.fifo .votes, #idea-list.fifo [data-a="boost"], #idea-list.fifo .boosted { display: none; }
+.idea-mode-hint { margin: 0 0 8px; font-size: 12px; opacity: .65; }

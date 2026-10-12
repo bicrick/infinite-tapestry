@@ -156,3 +156,8 @@ def test_plan_sends_images_as_content_blocks():
     it._call = fake
     it.plan("go here", "now", None, [(b"\xff\xd8x", "image/jpeg")])
     assert isinstance(seen["user"], list) and seen["user"][0]["type"] == "image"
+
+
+def test_queue_mode_threshold():
+    from infinite_tapestry.crowd import queue_mode
+    assert queue_mode(0) == "fifo" and queue_mode(3) == "fifo" and queue_mode(4) == "vote"
