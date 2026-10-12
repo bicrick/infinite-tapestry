@@ -134,6 +134,9 @@ def create_app(
     intent_limit = RateLimiter(intent_cooldown)
     control_limit = RateLimiter(control_cooldown)
     clock_task: dict[str, asyncio.Task | None] = {"t": None}
+    from .reactions import Reactions
+    reactions = Reactions()
+    app.state.reactions = reactions
 
     if interpreter is None:
         from .interpreter import PromptInterpreter
@@ -248,7 +251,13 @@ def create_app(
         if crowd and (c is None or c.done()):
             clock_task["crowd"] = asyncio.get_running_loop().create_task(crowd.run())
 
+    def ensure_reactions() -> None:
+        r = clock_task.get("react")
+        if r is None or r.done():
+            clock_task["react"] = asyncio.get_running_loop().create_task(reactions.run(broadcast))
+
     def ensure_clock() -> None:
+        ensure_reactions()
         t = clock_task["t"]
         if t is None or t.done():
             clock_task["t"] = asyncio.get_running_loop().create_task(clock_loop())
@@ -596,6 +605,14 @@ def create_app(
                         # Production: the stage is steered by the crowd pool (Supabase) and admins.
                         await notice("Add your idea to the pool. The crowd and Auto decide what plays.")
                         continue
+                    if t == "react":
+                        try:
+                            si = int(data.get("i", -1))
+                        except (TypeError, ValueError):
+                            si = -1
+                        si = si if 0 <= si <= max(0, buffer.produced) else None
+                        reactions.add(str(id(queue)), ip, data.get("k"), si, str(data.get("s", ""))[:120])
+                        continue
                     if t == "ping":
                         await ws.send_json({"type": "pong"})
                     elif t in ("pong", "ack"):
@@ -692,6 +709,7 @@ def create_app(
         finally:
             conn_per_ip[ip] = max(0, conn_per_ip.get(ip, 1) - 1)
             clients.discard(queue)
+            reactions.forget(str(id(queue)))
             unsubscribe()
             try:
                 await ws.close()

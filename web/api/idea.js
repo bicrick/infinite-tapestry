@@ -34,6 +34,6 @@ module.exports = async (req, res) => {
     }
     if (out && out.error) return res.status(422).json({ error: out.error });
     // Shadow-muted submissions look exactly like normal ones to the sender.
-    res.status(200).json({ ok: true, handle: out.handle });
+    res.status(200).json({ ok: true, handle: out.handle, id: out.shadow ? null : out.id });
   } catch (e) { console.error("idea", e.message); res.status(500).json({ error: "server" }); }
 };

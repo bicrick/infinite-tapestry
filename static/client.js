@@ -1121,6 +1121,8 @@
       send({ type: "pong" });
     } else if (msg.type === "clock") {
       onClock(msg);
+    } else if (msg.type === "react") {
+      window.dispatchEvent(new CustomEvent("tapestry:react", { detail: msg }));
     } else if (msg.type === "fuel" || msg.type === "activity" || msg.type === "auth") {
       window.dispatchEvent(new CustomEvent("tapestry:" + msg.type, { detail: msg }));
     } else if (msg.type === "notice") {
@@ -1140,6 +1142,9 @@
   }
 
   window.TapestryWS = { send: (o) => send(o), toast: (h, ms) => toast(h, ms), esc: (x) => esc(x) };
+  // Read-only view hooks for reactions/clips (fun.js).
+  window.TapestryView = { canvas, center: () => Math.round(centerIdx()), title: () => ($("now-title").textContent || "").trim(),
+    by: () => ($("now-src").textContent || "").trim() };
   function connect() {
     const url = wsUrl();
     ws = new WebSocket(url);

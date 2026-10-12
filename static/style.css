@@ -660,3 +660,35 @@ body.idle .kept { opacity: .45; }
 .p-banner-edit button { font: inherit; font-size: 13px; padding: 7px 16px; border-radius: 999px; border: 0; background: var(--solid); color: var(--on-solid); cursor: pointer; }
 .p-donate-hint { margin-top: 12px; font-size: 13px; color: var(--muted); }
 .p-donate-hint a { color: rgb(var(--ink)); text-decoration: none; }
+/* ---------- reactions, notices, share toast, clips (fun.js) ---------- */
+.react-layer { position: fixed; right: 0; bottom: 120px; width: 280px; height: 60vh; pointer-events: none; z-index: 30; overflow: hidden; }
+.react-float { position: absolute; bottom: 0; font-size: 20px; opacity: 0; animation: react-up 3s var(--ease) forwards; filter: drop-shadow(0 2px 6px rgba(0,0,0,.35)); }
+.react-float.own { font-size: 24px; }
+@keyframes react-up { 0% { transform: translate(0, 0) scale(.6); opacity: 0; } 12% { opacity: .9; transform: translate(0, -30px) scale(1); }
+  100% { transform: translate(var(--dx, 0), -52vh) scale(.9); opacity: 0; } }
+.react-bar { position: fixed; right: 24px; bottom: 132px; display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line); z-index: 31; opacity: .55; transition: opacity .25s var(--ease); }
+.react-bar:hover, .react-bar:focus-within { opacity: 1; }
+.react-bar button { background: none; border: 0; padding: 4px 6px; font-size: 16px; line-height: 1; border-radius: 999px; cursor: pointer; transition: transform .15s var(--ease); }
+.react-bar button:active { transform: scale(1.25); }
+.react-bar button.cool { opacity: .35; }
+.react-sep { width: 1px; height: 16px; background: var(--line); margin: 0 3px; }
+.react-bar .clip-btn { font-size: 11px; color: var(--muted); padding: 5px 9px; letter-spacing: .02em; }
+.react-bar .clip-btn:hover { color: var(--fg); }
+.chat-list li.sys { color: rgba(var(--ink),.5); font-size: 11px; font-style: italic; }
+.chat-list li.sys b { font-style: normal; }
+.now-remix { background: none; border: 0; padding: 0 2px; color: rgba(var(--ink),.4); font-size: 11px; cursor: pointer; flex: none; }
+.now-remix:hover { color: var(--fg); }
+.share-toast { position: fixed; left: 50%; top: 64px; transform: translate(-50%, -8px); opacity: 0; pointer-events: none; z-index: 70;
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 14px; border-radius: 999px; background: var(--glass-strong);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--line); font-size: 12px; transition: opacity .25s var(--ease), transform .25s var(--ease); white-space: nowrap; }
+.share-toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.share-toast .st-btn { background: var(--solid); color: var(--on-solid); border: 0; border-radius: 999px; padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer; min-width: 74px; }
+.share-toast .st-btn.ok { background: rgba(var(--ink),.16); color: var(--fg); }
+.share-toast .st-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 6px; }
+@media (pointer: coarse), (max-width: 720px) {
+  .react-bar { right: 10px; bottom: calc(150px + env(safe-area-inset-bottom)); opacity: .8; }
+  .react-bar button { padding: 6px 7px; font-size: 18px; }
+  .react-layer { width: 160px; bottom: 190px; }
+}
+@media (prefers-reduced-motion: reduce) { .react-float { animation-duration: 1.2s !important; } }
