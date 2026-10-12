@@ -88,6 +88,13 @@ CONTROL_TYPES = {"intent", "autopilot", "speed", "skip", "remove", "move", "edit
 MAX_QUEUE = 30
 
 
+def _title_from_prompt(p: str) -> str:
+    """Older strips (before scene metadata) get a title from the first clause of their prompt."""
+    head = (p or "").split(",")[0].strip()
+    words = head.split()[:5]
+    return " ".join(w.capitalize() if len(w) > 3 else w for w in words)
+
+
 def create_app(
     config: "Config",
     buffer: "StripBuffer",
@@ -217,6 +224,18 @@ def create_app(
         # Clock/timeline stays viewer-driven via ensure_clock on WS connect.
         ensure_crowd()
 
+    @app.on_event("shutdown")
+    async def _shutdown_persist() -> None:
+        # Graceful restart: force-save director state (incl. queued ideas) so
+        # nothing the director already pulled is lost across a SIGTERM restart.
+        st = getattr(generator, "store", None) if generator else None
+        if st is not None:
+            try:
+                st.save_state(generator.snapshot_state(), generator.canvas, force=True)
+                logger.info("Shutdown: director state saved")
+            except Exception:
+                logger.exception("Shutdown state save failed")
+
     @app.get("/health")
     async def health() -> dict[str, Any]:
         return {
@@ -263,6 +282,24 @@ def create_app(
         return Response(data, media_type="image/jpeg",
                         headers={"Cache-Control": "public, max-age=31536000, immutable", "Access-Control-Allow-Origin": "*"})
 
+    _runs_cache: dict[str, Any] = {"n": -1, "runs": []}
+
+    def scene_runs(store) -> list[list]:
+        """Run-length scene index: [[start_strip, title, by, style, origin], ...] for live captions while scrubbing."""
+        meta = store.load_meta()
+        if len(meta) == _runs_cache["n"]:
+            return _runs_cache["runs"]
+        runs: list[list] = []
+        for i in sorted(meta):
+            m = meta[i]
+            sc = m.get("scene") or {}
+            title = sc.get("title") or _title_from_prompt(m.get("prompt", ""))
+            row = [i, title, sc.get("by") or "", sc.get("style") or "", sc.get("origin") or ""]
+            if not runs or runs[-1][1:] != row[1:]:
+                runs.append(row)
+        _runs_cache.update(n=len(meta), runs=runs)
+        return runs
+
     @app.get("/timeline")
     async def timeline_points(points: int = 300) -> dict[str, Any]:
         """Sampled (strip index, unix time) pairs so the client can label its scrubber with wall-clock time."""
@@ -284,7 +321,8 @@ def create_app(
                     out.update(await asyncio.to_thread(store.mirror.strip_times, miss))
                 except Exception:
                     pass
-        return {"max": idx, "points": sorted([i, t] for i, t in out.items()), "now": time.time()}
+        scenes = await asyncio.to_thread(scene_runs, store) if store is not None else []
+        return {"max": idx, "points": sorted([i, t] for i, t in out.items()), "now": time.time(), "scenes": scenes}
 
     @app.get("/export.png")
     async def export_png(scale: float = 1.0, last: int = 0, start: int = 0, end: int = -1, max_strips: int = 4000):

@@ -130,3 +130,7 @@
   mirror("status-text", "amb-status");
   mirror("now-title", "amb-title", (t) => (t === "—" ? "" : t));
 })();
+(() => {
+  const a = document.getElementById("now-time"), b = document.getElementById("amb-time");
+  if (a && b) new MutationObserver(() => { b.textContent = a.textContent; }).observe(a, { childList: true, characterData: true, subtree: true });
+})();
