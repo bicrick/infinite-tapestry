@@ -88,7 +88,7 @@ class Autopilot:
         base = cur["prompt"].split(", seen through")[0]
         mod = random.choice(VARIATIONS)
         d.add([make_scene(f"{base}, {mod}", cur.get("negative", ""), f"{cur['title'][:40]}, {mod.split()[-1]}",
-                          20, 16, source="variation", origin="auto")])
+                          20, 16, source="variation", origin="auto", style=cur.get("style"))])
         self.on_change()
 
     async def tick(self) -> None:
@@ -112,7 +112,7 @@ class Autopilot:
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
-                              s.get("hold"), source="", origin="auto") for s in plan["scenes"]])
+                              s.get("hold"), source="", origin="auto", style=s.get("style")) for s in plan["scenes"]])
             self._failures = 0
             self.last_error = ""
             self._next_allowed = time.monotonic() + self.min_interval
