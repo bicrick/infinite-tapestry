@@ -1,6 +1,7 @@
 // Social layer: accounts, idea pool, votes, chat, fuel, donations, admin.
 // Loaded as a module; stays dormant when no Supabase config is present (local/dev).
 const CFG = window.TAPESTRY_CONFIG || {};
+let queueMode = "fifo";   // hoisted: refreshIdeas can run before the queue UI block
 const $ = (id) => document.getElementById(id);
 const W = () => window.TapestryWS || { send() {}, toast() {}, esc: (s) => String(s) };
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -218,7 +219,6 @@ async function boot() {
     renderIdeas();
   }
   const UP = '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>';
-  let queueMode = "fifo";
   function renderIdeas() {
     const list = $("idea-list");
     if (!list) return;
