@@ -1,9 +1,6 @@
 {
  "functions": {
   "api/*.js": {
-   "maxDuration": 15
-  },
-  "api/og.js": {
    "maxDuration": 20,
    "includeFiles": "lib/fonts/**"
   }
