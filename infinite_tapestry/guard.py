@@ -46,3 +46,27 @@ def is_sexual(*texts: str) -> bool:
 def is_disallowed(*texts: str) -> bool:
     """Anything we refuse to paint: sexual content, and (always) sexualized minors."""
     return is_blocked(*texts) or is_sexual(*texts)
+
+
+# Minimal hateful-slur screen (hard block alongside sexual content and minors).
+_SLUR = re.compile(r"\b(n[i1]gg(?:er|a)s?|f[a@]gg?ots?|k[i1]kes?|sp[i1]cs?|ch[i1]nks?|tr[a@]nn(?:y|ies)|wetbacks?|r[e3]tards?)\b", re.I)
+
+
+def mentions_minor(*texts: str) -> bool:
+    return bool(_MINOR.search(" ".join(t for t in texts if t)))
+
+
+def has_slur(*texts: str) -> bool:
+    return bool(_SLUR.search(" ".join(t for t in texts if t)))
+
+
+def hard_block_reason(*texts: str) -> str | None:
+    """The ONLY idea-level blocks: sexual/nude, minors, hateful slurs. Gross, crude, gory,
+    absurd and offensive-but-not-hateful ideas are painted as written."""
+    if is_sexual(*texts) or is_blocked(*texts):
+        return "sexual"
+    if mentions_minor(*texts):
+        return "minor"
+    if has_slur(*texts):
+        return "slur"
+    return None

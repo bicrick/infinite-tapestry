@@ -37,8 +37,11 @@ def test_nsfw_classifier_regenerates_then_blurs():
     gen = StripGenerator(cfg, MockInpainter(cfg), StripBuffer(3, 1))
     calls = []
     gen.nsfw = lambda img: calls.append(1) or 0.99
+    flagged = []
+    gen.on_flag = flagged.append
     gen.generate_one()
-    assert gen.nsfw_hits == 1 and len(calls) == 2  # flagged, retried, still flagged -> blurred
+    # flagged, repainted clothed, still flagged -> scene dropped to Auto (+ strike), fallback checked too
+    assert gen.nsfw_hits == 1 and len(calls) == 3 and len(flagged) == 1
     gen.nsfw = lambda img: 0.0
     gen.generate_one()
     assert gen.nsfw_hits == 1
