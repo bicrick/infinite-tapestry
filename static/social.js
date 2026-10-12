@@ -45,6 +45,12 @@ async function boot() {
   $("cmd-input").placeholder = "Suggest where the tapestry goes next…";
   if (CFG.google) $("auth-google").classList.remove("hidden");
 
+  // Hoisted above first loadProfile(): loadVotes/renderIdeas run from loadProfile
+  // and must not hit TDZ (was: ReferenceError myVotes before initialization).
+  let myVotes = new Set();
+  let ideas = [];
+  let hourCents = Number(CFG.centsPerHour) || 20;
+
   // ---------- auth ----------
   async function loadProfile() {
     S.profile = null;
@@ -156,7 +162,6 @@ async function boot() {
     refreshIdeas();
     return true;
   };
-  let myVotes = new Set();
   async function loadVotes() {
     myVotes = new Set();
     if (S.session) {
@@ -165,7 +170,6 @@ async function boot() {
     }
     renderIdeas();
   }
-  let ideas = [];
   async function refreshIdeas() {
     sb.from("ideas").select("id,handle,body,image_path,start_strip,end_strip,played_at").eq("status", "played")
       .not("start_strip", "is", null).order("played_at", { ascending: false }).limit(20).then(({ data }) => renderWoven(data || []));
@@ -280,12 +284,12 @@ async function boot() {
   });
 
   // ---------- fuel & donations ----------
-  const HOUR_CENTS = CFG.centsPerHour || 20;
   let fuel = { balance_cents: null, pod_status: null };
   function renderFuel() {
     if (fuel.balance_cents == null) return;
     const cents = Math.max(0, Number(fuel.balance_cents));
-    const hours = cents / HOUR_CENTS;
+    const rate = hourCents || Number(CFG.centsPerHour) || 20;
+    const hours = cents / rate;
     const pct = Math.min(100, (hours / 48) * 100);  // full bar = two days
     $("fuel-fill").style.width = pct + "%";
     $("fuel-fill-big").style.width = pct + "%";
@@ -299,7 +303,17 @@ async function boot() {
     const { data } = await sb.from("fuel_status").select("*").maybeSingle();
     if (data) { fuel = data; renderFuel(); }
   }
-  window.addEventListener("tapestry:fuel", (e) => { fuel = { ...fuel, balance_cents: e.detail.balance_cents ?? fuel.balance_cents }; renderFuel(); });
+  window.addEventListener("tapestry:config", (e) => {
+    const r = e.detail && e.detail.gpu_cents_per_hour;
+    if (r) { hourCents = Number(r) || hourCents; renderFuel(); }
+  });
+  window.addEventListener("tapestry:fuel", (e) => {
+    const f = (e.detail && e.detail.fuel) || {};
+    if (f.gpu_cents_per_hour) hourCents = Number(f.gpu_cents_per_hour) || hourCents;
+    const cents = f.cents ?? e.detail.balance_cents;
+    if (cents != null) fuel = { ...fuel, balance_cents: cents };
+    renderFuel();
+  });
   refreshFuel();
   setInterval(refreshFuel, 60000);
 

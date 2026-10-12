@@ -832,6 +832,7 @@
       config = Object.assign(config, msg);
       interpreterOn = !!msg.interpreter;
       delete config.type;
+      window.dispatchEvent(new CustomEvent("tapestry:config", { detail: msg }));
     } else if (msg.type === "ping") {
       send({ type: "pong" });
     } else if (msg.type === "clock") {

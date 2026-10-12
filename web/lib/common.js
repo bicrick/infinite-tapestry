@@ -107,4 +107,9 @@ async function readRaw(req) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-module.exports = { env, rest, userFromToken, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD };
+/** Storage prefixes to try for mirrored tapestry assets (env, SDXL, legacy SD1.5). */
+function storagePrefixes() {
+  return [...new Set([env("TAPESTRY_STORAGE_PREFIX", "live-sdxl"), "live-sdxl", "live"])];
+}
+
+module.exports = { env, rest, userFromToken, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };

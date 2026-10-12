@@ -67,6 +67,8 @@ def test_websocket_receives_strip_and_ping(mock_app):
         cfg_msg = ws.receive_json()
         assert cfg_msg["type"] == "config"
         assert cfg_msg["height"] == cfg.height
+        assert "gpu_cents_per_hour" in cfg_msg
+        assert isinstance(cfg_msg["gpu_cents_per_hour"], (int, float))
 
         got_binary = False
         got_pong = False
@@ -98,3 +100,60 @@ def test_websocket_receives_strip_and_ping(mock_app):
 
         assert got_binary, "expected at least one strip frame"
         assert got_pong, "expected ping/pong keep-alive"
+
+
+def test_startup_without_crowd_does_not_hang(mock_app):
+    """Mock mode has no Supabase → crowd is None; startup must stay idle (no network)."""
+    app, cfg, buf, gen = mock_app
+    assert app.state.crowd is None
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+        assert callable(app.state.ensure_crowd)
+        app.state.ensure_crowd()  # no-op when crowd is None
+
+
+def test_crowd_starts_on_startup_without_viewers(monkeypatch):
+    """Crowd meter/pull must start at app startup, not wait for the first WS viewer."""
+    started = []
+
+    class FakeCrowd:
+        def __init__(self, *a, **k):
+            self.fuel_cents = None
+
+        def state(self):
+            return {"cents": None, "hours": None, "out": False, "gpu_cents_per_hour": 89}
+
+        async def run(self):
+            started.append(1)
+            import asyncio
+            await asyncio.Event().wait()
+
+    monkeypatch.setenv("SUPABASE_URL", "http://example.invalid")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "test-key")
+    monkeypatch.setenv("TAPESTRY_CROWD", "1")
+    monkeypatch.setattr("infinite_tapestry.crowd.Crowd", FakeCrowd)
+
+    cfg = Config(
+        mock=True, height=32, window_width=64, strip_width=16, overlap=4,
+        buffer_target=3, buffer_min=1, scroll_speed=40,
+    )
+    buf = StripBuffer(target=cfg.buffer_target, minimum=cfg.buffer_min)
+    gen = StripGenerator(cfg, MockInpainter(cfg), buf)
+    gen.start()
+    try:
+        for _ in range(40):
+            if buf.produced >= 1:
+                break
+            time.sleep(0.05)
+        app = create_app(cfg, buf, gen)
+        assert app.state.crowd is not None
+        with TestClient(app) as client:
+            assert client.get("/health").status_code == 200
+            for _ in range(40):
+                if started:
+                    break
+                time.sleep(0.05)
+            assert started, "crowd.run should start at startup with 0 viewers"
+    finally:
+        gen.stop()
+
