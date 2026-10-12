@@ -634,12 +634,7 @@
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
-        const x0 = i * SW() - left;
-        if ((i + 1) * SW() <= liveB) ctx.drawImage(e.bitmap, x0 - e.overlap, 0);
-        else {   // held-back strip past live: the image assembles out of particles toward the boundary
-          if (i * SW() < liveB) { ctx.save(); ctx.beginPath(); ctx.rect(x0 - e.overlap, 0, liveB - i * SW() + e.overlap, config.height); ctx.clip(); ctx.drawImage(e.bitmap, x0 - e.overlap, 0); ctx.restore(); }
-          drawParticles(e, i, left, liveB);
-        }
+        ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);   // past-live particle assembly reverted (showed blocks in the default view)
       }
       coverage = want ? have / want : 0;
     }
@@ -691,7 +686,7 @@
       if (px !== draw.blurPx) { draw.blurPx = px; canvas.style.transition = px > 0.5 ? "none" : ""; canvas.style.filter = px > 0.5 ? `blur(${px}px)` : ""; }
     }
     if (!fast && zoom > 0.9) requestMissing(firstIdx - 8, lastIdx + 3);
-    for (let i = lastIdx + 1; i <= Math.min(maxIndex, lastIdx + 3); i++) { const e = strips.get(i); if (e) { ensureDecoded(e); if (e.bitmap) stripParticles(e); } }   // pre-decode + precompute particles for the held-back strips
+    for (let i = lastIdx + 1; i <= Math.min(maxIndex, lastIdx + 3); i++) { const e = strips.get(i); if (e) ensureDecoded(e); }   // pre-decode the next strips so they never pop in
     evictFar(firstIdx, lastIdx);
   }
 
