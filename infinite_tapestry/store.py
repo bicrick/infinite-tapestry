@@ -60,6 +60,49 @@ class SupabaseMirror:
         except queue.Full:
             self.failed += 1
 
+    # ---- Postgres (PostgREST, service role) ----
+    def _rest(self, method: str, path: str, body: Any = None, prefer: str = "") -> Any:
+        req = urllib.request.Request(
+            f"{self.url}/rest/v1/{path}", method=method,
+            data=None if body is None else json.dumps(body).encode(),
+            headers={"Authorization": f"Bearer {self.key}", "apikey": self.key,
+                     "Content-Type": "application/json", **({"Prefer": prefer} if prefer else {})},
+        )
+        with urllib.request.urlopen(req, timeout=20) as r:
+            t = r.read()
+            return json.loads(t) if t else None
+
+    def db_async(self, fn) -> None:
+        """Run a DB write on the uploader thread (ordered with uploads)."""
+        try:
+            self._q.put_nowait(("__call__", fn, ""))
+        except queue.Full:
+            self.failed += 1
+
+    def save_strip_row(self, s: Strip) -> None:
+        row = {"session": self.prefix, "idx": s.index, "width": s.width, "height": s.height,
+               "overlap": s.overlap, "prompt": s.prompt[:500], "path": f"{self.prefix}/strips/{s.index:08d}.jpg"}
+        self.db_async(lambda: self._rest("POST", "strips?on_conflict=session,idx", [row],
+                                         "resolution=merge-duplicates,return=minimal"))
+
+    def save_state_row(self, state: dict) -> None:
+        row = {"id": self.prefix, "strip_index": int(state.get("strip_index", 0)), "data": state,
+               "canvas_path": f"{self.prefix}/canvas.png", "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        self.db_async(lambda: self._rest("POST", "tapestry_state?on_conflict=id", [row],
+                                         "resolution=merge-duplicates,return=minimal"))
+
+    def load_state_row(self) -> dict | None:
+        try:
+            rows = self._rest("GET", f"tapestry_state?id=eq.{self.prefix}&select=data")
+            return rows[0]["data"] if rows else None
+        except Exception:
+            logger.exception("Loading state from Postgres failed")
+            return None
+
+    def load_strip_rows(self, lo: int, hi: int) -> dict[int, dict]:
+        rows = self._rest("GET", f"strips?session=eq.{self.prefix}&idx=gte.{lo}&idx=lte.{hi}&select=idx,width,height,overlap,prompt")
+        return {r["idx"]: {"index": r["idx"], **r} for r in rows or []}
+
     def get(self, path: str) -> bytes | None:
         try:
             return self._req("GET", path)
@@ -71,7 +114,10 @@ class SupabaseMirror:
             path, data, ctype = self._q.get()
             for attempt in range(3):
                 try:
-                    self._req("POST", path, data, ctype)
+                    if path == "__call__":
+                        data()
+                    else:
+                        self._req("POST", path, data, ctype)
                     self.uploaded += 1
                     break
                 except Exception as e:
@@ -102,6 +148,7 @@ class HistoryStore:
                 f.write(json.dumps(meta) + "\n")
         if self.mirror:
             self.mirror.put(f"strips/{s.index:08d}.jpg", s.jpeg, "image/jpeg")
+            self.mirror.save_strip_row(s)
 
     def load_meta(self) -> dict[int, dict]:
         out: dict[int, dict] = {}
@@ -118,7 +165,16 @@ class HistoryStore:
     def load_strip(self, index: int, meta: dict | None = None) -> Strip | None:
         p = self._strip_path(index)
         if not p.exists():
-            return None
+            # Cache miss: fetch from durable Storage and re-cache.
+            data = self.mirror.get(f"strips/{index:08d}.jpg") if self.mirror else None
+            if not data:
+                return None
+            p.write_bytes(data)
+            if not meta and self.mirror:
+                try:
+                    meta = self.mirror.load_strip_rows(index, index).get(index)
+                except Exception:
+                    meta = None
         m = meta or {}
         return Strip(index=index, width=m.get("width", 0), height=m.get("height", 0), overlap=m.get("overlap", 0),
                      jpeg=p.read_bytes(), prompt=m.get("prompt", ""), created_at=m.get("created_at", 0.0))
@@ -156,30 +212,26 @@ class HistoryStore:
                 if self.mirror and mirror_now:
                     self.mirror.put("canvas.png", buf.getvalue(), "image/png")
         if self.mirror and mirror_now:
-            self.mirror.put("state.json", data, "application/json")
+            # canvas.png was queued just before, so state never points past it.
+            self.mirror.save_state_row(state)
         return True
 
     def load_state(self) -> tuple[dict | None, Image.Image | None]:
+        """Postgres is the source of truth; the local disk is only a cache.
+        Falls back to the cache when Supabase isn't configured (dev/tests)."""
+        if self.mirror:
+            state = self.mirror.load_state_row()
+            if state:
+                canvas = None
+                c = self.mirror.get("canvas.png")
+                if c:
+                    canvas = Image.open(io.BytesIO(c)).convert("RGB")
+                logger.info("Restored state from Supabase at strip %s", state.get("strip_index"))
+                return state, canvas
+            return None, None
         p = self.dir / "state.json"
         state = json.loads(p.read_text()) if p.exists() else None
         canvas = None
         if (self.dir / "canvas.png").exists():
             canvas = Image.open(self.dir / "canvas.png").convert("RGB")
-        if state is None and self.mirror:
-            # Fresh disk (e.g. new pod): pull state + canvas + recent strips from Storage.
-            raw = self.mirror.get("state.json")
-            if raw:
-                state = json.loads(raw)
-                c = self.mirror.get("canvas.png")
-                if c:
-                    canvas = Image.open(io.BytesIO(c)).convert("RGB")
-                last = int(state.get("strip_index", 0))
-                for i in range(max(0, last - 200), last):
-                    b = self.mirror.get(f"strips/{i:08d}.jpg")
-                    if b:
-                        self._strip_path(i).write_bytes(b)
-                        with open(self.dir / "strips.jsonl", "a") as f:
-                            f.write(json.dumps({"index": i, "width": state.get("strip_width", 128) + state.get("overlap", 0),
-                                                "height": state.get("height", 512), "overlap": state.get("overlap", 0), "prompt": ""}) + "\n")
-                logger.info("Restored state from Supabase Storage at strip %d", last)
         return state, canvas

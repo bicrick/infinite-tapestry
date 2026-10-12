@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import struct
 import time
 from pathlib import Path
@@ -79,6 +80,11 @@ def client_ip(ws: WebSocket) -> str:
 
 
 MAX_INTENT_CHARS = 300
+MAX_MESSAGE_BYTES = 4096
+MAX_CONN_PER_IP = int(os.environ.get("TAPESTRY_MAX_CONN_PER_IP", "8"))
+MAX_CONNECTIONS = int(os.environ.get("TAPESTRY_MAX_CONNECTIONS", "500"))
+CONTROL_TYPES = {"intent", "autopilot", "speed", "skip", "remove", "move", "edit", "play", "clear",
+                 "configure", "set_prompt", "queue"}
 MAX_QUEUE = 30
 
 
@@ -108,6 +114,7 @@ def create_app(
     timeline = Timeline(config.strip_width, default_speed=config.scroll_speed)
     app.state.timeline = timeline
     clients: set[asyncio.Queue] = set()
+    conn_per_ip: dict[str, int] = {}
     intent_limit = RateLimiter(intent_cooldown)
     control_limit = RateLimiter(control_cooldown)
     clock_task: dict[str, asyncio.Task | None] = {"t": None}
@@ -126,11 +133,21 @@ def create_app(
         autopilot.enabled = bool(getattr(config, "autopilot", True))
     app.state.autopilot = autopilot
 
+    from .crowd import Crowd, Supa
+
+    supa = Supa.from_env()
+    crowd = None
+    if supa and generator is not None and os.environ.get("TAPESTRY_CROWD", "1") == "1":
+        crowd = Crowd(supa, generator.director, interpreter, generator,
+                      broadcast=lambda m: broadcast(m), on_change=lambda: broadcast_director(), mock=config.mock)
+    app.state.crowd = crowd
+
     def director_state() -> dict[str, Any] | None:
         if not generator:
             return None
         st = generator.director.state()
         st["autopilot"] = autopilot.state() if autopilot else None
+        st["fuel"] = crowd.state() if crowd else None
         return st
 
     def gpu_stats() -> dict[str, Any] | None:
@@ -177,6 +194,9 @@ def create_app(
         t = clock_task["t"]
         if t is None or t.done():
             clock_task["t"] = asyncio.get_running_loop().create_task(clock_loop())
+        c = clock_task.get("crowd")
+        if crowd and (c is None or c.done()):
+            clock_task["crowd"] = asyncio.get_running_loop().create_task(crowd.run())
         a = clock_task.get("auto")
         if autopilot and (a is None or a.done()):
             clock_task["auto"] = asyncio.get_running_loop().create_task(autopilot.run())
@@ -259,9 +279,14 @@ def create_app(
 
     @app.websocket("/ws")
     async def stream_endpoint(ws: WebSocket) -> None:
-        await ws.accept()
-        ensure_clock()
         ip = client_ip(ws)
+        if conn_per_ip.get(ip, 0) >= MAX_CONN_PER_IP or len(clients) >= MAX_CONNECTIONS:
+            await ws.close(code=1013)
+            return
+        await ws.accept()
+        conn_per_ip[ip] = conn_per_ip.get(ip, 0) + 1
+        ensure_clock()
+        user: dict | None = None
         logger.info("WebSocket client connected from %s", ip)
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=512)
@@ -374,9 +399,21 @@ def create_app(
                 broadcast({"type": "activity", "text": text, "titles": [s["title"] for s in scenes], "when": when})
                 broadcast_director()
 
+            msg_count = [0, time.monotonic()]
+
             async def recv() -> None:
+                nonlocal user
                 while True:
                     raw = await ws.receive_text()
+                    if len(raw) > MAX_MESSAGE_BYTES:
+                        await notice("Message too large.")
+                        continue
+                    msg_count[0] += 1
+                    if msg_count[0] > 120 and time.monotonic() - msg_count[1] < 10:
+                        await ws.close(code=1008)  # flooding
+                        return
+                    if time.monotonic() - msg_count[1] >= 10:
+                        msg_count[:] = [0, time.monotonic()]
                     try:
                         data = json.loads(raw)
                     except json.JSONDecodeError:
@@ -384,6 +421,16 @@ def create_app(
                     if not isinstance(data, dict):
                         continue
                     t = data.get("type")
+                    if t == "auth":
+                        tok = str(data.get("token", ""))[:4096]
+                        user = await asyncio.to_thread(supa.user_from_token, tok) if (supa and tok) else None
+                        await ws.send_json({"type": "auth", "admin": bool(user and user.get("is_admin")),
+                                            "handle": (user or {}).get("handle")})
+                        continue
+                    if t in CONTROL_TYPES and supa is not None and not (user and user.get("is_admin")):
+                        # Production: the stage is steered by the crowd pool (Supabase) and admins.
+                        await notice("Add your idea to the pool. The crowd and Claude decide what plays.")
+                        continue
                     if t == "ping":
                         await ws.send_json({"type": "pong"})
                     elif t in ("pong", "ack"):
@@ -469,6 +516,7 @@ def create_app(
         except Exception:
             logger.exception("WebSocket handler error")
         finally:
+            conn_per_ip[ip] = max(0, conn_per_ip.get(ip, 1) - 1)
             clients.discard(queue)
             unsubscribe()
             try:

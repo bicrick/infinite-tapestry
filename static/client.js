@@ -11,6 +11,7 @@
   const ctx = canvas.getContext("2d", { alpha: false });
   const statusEl = $("status");
   const statusText = $("status-text");
+  const DEBUG = /[?&]debug/.test(location.search);
   const liveBtn = $("live-btn");
 
   const MAGIC = "ITAP";
@@ -118,11 +119,22 @@
       () => { e.decoding = false; });
   }
 
+  // Long sessions: keep decoded bitmaps only near the view and compressed
+  // blobs only within KEEP_BLOBS strips of the view or the live edge; anything
+  // else is dropped and re-fetched from the server when panned to.
+  const KEEP_BLOBS = 360;
+  let evictTick = 0;
   function evictFar(firstIdx, lastIdx) {
-    for (const e of strips.values()) {
-      if (e.bitmap && (e.index < firstIdx - KEEP_DECODED || e.index > lastIdx + KEEP_DECODED)) {
+    const liveIdx = Math.floor(liveScroll / SW());
+    const sweepBlobs = (++evictTick % 60) === 0;
+    for (const [i, e] of strips) {
+      if (e.bitmap && (i < firstIdx - KEEP_DECODED || i > lastIdx + KEEP_DECODED)) {
         e.bitmap.close && e.bitmap.close();
         e.bitmap = null;
+      }
+      if (sweepBlobs && Math.abs(i - firstIdx) > KEEP_BLOBS && Math.abs(i - liveIdx) > KEEP_BLOBS) {
+        if (e.bitmap) { e.bitmap.close && e.bitmap.close(); }
+        strips.delete(i);
       }
     }
   }
@@ -221,8 +233,17 @@
     const aheadStrips = Math.max(0, ahead / SW());
     statusEl.classList.toggle("off", !connected);
     statusEl.classList.toggle("warn", connected && live && aheadStrips < 1);
-    if (!connected) { statusText.textContent = "offline · reconnecting"; return; }
+    if (!connected) { statusText.textContent = "reconnecting"; return; }
     const parts = [];
+    const S = window.TapestrySocial;
+    if (!DEBUG && !(S && S.isAdmin())) {
+      parts.push(live ? "live" : "rewound");
+      if (speedMult > 1) parts.push(speedMult + "×");
+      parts.push(viewers + " watching");
+      statusText.textContent = parts.join("  ·  ");
+      syncSpeedUi();
+      return;
+    }
     if (!live) parts.push("history · strip " + Math.floor(viewLeft() / SW()) + "/" + maxIndex);
     if (gpu && gpu.strip_seconds) parts.push(gpu.strip_seconds.toFixed(1) + "s/strip");
     parts.push(aheadStrips.toFixed(1) + " ahead");
@@ -407,6 +428,11 @@
     const input = $("cmd-input");
     const text = input.value.trim();
     if (!text) return;
+    const S = window.TapestrySocial;
+    if (S && S.enabled && !S.isAdmin()) {  // production: ideas go to the shared pool
+      S.submitIdea(text).then((ok) => { if (ok) input.value = ""; });
+      return;
+    }
     const req = ++reqId;
     pending.add(req);
     $("cmd").classList.add("busy");
@@ -579,7 +605,7 @@
 
   function srcTag(sc) {
     const o = sc && sc.origin;
-    return o === "auto" ? '<span class="tag auto">✦ Claude</span>' : o === "user" ? '<span class="tag">You</span>' : "";
+    return o === "auto" ? '<span class="tag auto">✦ Claude</span>' : o === "user" ? `<span class="tag">${sc.by ? esc(sc.by) : "You"}</span>` : "";
   }
   function showDirector(d) {
     if (!d) return;
@@ -602,7 +628,7 @@
     }
     const shown = tgt && (d.transition_progress || 0) >= 0.5 ? tgt : cur;
     const srcEl = $("now-src");
-    srcEl.textContent = shown.origin === "auto" ? "✦ Claude" : shown.origin === "user" ? "You" : "Now";
+    srcEl.textContent = shown.origin === "auto" ? "✦ Claude" : shown.origin === "user" ? (shown.by || "You") : "Now";
     srcEl.className = "src" + (shown.origin === "auto" ? " auto" : "");
     renderQueue(d);
   }
@@ -625,6 +651,8 @@
       send({ type: "pong" });
     } else if (msg.type === "clock") {
       onClock(msg);
+    } else if (msg.type === "fuel" || msg.type === "activity" || msg.type === "auth") {
+      window.dispatchEvent(new CustomEvent("tapestry:" + msg.type, { detail: msg }));
     } else if (msg.type === "notice") {
       pending.clear(); $("cmd").classList.remove("busy");
       toast(esc(msg.text), 3500);
@@ -641,6 +669,7 @@
     }
   }
 
+  window.TapestryWS = { send: (o) => send(o), toast: (h, ms) => toast(h, ms), esc: (x) => esc(x) };
   function connect() {
     const url = wsUrl();
     ws = new WebSocket(url);
@@ -653,6 +682,9 @@
       if (clientPingTimer) clearInterval(clientPingTimer);
       clientPingTimer = setInterval(() => send({ type: "ping" }), 25000);
       send({ type: "status_request" });
+      const S = window.TapestrySocial;
+      if (S && S.token()) send({ type: "auth", token: S.token() });
+      window.dispatchEvent(new CustomEvent("tapestry:ws", { detail: { open: true } }));
     };
     ws.onmessage = (ev) => {
       if (typeof ev.data === "string") {
@@ -663,12 +695,80 @@
     };
     ws.onclose = () => {
       connected = false;
+      window.dispatchEvent(new CustomEvent("tapestry:ws", { detail: { open: false } }));
       if (clientPingTimer) clearInterval(clientPingTimer);
-      setTimeout(connect, reconnectDelay);
-      reconnectDelay = Math.min(15000, reconnectDelay * 1.5);
+      const wait = reconnectDelay * (0.75 + Math.random() * 0.5);  // jitter
+      setTimeout(connect, navigator.onLine === false ? 3000 : wait);
+      reconnectDelay = Math.min(30000, reconnectDelay * 1.6);
     };
     ws.onerror = () => { try { ws.close(); } catch (_) {} };
   }
+
+  window.addEventListener("online", () => { if (!connected) { reconnectDelay = 1000; try { ws && ws.close(); } catch (_) {} } });
+
+  // ---------- keep the screen awake ----------
+  let wakeLock = null;
+  async function keepAwake() {
+    try {
+      if ("wakeLock" in navigator && document.visibilityState === "visible" && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => { wakeLock = null; });
+      }
+    } catch (_) { /* denied or unsupported: fine */ }
+  }
+  document.addEventListener("visibilitychange", keepAwake);
+  ["pointerdown", "keydown"].forEach((e) => window.addEventListener(e, keepAwake, { once: true }));
+  keepAwake();
+
+  // ---------- ambient mode: canvas only, full screen ----------
+  function setAmbient(on) {
+    document.body.classList.toggle("ambient", on);
+    if (on) {
+      drawer.classList.remove("open");
+      document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {});
+      toast("Ambient mode · press Esc or A to exit", 2200);
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+  window.TapestryAmbient = setAmbient;
+  window.addEventListener("keydown", (e) => {
+    if (/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+    if (e.key === "a" || e.key === "A") setAmbient(!document.body.classList.contains("ambient"));
+    if (e.key === "Escape" && document.body.classList.contains("ambient")) setAmbient(false);
+  });
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement) document.body.classList.remove("ambient");
+  });
+  // Fullscreen toggle (button or Shift+F) and "reveal": hide every piece of UI
+  // while the pointer is held still on the canvas, or toggled with H.
+  function toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(() => {});
+  }
+  const fsBtn = document.getElementById("fullscreen-btn");
+  if (fsBtn) fsBtn.addEventListener("click", toggleFullscreen);
+  const hideBtn = document.getElementById("hide-btn");
+  if (hideBtn) hideBtn.addEventListener("click", () => { document.body.classList.add("reveal-lock"); toast("UI hidden · press H or tap to bring it back", 1800); });
+  let holdTimer = 0, holdX = 0, holdY = 0;
+  canvas.addEventListener("pointerdown", (e) => {
+    if (document.body.classList.contains("reveal-lock")) { document.body.classList.remove("reveal-lock"); return; }
+    holdX = e.clientX; holdY = e.clientY;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => document.body.classList.add("reveal"), 380);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (Math.hypot(e.clientX - holdX, e.clientY - holdY) > 6) clearTimeout(holdTimer);
+  });
+  const endHold = () => { clearTimeout(holdTimer); document.body.classList.remove("reveal"); };
+  canvas.addEventListener("pointerup", endHold);
+  canvas.addEventListener("pointercancel", endHold);
+  window.addEventListener("keydown", (e) => {
+    if (/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+    if (e.key === "h" || e.key === "H") document.body.classList.toggle("reveal-lock");
+    if (e.key === "F" && e.shiftKey) toggleFullscreen();
+  });
+  if (new URLSearchParams(location.search).has("ambient")) document.body.classList.add("ambient");
 
   connect();
   requestAnimationFrame(frame);
