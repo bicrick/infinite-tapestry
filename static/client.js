@@ -279,9 +279,41 @@
     while (lo <= hi) { const m = (lo + hi) >> 1; if (tlScenes[m][0] <= idx) { ans = m; lo = m + 1; } else hi = m - 1; }
     return ans < 0 ? null : tlScenes[ans];
   }
+  // Append live per-strip scene labels (server sends one after each strip).
+  function addStripScene(i, sc) {
+    const last = tlScenes[tlScenes.length - 1];
+    if (last && i <= last[0]) return;  // older strip: /timeline backfill covers it
+    if (last && last[1] === sc[0] && last[2] === sc[1] && last[3] === sc[2] && last[4] === sc[3]) return;
+    tlScenes.push([i, sc[0], sc[1], sc[2], sc[3]]);
+  }
+  let liveCapKey = null;
+  function srcLabel(by, origin) { return origin === "auto" ? "✦ Auto" : by ? "by " + by : origin === "user" ? "Audience" : "Now"; }
+  // Live: caption the strip under the centre of the view (what's actually on screen).
+  function liveCaption() {
+    const r = tlScenes.length ? sceneAt(Math.max(0, Math.min(maxIndex, Math.round(centerIdx())))) : null;
+    if (!r) return false;
+    const key = r[0] + "|" + r[1];
+    if (key !== liveCapKey) {
+      liveCapKey = key;
+      const [, title, by, style, origin] = r;
+      $("now-title").textContent = title || "—";
+      const src = $("now-src");
+      src.textContent = srcLabel(by, origin) + (style && style !== "none" && style !== "photo" ? " · " + style : "");
+      src.className = "src" + (origin === "auto" ? " auto" : "");
+      if (director) {
+        const up = director.upcoming || director.items || [];
+        const tg = director.target_scene;
+        const nxt = (tg && tg.title !== title) ? tg : up.find((x) => x.title !== title);
+        $("now-arrow").classList.toggle("hidden", !nxt);
+        $("next-title").textContent = nxt ? nxt.title : "";
+      }
+    }
+    return true;
+  }
   function histCaption() {
     if (live || !tlScenes.length) {
-      if (histKey !== null) { histKey = null; document.body.classList.remove("hist-cap"); $("now-time").textContent = ""; if (director) showDirector(director); }
+      if (histKey !== null) { histKey = null; liveCapKey = null; document.body.classList.remove("hist-cap"); $("now-time").textContent = ""; if (director) showDirector(director); }
+      liveCaption();
       return;
     }
     const idx = Math.max(0, Math.min(maxIndex, Math.round(centerIdx())));
@@ -299,7 +331,7 @@
       const [, title, by, style, origin] = r;
       $("now-title").textContent = title || "—";
       const src = $("now-src");
-      src.textContent = (origin === "auto" ? "✦ Auto" : by ? by : origin === "user" ? "Audience" : "Earlier") + (style && style !== "none" ? " · " + style : "");
+      src.textContent = (origin === "auto" ? "✦ Auto" : by ? "by " + by : origin === "user" ? "Audience" : "Earlier") + (style && style !== "none" ? " · " + style : "");
       src.className = "src" + (origin === "auto" ? " auto" : "");
       $("now-arrow").classList.add("hidden"); $("next-title").textContent = "";
       cap && cap.classList.remove("swap");
@@ -999,7 +1031,7 @@
       }
       li.draggable = true;
       li.innerHTML =
-        `<span class="n">${i + 1}</span><div><div class="t">${esc(s.title)}</div>` +
+        `<span class="n">${i + 1}</span><div><div class="t">${esc(s.title)} ${s.origin === "auto" ? '<span class="tag auto">✦ Auto</span>' : s.by ? '<span class="tag">' + esc(s.by) + "</span>" : ""}</div>` +
         (editingId === s.id
           ? `<textarea>${esc(s.prompt)}</textarea>`
           : `<div class="p" title="${esc(s.prompt)}">${esc(s.prompt)}</div>`) +
@@ -1045,7 +1077,8 @@
     const cur = d.current_scene || { title: d.current };
     const tgt = d.target_scene;
     const next = tgt || ((d.upcoming || d.items) && (d.upcoming || d.items)[0]);
-    if (histKey === null) {
+    const stripCap = histKey === null && liveCaption();
+    if (histKey === null && !stripCap) {
       $("now-title").textContent = cur.title || d.current;
       $("now-arrow").classList.toggle("hidden", !next);
       $("next-title").textContent = next ? next.title : "";
@@ -1062,8 +1095,8 @@
     }
     const shown = tgt && (d.transition_progress || 0) >= 0.5 ? tgt : cur;
     const srcEl = $("now-src");
-    if (histKey === null) srcEl.textContent = shown.origin === "auto" ? "✦ Auto" : shown.origin === "user" ? (shown.by || "You") : "Now";
-    if (histKey === null) srcEl.className = "src" + (shown.origin === "auto" ? " auto" : "");
+    if (histKey === null && !stripCap) srcEl.textContent = shown.origin === "auto" ? "✦ Auto" : shown.origin === "user" ? (shown.by ? "by " + shown.by : "You") : "Now";
+    if (histKey === null && !stripCap) srcEl.className = "src" + (shown.origin === "auto" ? " auto" : "");
     renderQueue(d);
   }
 
@@ -1076,6 +1109,7 @@
       bufferLow = !!msg.buffer.low;
     }
     if (msg.gpu) gpu = msg.gpu;
+    if (msg.type === "strip_scene" && Array.isArray(msg.s)) { addStripScene(msg.i, msg.s); return; }
     if (msg.director) showDirector(msg.director);
     if (msg.type === "config") {
       config = Object.assign(config, msg);

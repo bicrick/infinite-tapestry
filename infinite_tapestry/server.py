@@ -37,6 +37,15 @@ PING_INTERVAL_S = 20.0
 RECENT_ON_CONNECT = 24
 
 
+def strip_scene_message(strip: "Strip") -> dict | None:
+    """Per-strip scene label so clients caption what is on screen, not the director's plan (which runs ahead)."""
+    sc = getattr(strip, "scene", None) or {}
+    if not sc.get("title"):
+        return None
+    return {"type": "strip_scene", "i": int(strip.index),
+            "s": [sc.get("title") or "", sc.get("by") or "", sc.get("style") or "", sc.get("origin") or ""]}
+
+
 def encode_strip_message(strip: "Strip") -> bytes:
     prompt_bytes = strip.prompt.encode("utf-8")
     if len(prompt_bytes) > 65535:
@@ -441,6 +450,8 @@ def create_app(
             await ws.send_json(clock_msg())
             for strip in buffer.snapshot()[-RECENT_ON_CONNECT:]:
                 await ws.send_bytes(encode_strip_message(strip))
+                if (_sm := strip_scene_message(strip)):
+                    await ws.send_json(_sm)
                 last_index = max(last_index, strip.index)
             await ws.send_json(
                 {"type": "status", "buffer": buffer.peek_depth(), "director": director_state(), "gpu": gpu_stats()}
@@ -455,6 +466,8 @@ def create_app(
                         await ws.send_json({"type": "ping", "buffer": buffer.peek_depth(), "gpu": gpu_stats()})
                         for strip in buffer.strips_after(last_index):
                             await ws.send_bytes(encode_strip_message(strip))
+                            if (_sm := strip_scene_message(strip)):
+                                await ws.send_json(_sm)
                             last_index = strip.index
                         continue
                     if isinstance(item, dict):
@@ -464,6 +477,8 @@ def create_app(
                     if strip.index <= last_index:
                         continue
                     await ws.send_bytes(encode_strip_message(strip))
+                    if (_sm := strip_scene_message(strip)):
+                        await ws.send_json(_sm)
                     last_index = strip.index
                     await ws.send_json(
                         {"type": "status", "buffer": buffer.peek_depth(), "last_index": last_index,
@@ -514,6 +529,9 @@ def create_app(
                 if not scenes:
                     await notice("That prompt is blocked.")
                     return
+                if user and user.get("handle"):
+                    for sc in scenes:
+                        sc["by"] = "@" + str(user["handle"])
                 if autopilot:
                     autopilot.user_acted()
                 if when == "now":
@@ -588,6 +606,8 @@ def create_app(
                             found = sorted(found + [d for d in disk if d.index not in have], key=lambda x: x.index)
                         for strip in found:
                             await ws.send_bytes(encode_strip_message(strip))
+                            if (_sm := strip_scene_message(strip)):
+                                await ws.send_json(_sm)
                     elif t == "intent" and generator:
                         task = asyncio.create_task(handle_intent(data))
                         intent_tasks.add(task)
