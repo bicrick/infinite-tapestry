@@ -175,7 +175,7 @@ SDXL_PRESET: dict[str, Any] = {
 # FLUX.2 [klein] 4B (Apache-2.0): SDXL geometry, 4 distilled steps, no CFG.
 # Narrow repaint band + no 70% scene-change repaint: a wide repainted band got cross-faded over
 # the old pixels (ghosting) and let klein redraw whole compositions each strip. Bakeoff: tapestry-samples/blend.
-KLEIN_PRESET: dict[str, Any] = {"steps": 4, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 48,
+KLEIN_PRESET: dict[str, Any] = {"steps": 3, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 48,
                                 "scene_change_repaint": 0.0, "dup_check": True,
                                 "seam_retries": 1, "pan_variations": False,
                                 "vision_transitions": True}

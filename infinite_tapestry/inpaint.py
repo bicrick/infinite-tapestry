@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -348,6 +350,10 @@ class KleinInpainter(Inpainter):
         pipe = Flux2KleinInpaintPipeline.from_pretrained(self.MODEL, torch_dtype=torch.bfloat16)
         pipe.to(config.device)  # text encoder stays resident (fits in 24 GB with SDXL unloaded)
         pipe.set_progress_bar_config(disable=True)
+        if os.environ.get("TAPESTRY_KLEIN_COMPILE", "1") == "1":
+            # ~30% faster per step on a 4090 (bakeoff blend4: 3 steps + compile ~2.1 s/strip vs 3.2 s).
+            # First strip (and first strip of a new shape, e.g. an image idea) pays the compile.
+            pipe.transformer = torch.compile(pipe.transformer, mode="max-autotune-no-cudagraphs", dynamic=False)
         self._pipe = pipe
         self.guidance = 1.0
         self.loaded: list[str] = []
