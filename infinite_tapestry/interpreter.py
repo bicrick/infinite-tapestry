@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 API_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_MODEL = os.environ.get("TAPESTRY_HAIKU_MODEL", "claude-haiku-5-5")
 FALLBACK_MODEL = "claude-haiku-4-5"
+THINK_BUDGET = int(os.environ.get("TAPESTRY_THINK_BUDGET", "2048"))  # planner reasoning for better cinematography
 
 # Backend-agnostic: SDXL on large GPUs (1024px / 256px strips), SD 1.5 otherwise (512 / 128).
 _BACKEND_GEOM = (
@@ -36,9 +37,9 @@ SYSTEM = f"""You direct an endless, horizontally scrolling image that {_BACKEND_
 The user types a loose intention for where the journey goes next. Turn it into a short plan of 1-2 scenes. The FIRST scene must already be the user's destination (no bridging or in-between scenes); the transition blend handles continuity.
 Each scene prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, written so it can extend sideways indefinitely (describe a continuous space or pattern, not a single centered object). {_COMPOSITION_NOTE} Avoid text, frames, borders and split images.
 Content line: preserve the user's intent faithfully, including dark, gory, violent, horror, disturbing, grotesque and surreal themes; don't soften or sanitize those. The ONE exception is sexual content: never include nudity, sexual acts, erotic or suggestive content; if an intention asks for it, keep only its non-sexual elements (setting, mood, palette).
-Continuity: continue the existing composition, perspective and lighting; let the transition carry the change. transition = strips used to blend into that scene (2-4; prefer 3). hold = strips to stay on it before the next queued scene (1-3; prefer 2). Scenes change every ~10-15 seconds.
+Continuity: continue the existing composition, perspective and lighting; let the transition carry the change. transition = strips used to blend into that scene (4-6). hold = strips to stay on it (5-10; user ideas 8-10). Each scene lasts ~25-40 seconds.
 Reply with ONLY a JSON object, no prose:
-{{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":3,"hold":2,"style":"photo"}}],"note":"one short sentence"}}"""
+{{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"extra negative terms or empty","transition":5,"hold":7,"style":"photo","beats":["approach beat prompt","reveal beat prompt","climax beat prompt"]}}],"note":"one short sentence"}}"""
 
 
 _STYLE_NOTE = (
@@ -53,8 +54,8 @@ _STYLE_NOTE = (
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide where the journey drifts next, forever.
 Given the recent scenes (oldest first), invent the NEXT scenes (as many as asked). Be genuinely interesting: topical riffs on today's news, funny visual gags, and striking specific cinematic places; never safe screensaver filler (no coral reefs, meadows, generic forests, sunset beaches, nebulae). Follow the THEME given in the request. Never repeat or closely revisit a recent scene. No recognizable real people, nothing sexual, nothing involving minors.
 Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). {_COMPOSITION_NOTE} No text, frames, borders or split images. Never include nudity or sexual content.
-transition = strips to blend in (2-4), hold = strips to stay (1-3). Scenes last only ~10-15 seconds, so make each one instantly readable.
-Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":3,"hold":2,"style":"photo"}}],"note":"one short sentence"}}"""
+transition = strips to blend in (4-6), hold = strips to stay (5-8). Each scene lasts ~25-40 seconds.
+Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":5,"hold":7,"style":"photo","beats":["approach beat prompt","reveal beat prompt","climax beat prompt"]}}],"note":"one short sentence"}}"""
 _IMMERSIVE_NOTE = (
     "\nImmersion (most important): every prompt is ENVIRONMENT-FIRST and puts the camera INSIDE the place, never "
     "looking at a tabletop or display. Start with the camera position and the space, then depth, a clear subject and "
@@ -64,13 +65,23 @@ _IMMERSIVE_NOTE = (
     "everything around us is made of it. Use sideways-panorama phrasing (wide panoramic view, the space continuing "
     "left and right). NEVER still life, product shots, close-ups of objects, miniatures, dioramas or items on a surface."
 )
-SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE
-AUTO_SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE
+_CINEMA_NOTE = (
+    "\nCinematography (do this for EVERY scene before writing): pick the camera that best shows THIS subject, e.g. "
+    "aerial wide for a packed football stadium, eye level inside a crowd, low angle for monuments, drone over a city, "
+    "handheld in a market. Choose lens (14mm ultra-wide, 24mm, 35mm, 85mm), time of day, lighting and weather on purpose. "
+    "Write a rich prompt with ONE clear focal subject, crowds and people when the place would have them, visible motion "
+    "(motion blur, flying sparks, waving flags, rain streaks), and depth layers (foreground / midground / background). "
+    "Mini narrative: give each scene \"beats\": 2-4 full prompts that play in order across its strips, e.g. approach -> "
+    "reveal -> climax, same subject and place, different framing or moment (wide establishing -> closer in the crowd -> "
+    "the peak moment). \"prompt\" = the first beat. Avoid flat textures, wallpaper-like repetition and still life."
+)
+SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE + _CINEMA_NOTE
+AUTO_SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE + _CINEMA_NOTE
 
 
 
 class PromptInterpreter:
-    def __init__(self, api_key: str | None = None, model: str | None = None, timeout: float = 20.0) -> None:
+    def __init__(self, api_key: str | None = None, model: str | None = None, timeout: float = 45.0) -> None:
         self.api_key = api_key if api_key is not None else (os.environ.get("TAPESTRY_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY", ""))
         self.model = model or DEFAULT_MODEL
         self.timeout = timeout
@@ -80,7 +91,7 @@ class PromptInterpreter:
     def enabled(self) -> bool:
         return bool(self.api_key)
 
-    def _call(self, model: str, user: Any, system: str = SYSTEM, max_tokens: int = 1200) -> str:
+    def _call(self, model: str, user: Any, system: str = SYSTEM, max_tokens: int = 6000, _think: bool = True) -> str:
         if not self.api_key:
             raise RuntimeError("no API key")
         body = json.dumps(
@@ -89,7 +100,8 @@ class PromptInterpreter:
                 "max_tokens": max_tokens,
                 # Haiku 5.5 adaptive thinking counts toward max_tokens; disable so
                 # short JSON plans are not truncated mid-object.
-                "thinking": {"type": "disabled"},
+                "thinking": ({"type": "enabled", "budget_tokens": THINK_BUDGET} if _think and THINK_BUDGET and max_tokens > THINK_BUDGET + 1500
+                             else {"type": "disabled"}),
                 "system": system,
                 "messages": [{"role": "user", "content": user}],
             }
@@ -103,8 +115,13 @@ class PromptInterpreter:
                 "content-type": "application/json",
             },
         )
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            data = json.loads(resp.read())
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 400 and _think and THINK_BUDGET:
+                return self._call(model, user, system, max_tokens, _think=False)
+            raise
         usage = data.get("usage") or {}
         self.tokens_used += int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
@@ -122,7 +139,7 @@ class PromptInterpreter:
         last: Exception | None = None
         for model in dict.fromkeys([self.model, FALLBACK_MODEL]):
             try:
-                plan = parse_plan(self._call(model, user, system=AUTO_SYSTEM, max_tokens=1600))
+                plan = parse_plan(self._call(model, user, system=AUTO_SYSTEM, max_tokens=6000))
                 plan["source"], plan["model"] = "haiku", model
                 return plan
             except urllib.error.HTTPError as e:
@@ -209,8 +226,9 @@ def parse_plan(text: str) -> dict[str, Any]:
                 "prompt": prompt[:600],
                 "negative": str(s.get("negative", "") or "")[:400],
                 "style": (str(s.get("style") or "photo").strip().lower()[:24] or "photo"),
-                "transition": _clamp(s.get("transition"), 2, 4, 3),
-                "hold": _clamp(s.get("hold"), 1, 3, 2),
+                "transition": _clamp(s.get("transition"), 4, 6, 5),
+                "hold": _clamp(s.get("hold"), 5, 10, 7),
+                "beats": [str(b).strip()[:600] for b in (s.get("beats") or []) if str(b).strip()][:4] if isinstance(s.get("beats"), list) else [],
             }
         )
     if not scenes:

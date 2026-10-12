@@ -23,7 +23,7 @@ class Config:
     # Buffer / scroll
     buffer_target: int = 6  # strips to keep ahead
     buffer_min: int = 2  # below this, client should slow down
-    blend_strips: int = 3  # strips to interpolate between prompts
+    blend_strips: int = 5  # strips to interpolate between prompts
     history_limit: int = 600  # strips kept in memory; older ones are read from disk
     scroll_speed: float = 30.0  # px/s (nominal)
     scroll_speed_min: float = 8.0  # when buffer is low

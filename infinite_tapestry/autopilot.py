@@ -28,7 +28,7 @@ class Autopilot:
         director: Any,
         interpreter: Any,
         on_change: Callable[[], None] = lambda: None,
-        low_water: int = 6,
+        low_water: int = 3,
         min_interval: float = 2.0,
         token_budget: int | None = None,
         max_calls_per_hour: int = 300,
@@ -114,7 +114,7 @@ class Autopilot:
             heads = await asyncio.to_thread(self.headlines.sample, 6)
             mode = pick_mode(have_news=bool(heads))
             self.last_mode = mode
-            plan = await asyncio.to_thread(self.interpreter.autoplan, d.recent(8), self.vibe, 4,
+            plan = await asyncio.to_thread(self.interpreter.autoplan, d.recent(8), self.vibe, 2,
                                            brief(mode, heads, self.memory))
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
@@ -129,7 +129,7 @@ class Autopilot:
             for s in plan["scenes"]:
                 self.memory.add(s.get("title", ""))
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
-                              s.get("hold"), source="", origin="auto", style=s.get("style")) for s in plan["scenes"]])
+                              s.get("hold"), source="", origin="auto", style=s.get("style"), beats=s.get("beats")) for s in plan["scenes"]])
             self._failures = 0
             self.last_error = ""
             self._next_allowed = time.monotonic() + self.min_interval
