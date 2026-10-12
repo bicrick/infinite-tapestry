@@ -763,3 +763,12 @@ body.react-open .cmd-terms { display: none !important; }
   .wheel-label.on { opacity: 1; transform: translate(-50%, 0); }
   body:has(.wheel-label.on) .dock { opacity: 0; pointer-events: none; transition: opacity .2s var(--ease); }
 }
+
+/* low-fuel: one quiet line, not a modal */
+.nudge-line { position: fixed; left: 50%; top: 14px; transform: translate(-50%, -6px); z-index: 40; opacity: 0; transition: opacity .3s, transform .3s;
+  font-size: 12px; letter-spacing: .02em; color: rgba(var(--ink),.72); background: var(--glass); backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); padding: 6px 8px 6px 14px; border-radius: 999px; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.nudge-line.on { opacity: 1; transform: translate(-50%, 0); }
+.nudge-line a { color: rgb(var(--ink)); text-underline-offset: 3px; }
+.nudge-line button { background: none; border: 0; color: inherit; opacity: .55; cursor: pointer; font-size: 14px; padding: 0 4px; line-height: 1; }
+.nudge-line button:hover { opacity: 1; }

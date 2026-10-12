@@ -1,3 +1,4 @@
+const OWNER = (h) => String(h || "").toLowerCase() === "bicrick";   // never credited in previews
 const { env, rest, POD, storagePrefixes } = require("../lib/common");
 
 // Raw crops (no `card`): a crop of the tapestry where an idea landed (profile thumbnails etc).
@@ -66,7 +67,7 @@ async function card(req, res) {
     if (idea || kind === "at") {
       const img = await getCrop(a, b, 1200, 630);
       if (!img) return fallback();
-      const o = idea ? { v: "by", img: toDataUrl(img), line: clip(idea.body, 90), by: idea.handle }
+      const o = idea ? { v: "by", img: toDataUrl(img), line: clip(idea.body, 90), by: OWNER(idea.handle) ? "" : idea.handle }
                      : { v: "full", img: toDataUrl(img), line: "A moment from the Infinite Tapestry.", sub: "You choose where it goes." };
       return send(await render(o), final);
     }

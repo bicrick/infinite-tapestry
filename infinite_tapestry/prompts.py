@@ -179,11 +179,9 @@ class LiveDirector:
     def _hold_len(self, scene: dict) -> int:
         h = scene.get("hold")
         h = self.hold if h is None else int(h)
-        # Variable scene length (~20-45 s with the blend at ~2.9 s/strip): donor/boosted ideas linger
-        # longest, other ideas a bit longer than default, quiet Auto filler moves on sooner.
-        if scene.get("prio"):
-            base = max(8, min(MAX_HOLD_USER, h + 4))
-        elif scene.get("origin") == "user":  # ideas linger longer than Auto filler
+        # Variable scene length (~20-45 s with the blend at ~2.9 s/strip): ideas linger a bit longer
+        # than default, quiet Auto filler moves on sooner. Same for everyone, donor or not.
+        if scene.get("origin") == "user":  # ideas linger longer than Auto filler
             base = min(MAX_HOLD_USER, h + 2)
         else:
             base = max(min(h, 3), h - 2)   # never lengthens a short hold

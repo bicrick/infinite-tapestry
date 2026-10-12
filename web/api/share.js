@@ -1,3 +1,4 @@
+const OWNER = (h) => String(h || "").toLowerCase() === "bicrick";   // never credited in previews
 const { rest } = require("../lib/common");
 
 // /s/<id>: a share page with a rich preview of where the idea landed, then straight into the tapestry.
@@ -36,7 +37,7 @@ module.exports = async (req, res) => {
   const target = landed ? `/?at=${idea.start_strip}&to=${idea.end_strip ?? idea.start_strip + 12}` : `/u/${encodeURIComponent(idea.handle)}`;
   const body = String(idea.body || "").replace(/\s+/g, " ").trim();
   const title = body.length > 70 ? body.slice(0, 68) + "…" : body;
-  const desc = `by @${idea.handle} · Infinite Tapestry`;
+  const desc = OWNER(idea.handle) ? "Infinite Tapestry" : `by @${idea.handle} · Infinite Tapestry`;
   const img = landed ? `${host}/api/og?card=idea&id=${idea.id}` : `${host}/brand/og/og-3-close.jpg`;
   res.setHeader("content-type", "text/html; charset=utf-8");
   res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=600");

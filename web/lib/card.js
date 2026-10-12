@@ -55,7 +55,7 @@ function tree({ v = "full", img, band, line, sub, by, viewers = 0 }) {
     h("div", { style: { position: "absolute", left: 60, right: 60, bottom: 56, display: "flex", flexDirection: "column", gap: 14 } },
       h("div", { style: { fontSize: v === "by" ? (big.length > 60 ? 44 : 54) : 52, fontWeight: 300, lineHeight: 1.1, letterSpacing: -1.2, maxWidth: 1000 } }, big),
       h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-        h("div", { style: { fontSize: 24, color: DIM } }, v === "by" ? `by @${by}` : (sub || "An endless painting, live.")),
+        h("div", { style: { fontSize: 24, color: DIM } }, v === "by" && by ? `by @${by}` : v === "by" ? "An endless painting, live." : (sub || "An endless painting, live.")),
         url())));
 }
 
