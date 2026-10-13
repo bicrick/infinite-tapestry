@@ -1162,3 +1162,9 @@ body:has(.drawer.open) .amb-title { opacity: 0 !important; pointer-events: none 
 .toast.nudge button { font: inherit; font-size: var(--t-md); border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer; color: var(--fg); background: rgba(var(--ink), .12); }
 .toast.nudge #nudge-x { background: none; padding: 4px 8px; color: var(--muted); }
 body.saver .toast.nudge, body.ambient .toast.nudge { display: none; }
+
+/* the on-stage title is absolutely centred; [data-tip] (position:relative, same specificity, later) used to win
+   and shift it right by its left inset (and drop it out of place on desktop). */
+#amb-title, #amb-title[data-tip] { position: absolute; left: 0; right: 0; margin: 0 auto; padding: 0 24px; box-sizing: border-box; width: auto; }
+/* GPU off / replay: a calm dim dot, never "reconnecting" */
+.status.replaying .dot { background: rgba(var(--ink), .35); box-shadow: none; }
