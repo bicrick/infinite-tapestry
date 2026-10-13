@@ -130,17 +130,47 @@
 // Desktop top-left clock (viewer local time).
 (() => { const el = document.getElementById("top-clock"); if (!el) return; const f = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }); const tick = () => { el.textContent = f.format(new Date()); setTimeout(tick, 60000 - (Date.now() % 60000) + 50); }; tick(); })();
 
-// Build check: show the running build in the drawer; reload when a newer build is deployed (stale tabs never linger).
+// Build check: show the running build; pick up new deploys gently (never mid-interaction).
+// Reloads only when the tab is hidden or the viewer has been idle ~3 min; state is carried over via sessionStorage.
+// build.json {critical:true} forces a reload within ~5 min (still never while composing).
 (() => {
   const me = (window.TAPESTRY_CONFIG || {}).buildId; if (!me) return;
   const el = document.getElementById("build-id"); if (el) el.textContent = "build " + me.split("-")[0];
+  const KEY = "tapestry.resume", B = document.body, $ = (id) => document.getElementById(id);
+  // restore state saved before an update reload
+  try {
+    const st = JSON.parse(sessionStorage.getItem(KEY) || "null"); sessionStorage.removeItem(KEY);
+    if (st && Date.now() - st.t < 60000) {
+      if (st.tab) { const btn = document.querySelector('#drawer [data-tab="' + st.tab + '"]'); if (btn) setTimeout(() => btn.click(), 0); }
+      if (!st.live && st.center >= 0) { const t0 = Date.now(); const w = () => { const V = window.TapestryView; if (V && V.ready() && V.max() >= st.center && window.TapestryJump) window.TapestryJump(st.center); else if (Date.now() - t0 < 15000) setTimeout(w, 200); }; setTimeout(w, 300); }
+    }
+  } catch (_) {}
+  let lastAct = Date.now(), pending = null, since = 0;
+  const act = () => { lastAct = Date.now(); };
+  ["pointerdown", "keydown", "wheel", "touchstart", "scroll"].forEach((e) => addEventListener(e, act, { passive: true, capture: true }));
+  addEventListener("pointermove", (e) => { if (e.buttons) act(); }, { passive: true });   // drags count; idle hover doesn't
+  const composing = () => B.classList.contains("composing") || (document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) && document.activeElement.value);
+  const busy = () => composing() || ($("drawer") && $("drawer").classList.contains("open")) || !!document.fullscreenElement && !B.classList.contains("saver");
+  const IDLE = 180000, ACTIVE = 120000;
+  const save = () => { try { const V = window.TapestryView, tab = document.querySelector("#drawer [data-tab].on");
+    sessionStorage.setItem(KEY, JSON.stringify({ t: Date.now(), live: !V || V.live(), center: V ? Math.round(V.center()) : -1, tab: tab ? tab.dataset.tab : null })); } catch (_) {} };
+  const reload = () => { save(); if (document.hidden) { location.reload(); return; } B.style.transition = "opacity .6s ease"; B.style.opacity = "0"; setTimeout(() => location.reload(), 650); };
+  const tryGo = () => {
+    if (!pending) return;
+    if (composing()) return;
+    const idle = Date.now() - lastAct;
+    if (document.hidden) return reload();
+    if (pending.critical && Date.now() - since > 300000) return reload();
+    if (!busy() && idle > ACTIVE && (idle > IDLE || B.classList.contains("saver"))) return reload();
+  };
   const check = () => fetch("/build.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((j) => {
     if (!j || !j.id || j.id === me) return;
-    const go = () => { if (!document.body.classList.contains("composing")) location.reload(); else setTimeout(go, 5000); };
-    go();
+    if (!pending) since = Date.now();
+    pending = j; tryGo();
   }).catch(() => {});
-  setTimeout(check, 4000); setInterval(check, 90000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+  setTimeout(check, 4000); setInterval(check, 90000); setInterval(tryGo, 10000);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) tryGo(); else check(); });
+  window.TapestryUpdate = { check, tryGo, state: () => ({ pending, idle: Date.now() - lastAct, busy: busy() }) };
 })();
 
 // Ambient sound: opt-in toggle near the clock; engine lazy-loaded on first use
