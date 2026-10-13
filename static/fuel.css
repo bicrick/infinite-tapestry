@@ -3,3 +3,5 @@
 .fuel-page .tiers { margin: 12px 0 14px; }
 .fuel-page #donor-note { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
 .fuel-page #fuel-msg:empty { display: none; }
+.fuel-page a { color: rgb(var(--ink)); }
+@media (max-width: 520px) { .fuel-page .fuel-chart text { font-size: 18px; } }
