@@ -1131,3 +1131,7 @@ body.idle .top-fs, body.ambient .top-fs { opacity: 0 !important; pointer-events:
 /* footer: build label sits on its own line above the bar */
 .drawer .build-id { position: static !important; padding: 0 var(--s4) var(--s1); order: 98; flex: none; }
 .drawer-bar { order: 99; }
+#woven-list .item .t { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#woven-list .item .thumb, #woven-list .item .links { display: none; }
+#woven-list .item:hover .links { display: flex; }
+#panel-next .empty { padding: var(--s2) var(--s4) !important; font-size: var(--t-md); }
