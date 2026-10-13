@@ -892,3 +892,5 @@ body.composing:not(.away) .hwheel { opacity: 0; pointer-events: none; transition
 .hwheel { transition: opacity .4s var(--ease); }
 body.composing:not(.away) .dock .cmd-terms { margin-top: 10px; font-size: 10px; letter-spacing: .01em; }
 body.composing:not(.away) .dock .cmd-terms { white-space: normal; text-wrap: balance; overflow: visible; }
+body.composing:not(.away) .dock { translate: 0 calc(-1 * max(14px, var(--kb, 0px) - 14px - var(--sb, 0px))); }
+body.composing:not(.away) .dock .cmd-terms { max-height: none !important; line-height: 1.35; }
