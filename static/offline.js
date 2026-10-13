@@ -20,6 +20,7 @@
   const hide = () => { if (!shown) return; shown = false; document.body.classList.remove("offline-on"); };
   const arm = () => { if (timer || shown) return; timer = setTimeout(() => { timer = 0; open = open || !!window.__tapestryWsOpen; if (!open) show(); }, GRACE); };   // repeated failed reconnects must not keep pushing it back
   window.addEventListener("tapestry:ws", (e) => { open = !!(e.detail && e.detail.open); if (open) { clearTimeout(timer); timer = 0; hide(); } else arm(); });
+  setInterval(() => { if (shown && canPaint()) hide(); }, 1000);
   if (maint) show(); else if (!open) arm();   // never connected within the grace period → splash
   // Remember a small frame of the live painting for next time we're offline.
   const save = () => {
