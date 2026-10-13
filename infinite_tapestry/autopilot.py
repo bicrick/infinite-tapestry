@@ -79,6 +79,8 @@ def director_brief(recent: list[dict], journey: dict | None, steer: str, flavor:
                      "Vary your moves over time; do not always pick the same kind. Never repeat a recent subject.")
     lines.append("Keep continuity: the first new scene should flow out of the last one (shared color, light, shape or material) "
                  "so the transition is smooth, even when the subject changes.")
+    lines.append("Titles stay artistic: an evocative 2-4 word name like a painting's title (e.g. \"Lantern Tide\", \"The Amber Hour\"), "
+                 "never a literal description, a prompt fragment, or the journey name with a number.")
     if flavor_text:
         lines.append(f"Optional flavor you may use for a detour or a new journey (ignore if it breaks the flow): {flavor_text}")
     if steer:

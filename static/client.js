@@ -1361,7 +1361,7 @@
       if (!pending.size) $("cmd").classList.remove("busy");
       const p = msg.plan || {};
       const titles = (msg.scenes || []).map((s) => esc(s.title)).join(" → ");
-      toast((p.source === "haiku" ? "Planned " : "Queued ") + titles +
+      if (document.body.classList.contains("is-admin")) toast((p.source === "haiku" ? "Planned " : "Queued ") + titles +   // planner detail is admin-only; viewers just see the scene title
         (p.note ? `<br><span class="muted">${esc(p.note)}</span>` : ""), 6000);
     }
   }
