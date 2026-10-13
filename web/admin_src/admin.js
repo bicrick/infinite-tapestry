@@ -28,12 +28,25 @@ const fmt$ = (v) => (v == null ? "—" : "$" + Number(v).toFixed(2));
 const gb = (b) => (b == null ? "—" : b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" : (b / 1e6).toFixed(0) + " MB");
 const kv = (pairs) => pairs.map(([k, v]) => `<div><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join("");
 let OV = null;
+const dur = (sec) => sec == null ? "—" : sec < 3600 ? Math.round(sec / 60) + " min" : (sec / 3600).toFixed(1) + " h";
+const ERRS = { no_gpu_on_host: "RunPod can't start this pod: its host machine has no free GPU right now. Retry later, or migrate it to another machine in RunPod (it may get a new pod id; it is picked up automatically, or paste it under Pod).",
+  start_failed: "RunPod refused to start the pod." };
+function renderGpu(g, err) {
+  const st = g.state || {}, age = g.last_strip_at ? (Date.now() - new Date(g.last_strip_at)) / 1000 : null;
+  $("gpu").innerHTML = kv([["RunPod state", (g.pod || "—").toLowerCase()], ["GPU", g.gpu ? g.gpu + (g.location ? " · " + g.location : "") : "—"], ["uptime", g.pod === "RUNNING" ? dur(g.uptime_s) : "—"],
+    ["last strip", age == null ? "—" : age < 120 ? Math.round(age) + " s ago" : dur(age) + " ago"], ["$/hr", g.rate_per_hr != null ? fmt$(g.rate_per_hr) : "—"],
+    ["RunPod balance", fmt$(g.balance)], ["hours left (to $" + (g.floor ?? 0.5) + ")", g.hours_left == null ? "—" : g.hours_left.toFixed(1) + " h"], ["desired", st.desired || "—"]]);
+  document.querySelectorAll("#gpu-seg button").forEach((b) => b.classList.toggle("on", b.dataset.d === st.desired));
+  const e = err || st.last_error;
+  const box = $("gpu-err"); box.classList.toggle("hidden", !e);
+  if (e) box.innerHTML = esc(ERRS[e] || (/not enough free GPUs/i.test(e) ? ERRS.no_gpu_on_host : "Last start error: " + e)) + ` <a href="${esc(g.console_url)}" target="_blank" rel="noopener">Migrate / start on another machine →</a>`;
+  $("gpu-start").disabled = g.pod === "RUNNING"; $("gpu-stop").disabled = g.pod !== "RUNNING";
+  $("gpu-note").textContent = (st.note || "") + (g.start_enabled ? "" : " · controller auto-start is off (Start here still works)");
+  $("gpu-id").textContent = g.id || "—"; $("gpu-console").href = g.console_url || "#";
+}
 async function overview() {
   const d = OV = await call("overview"), g = d.gpu || {}, st = g.state || {};
-  $("gpu").innerHTML = kv([["pod", (g.pod || "—").toLowerCase()], ["desired", st.desired || "—"], ["RunPod balance", fmt$(g.balance)],
-    ["$/hr", g.rate_per_hr != null ? fmt$(g.rate_per_hr) : "—"], ["hours left (to $" + (g.floor ?? 0.5) + ")", g.hours_left == null ? "—" : g.hours_left.toFixed(1) + " h"],
-    ["now burning", g.burning ? "yes" : "no"]]) + `<p class="fine" style="grid-column:1/-1">${esc(st.note || "")}</p>`;
-  document.querySelectorAll("#gpu-seg button").forEach((b) => b.classList.toggle("on", b.dataset.d === st.desired));
+  renderGpu(g);
   const A = d.auto || {}, live = A.theme && A.theme_until && new Date(A.theme_until) > new Date();
   $("auto-paused").checked = !!A.paused;
   $("auto-note").textContent = live ? `Theme "${A.theme}" until ${new Date(A.theme_until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "No temporary theme.";
@@ -60,8 +73,18 @@ async function overview() {
 document.addEventListener("click", async (e) => {
   const t = e.target.closest("button"); if (!t) return;
   try {
-    if (t.dataset.d) {
-      if (!confirm(`Set GPU desired state to "${t.dataset.d}"?` + (t.dataset.d === "off" ? "" : " The controller may start the pod (billing ~$0.90/h)."))) return;
+    if (t.id === "gpu-start" || t.id === "gpu-stop") {
+      const on = t.id === "gpu-start";
+      if (!confirm(on ? "Start the GPU pod now? Billing ~$" + ((OV && OV.gpu && OV.gpu.rate_per_hr) || 0.9) + "/h until stopped." : "Stop the GPU pod? (It is stopped, never terminated.)")) return;
+      t.disabled = true; $("gpu-note").textContent = on ? "Starting…" : "Stopping…";
+      const r = await call(on ? "gpu_start" : "gpu_stop");
+      if (!r.ok) { renderGpu(OV.gpu, r.error === "start_failed" ? r.detail : r.error); t.disabled = false; return; }
+      renderGpu(r.gpu); setTimeout(overview, 8000);
+    } else if (t.id === "gpu-setid") {
+      const id = $("gpu-newid").value.trim(); if (!id || !confirm("Point the app at pod " + id + "?")) return;
+      const r = await call("gpu_pod_id", { pod_id: id }); $("gpu-newid").value = ""; renderGpu(r.gpu);
+    } else if (t.dataset.d) {
+      if (!confirm(`Set the desired state to "${t.dataset.d}"? The 5-minute controller follows it` + (t.dataset.d === "off" ? " (stops the pod)." : " (may start the pod; billing ~$0.90/h)."))) return;
       await call("gpu_set", { desired: t.dataset.d }); overview();
     } else if (t.dataset.idea) { await call("idea", { id: +t.dataset.idea, op: t.dataset.op }); overview(); }
     else if (t.dataset.sanc) { if (t.dataset.kind === "ban" && !confirm("Ban this user?")) return; await call("sanction", { user_id: t.dataset.sanc, kind: t.dataset.kind, minutes: +(t.dataset.min || 0) }); overview(); }
@@ -150,7 +173,7 @@ async function applyAction(c) {
 function renderMsg(m) {
   const out = [];
   for (const c of Array.isArray(m.content) ? m.content : []) {
-    if (c.type === "text" && c.text.trim()) { const d = document.createElement("div"); d.className = "msg " + m.role; d.textContent = c.text; out.push(d); }
+    if (c.type === "text" && c.text.trim()) { const d = document.createElement("div"); d.className = "msg-b " + m.role; d.textContent = c.text; out.push(d); }
     else if (c.type === "tool_use" && c.name === "propose_story") out.push(storyCard(structuredClone(c.input)));
     else if (c.type === "tool_use" && ACTION_TEXT[c.name]) {
       const d = document.createElement("div"); const done = localStorage.getItem(doneKey(c.id));
@@ -171,7 +194,7 @@ async function openChat(id) {
   CHAT = id; localStorage.setItem("it_chat", id || "");
   const log = $("chat-log"); log.innerHTML = "";
   if (id) for (const m of (await call("chat_get", { id })).messages) log.append(...renderMsg(m));
-  if (!log.children.length) log.innerHTML = '<div class="msg assistant">Hi, I\'m Auto. Ask what\'s playing, or let\'s draft a story.</div>';
+  if (!log.children.length) log.innerHTML = '<div class="msg-b assistant">Hi, I\'m Auto. Ask what\'s playing, or let\'s draft a story.</div>';
   log.scrollTop = log.scrollHeight;
 }
 async function chatList(sel) {
@@ -190,7 +213,7 @@ $("chat-form").onsubmit = async (e) => {
   const log = $("chat-log"); if (!CHAT) log.innerHTML = "";
   $("chat-in").value = "";
   log.append(...renderMsg({ role: "user", content: [{ type: "text", text }] }));
-  const w = document.createElement("div"); w.className = "msg assistant wait"; w.textContent = "Auto is thinking…"; log.append(w); log.scrollTop = log.scrollHeight;
+  const w = document.createElement("div"); w.className = "msg-b assistant wait"; w.textContent = "Auto is thinking…"; log.append(w); log.scrollTop = log.scrollHeight;
   try {
     const r = await call("chat_send", { chat_id: CHAT, text });
     w.replaceWith(...renderMsg(r.message));
@@ -198,3 +221,15 @@ $("chat-form").onsubmit = async (e) => {
   } catch (err) { w.textContent = "Auto couldn't answer just now. Try again."; }
   log.scrollTop = log.scrollHeight;
 };
+
+// ---------- views (sidebar / bottom nav) ----------
+function show(v) {
+  if (!document.getElementById("view-" + v)) v = "overview";
+  document.querySelectorAll(".adm .view").forEach((x) => x.classList.toggle("on", x.id === "view-" + v));
+  document.querySelectorAll(".side a[data-view]").forEach((a) => a.classList.toggle("on", a.dataset.view === v));
+  if (v === "auto") { const l = $("chat-log"); l.scrollTop = l.scrollHeight; }
+  window.scrollTo(0, 0);
+}
+addEventListener("hashchange", () => show(location.hash.slice(1)));
+show(location.hash.slice(1) || "overview");
+setInterval(() => { if (!document.hidden && token && $("view-overview").classList.contains("on")) overview().catch(() => {}); }, 30000);

@@ -102,12 +102,46 @@ async function runpod(query) {
   if (j.errors) throw new Error("runpod: " + JSON.stringify(j.errors).slice(0, 200));
   return j.data;
 }
-const POD = () => env("RUNPOD_POD_ID");
+// The pod id lives in pod_state.pod_id (falls back to RUNPOD_POD_ID), so a migrated/replacement pod is a data change.
+let _pod = null, _podAt = 0;
+const POD = () => _pod || env("RUNPOD_POD_ID");
+async function loadPod(force) {
+  if (!force && Date.now() - _podAt < 30000) return POD();
+  _podAt = Date.now();
+  try { const r = await rest("GET", "pod_state?id=eq.1&select=pod_id"); if (r && r[0] && r[0].pod_id) _pod = r[0].pod_id; } catch (_) {}
+  return POD();
+}
+// RunPod's "migrate" gives the pod a new id. If our pod is gone or stopped while a pod with the same name runs, adopt it.
+async function adoptPod() {
+  const d = await runpod(`query { myself { pods { id name desiredStatus } } }`).catch(() => null);
+  const pods = (d && d.myself && d.myself.pods) || [];
+  const cur = pods.find((p) => p.id === POD());
+  const name = (cur && cur.name) || env("RUNPOD_POD_NAME", "tapestry-sdxl");
+  if (cur && cur.desiredStatus === "RUNNING") return null;
+  const alt = pods.find((p) => p.id !== POD() && p.name === name && p.desiredStatus === "RUNNING") || (!cur && pods.find((p) => p.name === name));
+  if (!alt) return null;
+  const old = POD();
+  await rest("PATCH", "pod_state?id=eq.1", { pod_id: alt.id }, { prefer: "return=minimal" });
+  _pod = alt.id;
+  await audit("pod_adopt", { target: alt.id, detail: { from: old, name } });
+  return alt.id;
+}
 async function podStatus() {
   const d = await runpod(`query { pod(input: {podId: "${POD()}"}) { id desiredStatus } }`);
   return d.pod ? d.pod.desiredStatus : "UNKNOWN";
 }
-async function podStart() { return runpod(`mutation { podResume(input: {podId: "${POD()}", gpuCount: 1}) { id desiredStatus } }`); }
+async function podStart() {
+  try {
+    const r = await runpod(`mutation { podResume(input: {podId: "${POD()}", gpuCount: 1}) { id desiredStatus } }`);
+    await rest("PATCH", "pod_state?id=eq.1", { last_error: null }, { prefer: "return=minimal" }).catch(() => {});
+    return r;
+  } catch (e) {
+    const msg = String(e.message || e).replace(/^runpod: /, "").slice(0, 300);
+    await rest("PATCH", "pod_state?id=eq.1", { last_error: msg, updated_at: new Date().toISOString() }, { prefer: "return=minimal" }).catch(() => {});
+    await audit("pod_start_failed", { target: POD(), detail: { error: msg } });
+    const err = new Error(/not enough free GPUs/i.test(msg) ? "no_gpu_on_host" : "start_failed"); err.detail = msg; throw err;
+  }
+}
 async function podStop() { return runpod(`mutation { podStop(input: {podId: "${POD()}"}) { id desiredStatus } }`); }
 
 async function fuelBalance() {
@@ -124,6 +158,8 @@ async function runpodBalance() {
   catch (_) { return null; }   // unknown: never stop on a failed read
 }
 async function reconcile(reason) {
+  await loadPod(true);
+  await adoptPod().catch(() => null);
   const { balance } = await fuelBalance();
   const credit = await runpodBalance();
   const st = await podStatus();
@@ -134,11 +170,11 @@ async function reconcile(reason) {
   if ((broke || desired === "off") && st === "RUNNING") {
     await podStop(); action = "stop";
   } else if (!broke && credit != null && desired !== "off" && st !== "RUNNING" && env("CONTROLLER_ENABLE_START") === "1") {
-    await podStart(); action = "start";
+    action = await podStart().then(() => "start", (e) => "start_failed:" + e.message);
   }
-  const status = action === "start" ? "waking" : action === "stop" ? "sleeping" : st === "RUNNING" ? "running" : "sleeping";
+  const status = action.startsWith("start_failed") ? "sleeping" : action === "start" ? "waking" : action === "stop" ? "sleeping" : st === "RUNNING" ? "running" : "sleeping";
   await rest("PATCH", "pod_state?id=eq.1", { status, updated_at: new Date().toISOString(), note: `${reason}: pod ${st}, runpod $${credit == null ? "?" : credit.toFixed(2)}, fuel ${balance.toFixed(1)}c, action ${action}` }, { prefer: "return=minimal" });
-  if (action !== "none") await audit(action === "start" ? "pod_start" : "pod_stop", { target: POD(), detail: { reason, balance_cents: balance, runpod_balance: credit, by: "controller" } });
+  if (action === "start" || action === "stop") await audit(action === "start" ? "pod_start" : "pod_stop", { target: POD(), detail: { reason, balance_cents: balance, runpod_balance: credit, by: "controller" } });
   return { balance_cents: balance, runpod_balance: credit, pod: st, action, desired, start_enabled: env("CONTROLLER_ENABLE_START") === "1" };
 }
 
@@ -154,4 +190,4 @@ function storagePrefixes() {
   return [...new Set([env("TAPESTRY_STORAGE_PREFIX", "live-sdxl"), "live-sdxl", "live"])];
 }
 
-module.exports = { adminFromToken, ADMIN_EMAILS, SITE_URL, stripeLive, stripeWebhookSecret, runpod, runpodBalance, MIN_BALANCE, env, rest, userFromToken, clientIp, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };
+module.exports = { loadPod, adoptPod, podStart, podStop, adminFromToken, ADMIN_EMAILS, SITE_URL, stripeLive, stripeWebhookSecret, runpod, runpodBalance, MIN_BALANCE, env, rest, userFromToken, clientIp, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };

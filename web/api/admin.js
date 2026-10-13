@@ -3,26 +3,33 @@
 const UI = require("./_admin_ui.json");
 const stories = require("../lib/stories");
 const chat = require("../lib/autochat");
-const { env, rest, adminFromToken, audit, runpod, MIN_BALANCE, POD } = require("../lib/common");
+const { env, rest, adminFromToken, audit, runpod, MIN_BALANCE, POD, loadPod, adoptPod, podStart, podStop } = require("../lib/common");
 const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svc = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
 const DESIRED = new Set(["on", "off", "auto"]);
 const SHA = /^[0-9a-f]{40}$/;
 
 async function gpu() {
-  const [d, ps] = await Promise.all([
-    runpod(`query { myself { clientBalance currentSpendPerHr } pod(input: {podId: "${POD()}"}) { desiredStatus costPerHr machine { gpuDisplayName } } }`).catch(() => null),
-    rest("GET", "pod_state?id=eq.1&select=status,desired,note,updated_at").catch(() => []),
+  await loadPod(true);
+  await adoptPod().catch(() => null);
+  const id = POD();
+  const [d, ps, last] = await Promise.all([
+    runpod(`query { myself { clientBalance currentSpendPerHr } pod(input: {podId: "${id}"}) { id name desiredStatus costPerHr lastStatusChange machineId runtime { uptimeInSeconds } machine { gpuDisplayName location } } }`).catch(() => null),
+    rest("GET", "pod_state?id=eq.1&select=status,desired,note,updated_at,last_error,pod_id").catch(() => []),
+    rest("GET", "strips?order=idx.desc&limit=1&select=idx,created_at").catch(() => []),
   ]);
+  const p = d && d.pod;
   const bal = d && d.myself ? Number(d.myself.clientBalance) : null;
-  const rate = d && d.pod ? Number(d.pod.costPerHr) : null;
-  const running = d && d.pod && d.pod.desiredStatus === "RUNNING";
+  const rate = p ? Number(p.costPerHr) : null;
+  const running = p && p.desiredStatus === "RUNNING";
   const spend = d && d.myself ? Number(d.myself.currentSpendPerHr) : null;
-  const burn = running ? (spend || rate) : spend;
   const floor = MIN_BALANCE();
-  return { pod: d && d.pod ? d.pod.desiredStatus : "UNKNOWN", gpu: d && d.pod && d.pod.machine ? d.pod.machine.gpuDisplayName : null,
+  return { id, name: p && p.name, pod: p ? p.desiredStatus : "UNKNOWN", gpu: p && p.machine ? p.machine.gpuDisplayName : null,
+    location: p && p.machine ? p.machine.location : null, machine: p && p.machineId, uptime_s: p && p.runtime ? p.runtime.uptimeInSeconds : null,
+    last_change: p && p.lastStatusChange, last_strip_at: last[0] && last[0].created_at, last_strip: last[0] && last[0].idx,
     balance: bal, rate_per_hr: rate, spend_per_hr: spend, floor,
-    hours_left: bal != null && rate ? Math.max(0, (bal - floor) / rate) : null, burning: !!(burn && burn > 0.05),
+    hours_left: bal != null && rate ? Math.max(0, (bal - floor) / rate) : null, burning: !!(running || (spend && spend > 0.05)),
+    start_enabled: env("CONTROLLER_ENABLE_START") === "1", console_url: `https://console.runpod.io/pods?id=${id}`,
     state: ps[0] || null };
 }
 async function storageList(prefix) {
@@ -35,7 +42,7 @@ async function latestRelease() {
   return r.ok ? (await r.text()).trim().slice(0, 40) : null;
 }
 async function viewers() {
-  const pod = POD(); if (!pod) return null;
+  const pod = await loadPod(); if (!pod) return null;
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
   try { const r = await fetch(`https://${pod}-8000.proxy.runpod.net/health`, { signal: ctl.signal }); return r.ok ? (await r.json()).viewers ?? null : null; }
   catch (_) { return null; } finally { clearTimeout(t); }
@@ -51,6 +58,23 @@ module.exports = async (req, res) => {
   const a = body.action || "recent";
   try {
     if (a === "ui") return res.status(200).json(UI);
+    if (a === "gpu_start" || a === "gpu_stop") {   // immediate start/stop (also sets desired so the controller agrees)
+      await loadPod(true);
+      const on = a === "gpu_start";
+      await rest("PATCH", "pod_state?id=eq.1", { desired: on ? "on" : "off", updated_at: new Date().toISOString() }, { prefer: "return=minimal" });
+      await audit(on ? "admin_gpu_start" : "admin_gpu_stop", { actor: me.id, target: POD() });
+      try { if (on) await podStart(); else await podStop(); }
+      catch (e) { return res.status(200).json({ ok: false, error: e.message, detail: e.detail || String(e.message).slice(0, 300) }); }
+      return res.status(200).json({ ok: true, gpu: await gpu() });
+    }
+    if (a === "gpu_pod_id") {   // {pod_id}: point everything at another pod (e.g. after a RunPod migration)
+      const id = String(body.pod_id || "").trim();
+      if (!/^[a-z0-9]{8,24}$/.test(id)) return res.status(400).json({ error: "bad_pod_id" });
+      await rest("PATCH", "pod_state?id=eq.1", { pod_id: id }, { prefer: "return=minimal" });
+      await audit("admin_pod_id", { actor: me.id, target: id, detail: { from: POD() } });
+      await loadPod(true);
+      return res.status(200).json({ ok: true, gpu: await gpu() });
+    }
     if (a === "stories") return res.status(200).json(await stories.library());
     if (a === "story_save") return res.status(200).json({ story: await stories.save(body.story || {}) });
     if (a === "story_archive") { await rest("PATCH", `stories?id=eq.${Number(body.id)}`, { archived: true }, { prefer: "return=minimal" }); return res.status(200).json({ ok: true }); }

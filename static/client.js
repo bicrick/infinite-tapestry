@@ -62,10 +62,11 @@
   const requested = new Set();
   let liveInitialized = false;
 
+  let podWs = null;   // /api/live names the current pod (survives a RunPod migration without a rebuild)
   function wsUrl() {
     const q = new URLSearchParams(location.search).get("ws");
     const cfg = (window.TAPESTRY_CONFIG && window.TAPESTRY_CONFIG.wsUrl) || "";
-    let url = q || cfg;
+    let url = q || podWs || cfg;
     if (!url) {
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
       return proto + "//" + location.host + "/ws";
@@ -1473,7 +1474,7 @@
   // ---------- resilience: pod-independent bootstrap + replay fallback ----------
   // /api/live (Vercel + Supabase) serves the strip config and recent refs; strips themselves come from R2.
   // If live goes quiet (no new strip for a minute, or the pod is unreachable), quietly replay recent history.
-  let podDown = false, liveChecked = false;   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
+  let podDown = false, liveChecked = false, podPollAt = performance.now();   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
   let wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;
   const apiReq = new Set();
   function apiMissing(a, b) {
@@ -1496,6 +1497,10 @@
       }
       const it = j.items || [];
       liveChecked = true;
+      if (j.pod && j.pod.ws && j.pod.ws !== wsUrl() && !new URLSearchParams(location.search).get("ws")) {
+        podWs = j.pod.ws;
+        if (!connected && ws) { try { ws.onclose = null; ws.close(); } catch (_) {} connect(); }
+      }
       podDown = !!(j.pod && (j.pod.status !== "running" || j.pod.desired === "off")) || !!(j.last_at && j.now - j.last_at > 60);
       // Pod down at load: choose replay BEFORE the first strips land, so the camera starts at the replay position
       // and the load-in plays on the strips being replayed (no live-edge frame, then a backward jump).
@@ -1540,6 +1545,14 @@
   setInterval(() => {
     if (document.hidden || document.body.classList.contains("intro") || maxIndex < 0) return;
     if (connected) downSince = 0; else if (!downSince) downSince = performance.now();
+    if (!connected && performance.now() - (podPollAt || 0) > 60000) {   // GPU down: re-check its state and address
+      podPollAt = performance.now();
+      fetch("/api/live?n=1").then((r) => r.json()).then((j) => {
+        if (!j || !j.pod) return;
+        podDown = j.pod.status !== "running" || j.pod.desired === "off";
+        if (j.pod.ws && j.pod.ws !== wsUrl() && !new URLSearchParams(location.search).get("ws")) podWs = j.pod.ws;
+      }).catch(() => {});
+    }
     const quiet = performance.now() - lastFreshAt > 60000 || (downSince && performance.now() - downSince > 15000);
     if (!quiet) return;
     if (panMode === "live" && !replay) startReplay();

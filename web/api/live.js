@@ -23,7 +23,7 @@ module.exports = async (req, res) => {
     }
     const n = Math.min(400, Math.max(1, parseInt(q.n, 10) || 240));
     const [rows, ps] = await Promise.all([rest("GET", `${base}&order=idx.desc&limit=${n}`),
-      rest("GET", "pod_state?id=eq.1&select=status,desired").catch(() => [])]);
+      rest("GET", "pod_state?id=eq.1&select=status,desired,pod_id").catch(() => [])]);
     rows.reverse();
     const last = rows[rows.length - 1];
     const ov = last ? last.overlap : 192, w = last ? last.width - ov : 256;
@@ -35,7 +35,7 @@ module.exports = async (req, res) => {
       max: last ? last.idx : -1,
       last_at: last ? Date.parse(last.created_at) / 1000 : null,
       now: Date.now() / 1000,
-      pod: ps[0] ? { status: ps[0].status, desired: ps[0].desired } : null,
+      pod: ps[0] ? { status: ps[0].status, desired: ps[0].desired, ws: ps[0].pod_id ? `wss://${ps[0].pod_id}-8000.proxy.runpod.net/ws` : null } : null,
       items: rows.map(ref),
     });
   } catch (e) { res.status(500).json({ error: "server" }); }

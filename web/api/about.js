@@ -1,4 +1,4 @@
-const { env, rest, POD, storagePrefixes } = require("../lib/common");
+const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
 
 // Public, read-only, aggregated data for /about and /time-machine (no PII: handles only where the
 // person chose to be credited — idea authors and donor wall, never ids/emails/ip).
@@ -89,7 +89,7 @@ async function tile(res, l, c) {
       return res.status(200).send(Buffer.from(await r.arrayBuffer()));
     }
   }
-  if (POD()) {
+  if (await loadPod()) {
     const r = await fetch(`https://${POD()}-8000.proxy.runpod.net/lod/${l}/${c}.jpg`).catch(() => null);
     if (r && r.ok) {
       res.setHeader("content-type", "image/jpeg");

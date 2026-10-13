@@ -1,5 +1,5 @@
 const OWNER = (h) => String(h || "").toLowerCase() === "bicrick";   // never credited in previews
-const { env, rest, POD, storagePrefixes } = require("../lib/common");
+const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
 
 // Raw crops (no `card`): a crop of the tapestry where an idea landed (profile thumbnails etc).
 // Designed cards (`card=`): 1200x630 link previews over real tapestry crops (see lib/card.js):
@@ -17,7 +17,7 @@ async function getCrop(a, b, w, h, ms = 9000) {
     const r = await fetch(`${env("SUPABASE_URL").replace(/\/$/, "")}/storage/v1/object/tapestry/${pre}/${key}`, { headers: sbHeaders() }).catch(() => null);
     if (r && r.ok) return Buffer.from(await r.arrayBuffer());
   }
-  if (!POD()) return null;
+  if (!(await loadPod())) return null;
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
   const r = await fetch(`https://${POD()}-8000.proxy.runpod.net/crop/${a}/${b}.jpg?w=${w}&h=${h}`, { signal: ctl.signal }).catch(() => null);
   clearTimeout(t);
@@ -30,7 +30,7 @@ function settle(a, b) {
   return [a, b];
 }
 async function health() {
-  if (!POD()) return null;
+  if (!(await loadPod())) return null;
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
   const r = await fetch(`https://${POD()}-8000.proxy.runpod.net/health`, { signal: ctl.signal }).catch(() => null);
   clearTimeout(t);
