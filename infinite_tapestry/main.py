@@ -97,6 +97,9 @@ def main(argv: list[str] | None = None) -> int:
             os.environ.setdefault("TAPESTRY_STORAGE_PREFIX", "mock")
         generator.attach_store(HistoryStore(args.data_dir, SupabaseMirror.from_env()))
     generator.start()
+    from .ops import OpsLog
+
+    ops = OpsLog(generator).start()
 
     from .interpreter import PromptInterpreter
 
@@ -106,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         f"Claude {interpreter.model}" if interpreter.enabled else "off (no ANTHROPIC_API_KEY)",
     )
     app = create_app(config, buffer, generator, interpreter=interpreter)
+    ops.viewers = getattr(app.state, "viewer_count", lambda: None)
 
     # ws_ping_interval: uvicorn/websockets protocol ping (in addition to our JSON pings).
     try:
@@ -121,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
             ws_per_message_deflate=False,
         )
     finally:
+        ops.stop()
         generator.stop()
     return 0
 

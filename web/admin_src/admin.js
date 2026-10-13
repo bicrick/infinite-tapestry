@@ -118,7 +118,7 @@ document.addEventListener("click", async (e) => {
   const { data } = await sb.auth.getSession();
   token = data.session && data.session.access_token;
   if (!token) { $("msg").innerHTML = 'Sign in on <a href="/">the tapestry</a> with an admin account first.'; return; }
-  try { await overview(); stories().catch(() => {}); chatList().then(openChat).catch(() => {}); await load(); } catch (e) { $("msg").textContent = e.message === "admin_only" ? "This account isn't an admin." : "Error: " + e.message; }
+  try { if (location.hash === "#reliability") opsView().catch(() => {}); await overview(); stories().catch(() => {}); chatList().then(openChat).catch(() => {}); await load(); } catch (e) { $("msg").textContent = e.message === "admin_only" ? "This account isn't an admin." : "Error: " + e.message; }
 })();
 
 // ---------- stories: library + playlist ----------
@@ -231,9 +231,32 @@ function show(v) {
   if (!document.getElementById("view-" + v)) v = "overview";
   document.querySelectorAll(".adm .view").forEach((x) => x.classList.toggle("on", x.id === "view-" + v));
   document.querySelectorAll(".side a[data-view]").forEach((a) => a.classList.toggle("on", a.dataset.view === v));
+  if (v === "reliability" && token) opsView().catch((e) => ($("msg").textContent = "Error: " + e.message));
   if (v === "auto") { const l = $("chat-log"); l.scrollTop = l.scrollHeight; }
   window.scrollTo(0, 0);
 }
 addEventListener("hashchange", () => show(location.hash.slice(1)));
 show(location.hash.slice(1) || "overview");
 setInterval(() => { if (!document.hidden && token && $("view-overview").classList.contains("on")) overview().catch(() => {}); }, 30000);
+
+// ---------- reliability (ops_events / ops_stats) ----------
+let OPS_W = { h: 24, b: "hour" };
+const secs = (ms) => ms == null ? "—" : ms < 1000 ? ms + " ms" : ms < 90000 ? (ms / 1000).toFixed(1) + " s" : ms < 5400000 ? Math.round(ms / 60000) + " min" : (ms / 3600000).toFixed(1) + " h";
+const ct = (t) => new Date(t).toLocaleString([], { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) + " CT";
+async function opsView() {
+  const d = await call("ops", { hours: OPS_W.h, bucket: OPS_W.b }), hb = d.heartbeat || {};
+  const hbAge = hb.at ? (Date.now() - new Date(hb.at)) / 1000 : null;
+  const rl = Object.entries(d.reloads || {}).map(([k, v]) => k + " " + v).join(", ") || "0";
+  $("ops-kv").innerHTML = kv([["pod drops", d.pod_drops ?? 0], ["viewer disconnects", d.viewer_drops ?? 0], ["mean time to reconnect", secs(d.mttr_ms)],
+    ["longest strip gap", d.longest_gap_s == null ? "—" : secs(d.longest_gap_s * 1000)], ["gaps > 30 s", d.gaps_over_30s ?? 0],
+    ["avg time away from live", secs(d.away_ms_avg)], ["reloads", rl], ["pod heartbeat", hbAge == null ? "—" : Math.round(hbAge) + " s ago" + (hb.detail && hb.detail.release ? " · " + String(hb.detail.release).slice(0, 7) : "")]]);
+  if (d.longest_gap_at) $("ops-kv").insertAdjacentHTML("beforeend", `<div><b>${esc(ct(d.longest_gap_at))}</b><span>longest gap ended</span></div>`);
+  $("ops-unit").textContent = OPS_W.b;
+  const B = d.buckets || [];
+  $("ops-buckets").innerHTML = '<tr><th>' + OPS_W.b + ' (CT)</th><th>pod drops</th><th>viewer drops</th><th>reloads</th><th>mean reconnect</th></tr>' +
+    (B.slice().reverse().map((x) => `<tr><td class="m">${esc(OPS_W.b === "day" ? x.t.slice(0, 10) : x.t.slice(5))}</td><td>${x.pod_drops}</td><td>${x.viewer_drops}</td><td>${x.reloads}</td><td class="m">${secs(x.mttr_ms)}</td></tr>`).join("") || '<tr><td class="fine">No events in this window.</td></tr>');
+  $("ops-recent").innerHTML = (d.recent || []).map((e) => `<tr><td class="m">${esc(ct(e.started_at))}</td><td class="m">${esc(e.source)}</td><td><b>${esc(e.type)}</b></td><td class="m">${e.duration_ms == null ? "" : secs(e.duration_ms)}</td><td class="fine">${esc(Object.entries(e.detail || {}).filter(([k]) => k !== "build" && k !== "hidden").map(([k, v]) => k + "=" + v).join(" · ").slice(0, 160))}</td></tr>`).join("") || '<tr><td class="fine">No events yet.</td></tr>';
+}
+document.addEventListener("click", (e) => { const b = e.target.closest && e.target.closest("#ops-seg button"); if (!b) return;
+  OPS_W = { h: +b.dataset.h, b: b.dataset.b }; document.querySelectorAll("#ops-seg button").forEach((x) => x.classList.toggle("on", x === b)); opsView().catch(() => {}); });
+setInterval(() => { if (!document.hidden && token && $("view-reliability").classList.contains("on")) opsView().catch(() => {}); }, 60000);

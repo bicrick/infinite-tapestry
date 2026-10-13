@@ -3,6 +3,21 @@
  * - Backend WS URL: ?ws=... > window.TAPESTRY_CONFIG.wsUrl > page origin (/ws).
  * - Auto speed follows GPU throughput; auto-planned scene queue; drag to pan.
  */
+// Reliability telemetry: sampled (1 in 2 tabs), anonymous (random per-tab id), batched, beacon on hide.
+(function () {
+  const on = Math.random() < 0.5 && !/[?&]noops/.test(location.search), q = [];
+  const sid = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 6);
+  const build = String((window.TAPESTRY_CONFIG || {}).buildId || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 24);
+  const flush = () => {
+    if (!q.length) return;
+    const body = JSON.stringify({ sid, events: q.splice(0, 10) });
+    try { if (!(navigator.sendBeacon && navigator.sendBeacon("/api/ops", new Blob([body], { type: "application/json" })))) fetch("/api/ops", { method: "POST", body, keepalive: true, headers: { "content-type": "application/json" } }).catch(() => {}); } catch (_) {}
+  };
+  setInterval(flush, 30000);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); });
+  addEventListener("pagehide", flush);
+  window.TapestryOps = { report(type, ms, d) { if (!on || q.length > 30) return; q.push({ type, at: Date.now() - (ms || 0), ms: ms == null ? null : Math.round(ms), d: Object.assign({ build, hidden: document.hidden ? "1" : "0" }, d || {}) }); }, flush };
+})();
 (function () {
   "use strict";
   // Who suggested a scene: '@handle', 'a guest' or 'Auto'. The owner is never credited (shown as Auto).
@@ -51,7 +66,7 @@
   let curSpeed = 0, smoothDesired = 0;
   let lastTs = 0;
   let ws = null;
-  let reconnectDelay = 1000;
+  let reconnectDelay = 1000, dropAt = 0;   // dropAt: when a visible, open stream dropped (ops telemetry)
   let everOpened = false;   // initial connect shows nothing, never "reconnecting"
   let bufferDepth = 0;
   let bufferLow = false;
@@ -1379,6 +1394,8 @@
     ws = new WebSocket(url + (url.includes("?") ? "&" : "?") + "v=2");
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
+      if (dropAt && window.TapestryOps) TapestryOps.report("reconnect", performance.now() - dropAt, { pod: podDown ? "down" : "running" });
+      dropAt = 0;
       connected = true; everOpened = true;
       reconnectDelay = 1000;
       send({ type: "upcoming_request" });
@@ -1398,13 +1415,15 @@
         onStripBinary(ev.data);
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
+      if (connected && !document.hidden && window.TapestryOps) TapestryOps.report("disconnect", 0, { code: String((ev && ev.code) || 0), pod: podDown ? "down" : "running" });
+      if (connected && !document.hidden) dropAt = performance.now();
       connected = false;
       window.__tapestryWsOpen = false; window.dispatchEvent(new CustomEvent("tapestry:ws", { detail: { open: false } }));
       if (clientPingTimer) clearInterval(clientPingTimer);
       const wait = reconnectDelay * (0.75 + Math.random() * 0.5);  // jitter
       setTimeout(connect, navigator.onLine === false ? 3000 : wait);
-      reconnectDelay = Math.min(30000, reconnectDelay * 1.6);
+      reconnectDelay = Math.min(podDown ? 30000 : 4000, reconnectDelay * 1.6);
     };
     ws.onerror = () => { try { ws.close(); } catch (_) {} };
   }
@@ -1480,7 +1499,7 @@
   // /api/live (Vercel + Supabase) serves the strip config and recent refs; strips themselves come from R2.
   // If live goes quiet (no new strip for a minute, or the pod is unreachable), quietly replay recent history.
   let podDown = false, liveChecked = false, podPollAt = performance.now();   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
-  let wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;
+  let replayAt = 0, wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;
   const apiReq = new Set();
   function apiMissing(a, b) {
     a = Math.max(0, a); b = Math.min(b, maxIndex);
@@ -1535,6 +1554,7 @@
   }
   function startReplay() {
     if (replayBusy || maxIndex < 40) return;
+    if (!replay && !replayAt) { replayAt = performance.now(); window.TapestryOps && TapestryOps.report("replay", 0, { pod: podDown ? "down" : "running" }); }
     const back = Math.min(maxIndex - 4, 90 + Math.floor(Math.random() * 120));   // ~5-10 min of recent history
     fadeSwap(() => {
       replay = true;
@@ -1544,9 +1564,11 @@
   }
   function endReplay() {
     if (!replay || replayBusy) return;
+    if (replayAt && window.TapestryOps) TapestryOps.report("away_from_live", performance.now() - replayAt, { reason: "replay" });
+    replayAt = 0;
     fadeSwap(() => { replay = false; panMode = "live"; live = true; setAway(false); });
   }
-  ["pointerdown", "wheel", "keydown"].forEach((e) => canvas.addEventListener(e, () => { if (replay && !replayBusy) replay = false; }, { capture: true, passive: true }));
+  ["pointerdown", "wheel", "keydown"].forEach((e) => canvas.addEventListener(e, () => { if (replay && !replayBusy) { replay = false; if (replayAt && window.TapestryOps) TapestryOps.report("away_from_live", performance.now() - replayAt, { reason: "user_took_over" }); replayAt = 0; } }, { capture: true, passive: true }));
   setInterval(() => {
     if (document.hidden || document.body.classList.contains("intro") || maxIndex < 0) return;
     if (connected) downSince = 0; else if (!downSince) downSince = performance.now();
@@ -1558,7 +1580,10 @@
         if (j.pod.ws && j.pod.ws !== wsUrl() && !new URLSearchParams(location.search).get("ws")) podWs = j.pod.ws;
       }).catch(() => {});
     }
-    const quiet = performance.now() - lastFreshAt > 60000 || (downSince && performance.now() - downSince > 15000);
+    // Pod known down: replay soon. Pod believed running (app restart/deploy is ~35-50 s, a proxy blip less): hold at
+    // the live edge for 90 s instead of fading 5-10 min back into history, so a short drop never pulls viewers off live.
+    const grace = podDown ? 15000 : 90000;
+    const quiet = performance.now() - lastFreshAt > Math.max(60000, grace) || (downSince && performance.now() - downSince > grace);
     if (!quiet) return;
     if (panMode === "live" && !replay) startReplay();
     else if (replay && panMode === "live") startReplay();   // reached the end of the replay: loop

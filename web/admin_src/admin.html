@@ -5,6 +5,7 @@
     <a href="#auto" data-view="auto">Talk to Auto</a>
     <a href="#stories" data-view="stories">Stories</a>
     <a href="#queue" data-view="queue">Queue</a>
+    <a href="#reliability" data-view="reliability">Reliability</a>
     <a href="#deploys" data-view="deploys">Deploys</a>
     <a href="#settings" data-view="settings">Settings</a>
     <a class="back" href="/">← Tapestry</a>
@@ -57,6 +58,13 @@
         <h3>Guest sessions</h3><table id="sessions"></table>
         <h3>Bans</h3><table id="bans"></table>
       </div>
+    </section>
+
+    <section class="view" id="view-reliability">
+      <header class="vh"><h1>Reliability</h1><div class="seg" id="ops-seg" role="radiogroup" aria-label="Window"><button data-h="24" data-b="hour" class="on">24 h</button><button data-h="168" data-b="day">7 days</button><button data-h="720" data-b="day">30 days</button></div></header>
+      <div class="card-a"><h2>Summary</h2><div class="kv" id="ops-kv"></div><p class="fine">Pod drops = app restarts + generation stalls (&gt; 20 s with no strip). Viewer events are sampled from half of all tabs, anonymous.</p></div>
+      <div class="card-a"><h2>Per <span id="ops-unit">hour</span></h2><table id="ops-buckets"></table></div>
+      <div class="card-a"><h2>Recent events</h2><table id="ops-recent"></table></div>
     </section>
 
     <section class="view" id="view-deploys">

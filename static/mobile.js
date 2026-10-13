@@ -154,7 +154,7 @@
   const IDLE = 180000, ACTIVE = 120000;
   const save = () => { try { const V = window.TapestryView, tab = document.querySelector("#drawer [data-tab].on");
     sessionStorage.setItem(KEY, JSON.stringify({ t: Date.now(), live: !V || V.live(), center: V ? Math.round(V.center()) : -1, tab: tab ? tab.dataset.tab : null })); } catch (_) {} };
-  const reload = () => { save(); if (document.hidden) { location.reload(); return; } B.style.transition = "opacity .6s ease"; B.style.opacity = "0"; setTimeout(() => location.reload(), 650); };
+  const reload = () => { try { window.TapestryOps && (TapestryOps.report("reload", 0, { reason: pending && pending.critical ? "deploy_critical" : "deploy" }), TapestryOps.flush()); } catch (_) {} save(); if (document.hidden) { location.reload(); return; } B.style.transition = "opacity .6s ease"; B.style.opacity = "0"; setTimeout(() => location.reload(), 650); };
   const tryGo = () => {
     if (!pending) return;
     if (composing()) return;

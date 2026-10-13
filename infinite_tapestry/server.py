@@ -189,6 +189,7 @@ def create_app(
     timeline = Timeline(config.strip_width, default_speed=config.scroll_speed)
     app.state.timeline = timeline
     clients: set[Viewer] = set()
+    app.state.viewer_count = lambda: len(clients)   # ops heartbeat
     hub: dict[str, Any] = {"loop": None, "meta": None, "dir_json": None, "dir_at": 0.0, "dir_timer": None,
                            "public_base": None}
     conn_per_ip: dict[str, int] = {}

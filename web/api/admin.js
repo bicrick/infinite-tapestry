@@ -75,6 +75,7 @@ module.exports = async (req, res) => {
       await loadPod(true);
       return res.status(200).json({ ok: true, gpu: await gpu() });
     }
+    if (a === "ops") return res.status(200).json(await rest("POST", "rpc/ops_stats", { hours: Math.min(744, Math.max(1, Number(body.hours) || 24)), bucket: body.bucket === "day" ? "day" : "hour" }));
     if (a === "stories") return res.status(200).json(await stories.library());
     if (a === "story_save") return res.status(200).json({ story: await stories.save(body.story || {}) });
     if (a === "story_archive") { await rest("PATCH", `stories?id=eq.${Number(body.id)}`, { archived: true }, { prefer: "return=minimal" }); return res.status(200).json({ ok: true }); }
