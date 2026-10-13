@@ -137,7 +137,7 @@
   // Off-screen staging buffer: 2 strips + the inpaint context band, so repaints and arrivals happen out of view.
   // Calibrated hold-back: one full strip (the next arrival) + the inpaint band it repaints over its predecessor (+32px margin).
   // Together with the decode-aware limit below, the visible right edge only ever shows final pixels.
-  let maxOv = 128;
+  let maxOv = 128, drawExcess = 0;
   const BAND = () => maxOv + 32;
   const STAGE = () => 2 * SW() + BAND();   // + one more full strip of margin (user-calibrated)
   const panoramaWidth = () => (maxIndex + 1) * SW();
@@ -518,8 +518,8 @@
       corr -= fix;
       // Soft limit: the visible edge may only reach strips that are received AND decoded (+ the staging zone).
       // Ease the speed down as the buffer thins instead of stopping, so new pixels never surface on screen.
-      let k = Math.max(0, Math.floor((livePos - STAGE() + BAND()) / SW())); while (k <= maxIndex) { const e = strips.get(k); if (!e || !e.bitmap) break; k++; }
-      const limit = Math.min(panoramaWidth(), k * SW() - BAND() + STAGE());   // visible edge stays BAND short of strip k's repaint zone
+      let k = Math.max(0, Math.floor((livePos - STAGE() + drawExcess + BAND()) / SW())); while (k <= maxIndex) { const e = strips.get(k); if (!e || !e.bitmap) break; k++; }
+      const limit = Math.min(panoramaWidth() - drawExcess, k * SW() - BAND() + STAGE() - drawExcess);   // visible edge stays BAND short of strip k's repaint zone
       const ease = Math.max(0, Math.min(1, (limit - livePos) / (0.75 * SW())));
       if (livePos < limit) livePos = Math.min(limit, livePos + srvSpeed * dt * ease + Math.min(fix, Math.max(0, limit - livePos)));
       liveScroll = livePos - viewWorld();
@@ -583,6 +583,7 @@
     const left = Math.max(0, (center - (w / s) / 2) * (1 - ribbonAnchor) + (fullRight - w / s) * ribbonAnchor);
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
     if (window.__probe) window.__probe.push(left);
+    if (livePos !== null) { drawExcess = Math.max(0, left + w / s - (livePos - STAGE())); window.__dx = drawExcess / SW(); }   // how far the drawn right edge reaches past the nominal staged edge (ribbon / zoom / portrait centring)
     const yOff = portrait() ? bandTopFor(h, config.height * s0) + (config.height * s0 - config.height * s) / 2 : ribbonTop(h, config.height * s);
     publishBand(yOff, config.height * s, h);
     const firstIdx = Math.max(0, Math.floor(left / SW()) - 1);
@@ -595,20 +596,18 @@
     if (!window.__nolod && (zoom < 0.97 || fast || coverage < 1)) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
-      const liveB = livePos !== null && !fast ? livePos - STAGE() : Infinity;   // solid edge: the newest 2 on-screen strips are staged as particles
       const stripLayer = zoom > 0.3;
       for (let i = Math.max(firstIdx, 0); stripLayer && i <= Math.min(lastIdx, maxIndex); i++) {
         want++;
         const e = strips.get(i);
-        if (!e) continue;
+        if (!e) { continue; }
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
-        if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) ? performance.now() : -1e9;   // arrived while its repainted band is on screen?
+        if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) ? performance.now() : -1e9;
         const fa = Math.min(1, (performance.now() - e.seenAt) / 1000);                                      // then crossfade it in over ~1 s
         if (fa < 1) ctx.globalAlpha = fa * fa * (3 - 2 * fa);
-        if ((i + 1) * SW() <= liveB) ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);
-        else if (i * SW() < liveB) { ctx.save(); ctx.beginPath(); ctx.rect(-10, 0, liveB - left + 10, config.height); ctx.clip(); ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0); ctx.restore(); }
+        ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);   // no live-edge clip: the old particle-era clip hid the next strip's inpaint band until it popped in
         ctx.globalAlpha = 1;
       }
       coverage = want ? have / want : 0;
