@@ -184,7 +184,7 @@ void main(){
   vec3 c = tap(vec2(x, clamp(y, .05, .95)), lod) * .4
          + (tap(vec2(x - s, clamp(y + .08, .05, .95)), lod) + tap(vec2(x + s, clamp(y - .08, .05, .95)), lod)) * .3;
   float f = exp(-d * 3.4) * smoothstep(0., .04, d + .01);               // fade into a glow
-  f *= (uv.y > bot ? .34 : .16) * alpha;
+  f *= (uv.y > bot ? .5 : .24) * alpha;
   o = vec4(c * f, f);                                                    // premultiplied
 }`));
     gl.linkProgram(pr); gl.useProgram(pr);
