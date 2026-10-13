@@ -52,7 +52,8 @@ _STYLE_NOTE = (
 )
 
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide where the journey drifts next, forever.
-Given the recent scenes (oldest first), invent the NEXT scenes (as many as asked). Be genuinely interesting and never generic screensaver filler. The TONE comes entirely from the MOOD in the request: for beautiful moods (serene, landscape, golden hour, cosmic, underwater, botanical, weather, architectural, abstract, still life) make sincere, awe-inspiring beauty with NO jokes, gags, mashups of unrelated things or absurd twists; only quirky, funky, bubbly, surreal or wildcard moods may use humor, visual gags or absurd combinations. Follow the THEME and MOOD given in the request; do not default to quirky. Never repeat or closely revisit a recent scene. No recognizable real people, nothing sexual, nothing involving minors.
+CORE GOAL (above everything else): be INVENTIVE. Come up with fun, visually intriguing scenes: surprising concepts, striking visuals, playful ideas, rich textures and saturated, gorgeous color, always within what the renderer paints well (see Renderer strengths below).
+Given the recent scenes (oldest first), invent the NEXT scenes (as many as asked). Favor themed journeys: 2-4 scenes exploring one theme (e.g. a run of fractal worlds, then reefs, then cloth and textiles), then switch to something clearly different; the request says whether to start or continue a journey. The TONE comes entirely from the MOOD in the request: for beautiful moods (serene, landscape, golden hour, cosmic, underwater, botanical, weather, architectural, abstract, still life) make sincere, awe-inspiring beauty with NO jokes, gags, mashups of unrelated things or absurd twists; only quirky, funky, bubbly, surreal or wildcard moods may use humor, visual gags or absurd combinations. Follow the THEME, JOURNEY and MOOD given in the request; do not default to quirky. Never reuse an exact recent title. No recognizable real people, nothing sexual, nothing involving minors.
 Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). {_COMPOSITION_NOTE} No text, frames, borders or split images. Never include nudity or sexual content.
 transition = strips to blend in (2-3), hold = strips to stay (2-4). Each scene lasts ~10-15 seconds.
 Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":2,"hold":3,"style":"photo","beats":["first beat prompt","second beat prompt"]}}],"note":"one short sentence"}}"""
@@ -60,7 +61,7 @@ _IMMERSIVE_NOTE = (
     "\nImmersion (most important): every prompt is ENVIRONMENT-FIRST and puts the camera INSIDE the place, never "
     "looking at a tabletop or display. Start with the camera position and the space, then depth, a clear subject and "
     "vivid action, e.g. 'wide-angle shot from inside a vast cavern carved from aged cheddar, looking down a glowing "
-    "tunnel of dripping cheese stalactites, explorers with headlamps wading through molten fondue, deep perspective'. "
+    "tunnel of dripping cheese stalactites, rivers of molten fondue, deep perspective'. "
     "Take the idea LITERALLY and fully: if the idea is a cave, we are deep inside the cave; if it is made of something, "
     "everything around us is made of it. Use sideways-panorama phrasing (wide panoramic view, the space continuing "
     "left and right). NEVER still life, product shots, close-ups of objects, miniatures, dioramas or items on a surface."
@@ -75,8 +76,22 @@ _CINEMA_NOTE = (
     "closer, same subject and place, different framing or moment (wide establishing -> closer in the crowd -> "
     "the peak moment). \"prompt\" = the first beat. Avoid flat textures, wallpaper-like repetition and tabletop still life (unless the MOOD asks for an immersive still life)."
 )
+_AUTO_RENDER_NOTE = (
+    "\nRenderer strengths (Auto only): the image model is WEAKEST at hyperreal scenes built around people (faces, crowds, "
+    "street scenes, people doing things). Favor nature, fractals, abstract worlds, textures and materials, cosmic and "
+    "underwater scenes, landscapes, and architecture WITHOUT people. If people appear at all, keep them tiny, distant "
+    "silhouettes, never the subject. Any look is fine: photoreal, painterly, illustrated or abstract, whatever makes the "
+    "scene most striking. style = a short label for the look, e.g. \"photo\", \"oil painting\", \"fractal art\"."
+)
+_AUTO_CINEMA_NOTE = (
+    "\nCinematography (every scene): pick the camera that best shows THIS place (ultra-wide vista, drone over terrain, "
+    "low angle up a structure, macro at insect scale), plus lens, time of day, light and weather on purpose. ONE clear focal "
+    "subject, visible motion (drifting particles, flowing water or fabric, swirling light), depth layers "
+    "(foreground / midground / background). Give each scene \"beats\": 1-2 full prompts that play in order across its "
+    "strips (wide -> closer, same place). \"prompt\" = the first beat. Avoid flat wallpaper repetition and still life."
+)
 SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE + _CINEMA_NOTE
-AUTO_SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE + _CINEMA_NOTE
+AUTO_SYSTEM += _AUTO_RENDER_NOTE + _IMMERSIVE_NOTE + _AUTO_CINEMA_NOTE
 
 
 

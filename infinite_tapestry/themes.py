@@ -43,9 +43,9 @@ MODES = [("news", 0.35), ("funny", 0.30), ("cinematic", 0.35)]
 MODE_BRIEF = {
     "news": ("TOPICAL: riff on ONE of today's headlines below as a playful, visual, wordless scene (the vibe, objects "
              "or setting of the story, exaggerated or reimagined). Not propaganda, no slogans or text, no taking sides, "
-             "no recognizable real people (crowds, generic figures or symbolic objects instead), nothing sexual, no minors."),
+             "no recognizable real people (symbolic objects, places, animals or tiny distant figures instead), nothing sexual, no minors."),
     "funny": ("FUNNY/ABSURD: a visual gag that reads instantly without text: an ordinary real-world place with one "
-              "ridiculous twist. Deadpan, documentary-photo framing makes it funnier. Avoid the overused 'animals "
+              "ridiculous twist carried by objects, scale, materials or animals (not close-up people). Deadpan framing makes it funnier. Avoid the overused 'animals "
               "doing office jobs' trope unless it's truly fresh."),
     "cinematic": ("CINEMATIC: a striking, specific, non-cliche real place or moment a cinematographer would kill for, "
                   "with distinctive light and a precise location. Specific beats generic."),
@@ -66,32 +66,6 @@ def find_cliche(text: str) -> str | None:
     """The (normalized) classic subject a scene uses, e.g. 'nebula', or None."""
     m = _CLICHE_RE.search(text or "")
     return m.group(1).lower() if m else None
-
-
-class ClicheBudget:
-    """Classic subjects (reefs, nebulae, auroras...) are welcome now and then, not as a default:
-    at most one in every `every` Auto scenes (so never two in a row), and the same classic
-    subject not again within `distinct` scenes."""
-
-    def __init__(self, every: int = 6, distinct: int = 20) -> None:
-        self.every, self.distinct = every, distinct
-        self.log: collections.deque[str | None] = collections.deque(maxlen=max(every, distinct))
-
-    def _recent(self, n: int) -> list[str | None]:
-        return list(self.log)[-n:] if n > 0 else []
-
-    def open(self) -> bool:
-        """A classic subject may be used by the next scene."""
-        return not any(self._recent(self.every - 1))
-
-    def blocked(self) -> list[str]:
-        return sorted({c for c in self._recent(self.distinct) if c})
-
-    def allows(self, cliche: str | None) -> bool:
-        return cliche is None or (self.open() and cliche not in self.blocked())
-
-    def record(self, cliche: str | None) -> None:
-        self.log.append(cliche)
 
 
 class HeadlineCache:
@@ -148,12 +122,9 @@ class ThemeMemory:
             self.titles.append(title.strip()[:60])
 
     def is_repeat(self, title: str) -> bool:
-        words = {w for w in re.findall(r"[a-z]{4,}", (title or "").lower())}
-        for t in self.titles:
-            tw = set(re.findall(r"[a-z]{4,}", t.lower()))
-            if title.strip().lower() == t.lower() or (words and len(words & tw) >= max(2, len(words) - 1)):
-                return True
-        return False
+        """Exact same title only (themed journeys are meant to share words)."""
+        t = (title or "").strip().lower()[:60]
+        return bool(t) and any(t == x.lower() for x in self.titles)
 
 
 def pick_mode(rng: random.Random | None = None, have_news: bool = True) -> str:
@@ -162,32 +133,16 @@ def pick_mode(rng: random.Random | None = None, have_news: bool = True) -> str:
     return r.choices([m for m, _ in modes], [w for _, w in modes])[0]
 
 
-def brief(mode: str, headlines: list[str], memory: ThemeMemory, relax: bool = False, spark: bool = True,
-          budget: "ClicheBudget | None" = None) -> str:
-    s = ("THEME FOR THIS BATCH -> " + MODE_BRIEF[mode] +
-         "")
+def brief(mode: str, headlines: list[str], memory: ThemeMemory, relax: bool = True, spark: bool = True) -> str:
+    s = "THEME FOR THIS BATCH -> " + MODE_BRIEF[mode]
     if spark:
         s += "\nRandom spark for originality (use loosely or ignore): " + random.choice(SPARKS)
     if mode == "news" and headlines:
         s += "\nToday's headlines (pick one, render it visually):\n" + "\n".join(f"- {h}" for h in headlines)
-    if budget is not None and budget.open():
-        used = budget.blocked()
-        s += ("\nClassic subjects (" + ", ".join(CLICHES) + ") are welcome OCCASIONALLY: at most ONE scene in this "
-              "batch may use one, and only if it truly suits the mood; make it SPECIFIC (named place, unusual vantage, "
-              "distinctive light), never generic postcard filler. The other scene must avoid them all."
-              + (" Used recently, do NOT use again: " + ", ".join(used) + "." if used else ""))
-    elif budget is not None:
-        s += ("\nClassic subjects were used just recently, so NONE this batch (never use): " + ", ".join(CLICHES) +
-              ". Also avoid generic forests, generic landscapes and pretty-but-empty postcard scenes.")
-    elif relax:
-        s += "\nClassic beautiful subjects are allowed for this mood, but make them SPECIFIC (named place, unusual vantage, distinctive light), never generic postcard filler."
-    else:
-        s += ("\nBANNED cliches (never use): " + ", ".join(CLICHES) +
-              ". Also avoid generic forests, generic landscapes and pretty-but-empty postcard scenes.")
+    s += ("\nClassic subjects (reefs, nebulae, auroras, fractals, waterfalls...) are welcome when they fit; just make "
+          "them SPECIFIC and surprising (unusual vantage, material, scale or light), never bland postcard filler.")
     if memory.titles:
-        s += "\nThemes already used recently (do NOT repeat or closely revisit): " + "; ".join(memory.titles)
-    s += ("\nThe transition blend handles continuity, so you may jump to a completely new idea; "
-          "don't feel bound to evolve the previous scene.")
+        s += "\nTitles already used recently (do not reuse an exact title): " + "; ".join(memory.titles)
     return s
 
 

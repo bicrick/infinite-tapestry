@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from .prompts import make_scene
 from .moods import MoodRotator
-from .themes import ClicheBudget, HeadlineCache, ThemeMemory, brief, clean_title, find_cliche, mentions_minor, pick_mode
+from .themes import HeadlineCache, ThemeMemory, brief, clean_title, mentions_minor, pick_mode
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def momentum_brief(recent: list[dict]) -> str:
             steps.append(f"scene {n}: free choice, loosely linked to the previous scene")
     return ("THEME MOMENTUM: a viewer just played the idea \"" + idea + "\" (scene \"" + str(u.get("title", "")) + "\"). "
             "Do not jump to something unrelated. " + "; ".join(steps) + ". Keep the idea's tone (if it was gross or absurd, "
-            "stay gross or absurd). Theme momentum overrides the usual ban list and repeat rules for this world.")
+            "stay gross or absurd). Theme momentum overrides the usual repeat rules for this world.")
 
 
 class Autopilot:
@@ -82,7 +82,6 @@ class Autopilot:
         self.last_error = ""
         self.headlines = HeadlineCache()
         self.memory = ThemeMemory(40)
-        self.cliches = ClicheBudget(every=6, distinct=20)
         self.last_mode = ""
         self.moods = MoodRotator()
         self.last_mood = ""
@@ -162,8 +161,7 @@ class Autopilot:
                 mood = self.moods.next(2)
                 mode = "news" if mood == "topical" and heads else "cinematic"
                 self.last_mode = mode
-                text = brief(mode, heads, self.memory, relax=self.moods.relax_cliche(mood),
-                             spark=not self.moods.is_beautiful(mood), budget=self.cliches) + "\n" + self.moods.brief(mood)
+                text = brief(mode, heads, self.memory, spark=not self.moods.is_beautiful(mood)) + "\n" + self.moods.brief(mood)
             self.last_mood = mood
             plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text)
             if epoch != self.epoch:
@@ -173,17 +171,10 @@ class Autopilot:
             kept = []
             for x in plan["scenes"]:
                 x["title"] = clean_title(x.get("title", "")) or clean_title(x["prompt"].split(",")[0])[:60]
-                text_ = x["title"] + " " + x["prompt"]
-                if is_disallowed(x["prompt"]) or mentions_minor(text_):
+                if is_disallowed(x["prompt"]) or mentions_minor(x["title"] + " " + x["prompt"]):
                     continue
-                if mom:  # the carried-over user theme is exempt from the cliche/repeat filters
-                    self.cliches.record(find_cliche(text_))
-                    kept.append(x)
+                if not mom and self.memory.is_repeat(x["title"]):  # exact same title only
                     continue
-                c = find_cliche(text_)
-                if not self.cliches.allows(c) or self.memory.is_repeat(x["title"]):
-                    continue
-                self.cliches.record(c)  # one classic subject per ~6 scenes, same one not within 20
                 kept.append(x)
             plan["scenes"] = kept
             if not plan["scenes"]:

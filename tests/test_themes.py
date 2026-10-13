@@ -13,37 +13,40 @@ def test_memory_repeats_and_brief():
         m.add(f"Theme {i}")
     assert len(m.titles) == 40
     m.add("Salt Mine Chapel")
-    assert m.is_repeat("Salt Mine Chapel") and m.is_repeat("Chapel Salt Mine")
+    assert m.is_repeat("Salt Mine Chapel") and not m.is_repeat("Chapel Salt Mine")
     assert not m.is_repeat("Dust Storm Drive-In")
     b = brief("news", ["Nobel prize economics"], m)
-    assert "Nobel" in b and "Salt Mine Chapel" in b and "coral reef" in b
+    assert "Nobel" in b and "Salt Mine Chapel" in b and "welcome" in b and "BANNED" not in b
     assert pick_mode(have_news=False) != "news"
 
 
-def test_cliche_budget_occasional():
-    from infinite_tapestry.themes import ClicheBudget, clean_title, find_cliche
-    b = ClicheBudget(every=6, distinct=20)
-    assert find_cliche("Orion Nebula Overlook") == "nebula" and find_cliche("Salt Mine Chapel") is None
-    assert b.allows("nebula")
-    b.record("nebula")
-    assert not b.allows("coral reef")  # never two in a row
-    for _ in range(4):
-        b.record(None)
-    assert not b.allows("aurora")  # still within 1-in-6
-    b.record(None)
-    assert b.allows("aurora") and not b.allows("nebula")  # same one not within 20
-    for _ in range(14):
-        b.record(None)
-    assert not b.allows("nebula")  # 19 scenes since nebula
-    b.record(None)
-    assert b.allows("nebula")
-    assert "welcome OCCASIONALLY" in brief("cinematic", [], ThemeMemory(5), budget=ClicheBudget())
+def test_titles_cleaned():
+    from infinite_tapestry.themes import clean_title
+    from infinite_tapestry.prompts import make_scene
     assert clean_title("Mandelbrot Spires 系") == "Mandelbrot Spires"
     assert clean_title("Café Révolution — Night") == "Café Révolution — Night"
     assert clean_title("「Kelp」 Cathedral") == "Kelp Cathedral"
+    assert make_scene("silk dunes, wide", title="Silk Dunes 系")["title"] == "Silk Dunes"
+
+
+def test_journeys_2_to_4():
+    import random
+    from infinite_tapestry.moods import MoodRotator
+    r = MoodRotator(random.Random(1))
+    first = r.next(2)
+    assert r.fresh and "START" in r.brief(first)
+    runs, cur, n = [], first, 2
+    for _ in range(40):
+        k = r.next(2)
+        if k == cur:
+            n += 2
+            assert "CONTINUE" in r.brief(k)
+        else:
+            runs.append(n); cur, n = k, 2
+    assert all(2 <= x <= 4 for x in runs)
 
 
 def test_fractals_welcome_in_cosmic_and_abstract():
     from infinite_tapestry.moods import MOODS
     d = {m[0]: m[4] for m in MOODS}
-    assert "fractal" in d["cosmic"].lower() and "fractal" in d["abstract color field"].lower()
+    assert "fractal" in d["cosmic"].lower() and "fractal" in d["abstract color field"].lower() and "fractal" in d
