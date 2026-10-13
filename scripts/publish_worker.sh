@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd); cd "$ROOT"
 SHA=$(git rev-parse HEAD)
 T=$(mktemp -d)/w.tgz
-tar czf "$T" --exclude='__pycache__' infinite_tapestry pyproject.toml requirements.txt scripts/pod
+tar czf "$T" --exclude='__pycache__' infinite_tapestry static pyproject.toml requirements.txt scripts/pod
 B="$SUPABASE_URL/storage/v1/object/deploy/worker"
 H=(-H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "x-upsert: true")
 curl -sf "${H[@]}" -H "content-type: application/gzip" --data-binary @"$T" "$B/$SHA.tgz" > /dev/null

@@ -10,7 +10,7 @@ SHA=$(curl -sf --max-time 15 "${H[@]}" "$B/latest.txt" | tr -dc 'a-f0-9' | head 
 D=/root/releases/$SHA
 if [ ! -f "$D/.ok" ]; then
   mkdir -p "$D" && curl -sf --max-time 60 "${H[@]}" "$B/$SHA.tgz" -o /tmp/w.tgz && tar xzf /tmp/w.tgz -C "$D" \
-    && [ -f "$D/infinite_tapestry/server.py" ] && touch "$D/.ok" || { echo "fetch_release: download failed, keeping /root/it"; rm -rf "$D"; exit 0; }
+    && [ -f "$D/infinite_tapestry/server.py" ] && [ -d "$D/static" ] && touch "$D/.ok" || { echo "fetch_release: download failed, keeping /root/it"; rm -rf "$D"; exit 0; }
 fi
 # /root/it becomes a symlink to the release (the old directory is kept once as /root/it-pre-release).
 if [ -d /root/it ] && [ ! -L /root/it ]; then mv /root/it /root/it-pre-release; fi
