@@ -83,3 +83,23 @@ VERCEL_BYPASS, STRIPE_WEBHOOK_ID/SECRET).
    For Google login, create OAuth credentials, enable the provider, and set `google: true` via `TAPESTRY_GOOGLE_LOGIN=true` in the build.
 4. Seed fuel or donate, set `pod_state.desired='auto'`, and the controller will wake the pod.
 5. Make your account admin (see above).
+
+## Fault tolerance (Oct 2026)
+
+* **Pod-independent page:** `/api/live` (Vercel + Supabase `strips`, edge-cached 5 s) serves the strip config and the
+  newest 240 refs; `/api/live?start&end` serves history ranges. Images always come from R2 (free egress). The page boots,
+  browses and replays history with the pod down; the offline splash only shows when nothing can be painted.
+* **Replay fallback:** no new strip for 60 s (or the pod unreachable for 15 s) → the view fades (opacity only) to
+  ~90–210 strips back and drifts forward at the normal speed, looping; the first fresh strip fades back to live.
+* **Pod supervisor:** `/root/it/scripts/pod/supervise.sh` restarts the app on exit and kills it if no strip is written for
+  5 min. `touch /root/supervise.pause` holds the app down on purpose. `/post_start.sh` (installed) runs `boot.sh` on every
+  container start, so a pod restart brings the app back by itself.
+* **Versioned worker:** `scripts/publish_worker.sh` uploads `deploy/worker/<sha>.tgz` + `latest.txt` (private Supabase
+  bucket). `fetch_release.sh` installs it under `/root/releases/<sha>` and repoints the `/root/it` symlink; failures keep
+  the current code. Rollback: `ln -sfn /root/releases/<old sha> /root/it` (or `/root/it-pre-release`, or
+  `/root/it-pre-supervise.tgz`), then `pkill -f "m infinite_[t]apestry.main"` (the supervisor restarts it).
+* **CI + watchdog:** `deploy/github-workflows/{ci,watchdog}.yml` (tests, worker release, Vercel prod deploy with smoke
+  test + alias; 10-minute stall check that fails → GitHub emails). Move them into `.github/workflows/` once a token with
+  the `workflow` scope is available. Repo secrets are already set.
+* **Next step (not done):** move the crowd director + Auto (Haiku) into a Vercel function on the pg_cron tick writing a
+  `scenes` queue table the pod pulls from; the pod would then only render.
