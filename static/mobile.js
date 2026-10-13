@@ -98,7 +98,7 @@
   const $ = (id) => document.getElementById(id);
   const mirror = (from, to, fmt) => {
     const a = $(from), b = $(to); if (!a || !b) return;
-    const sync = () => { const t = fmt ? fmt(a.textContent) : a.textContent; if (b.textContent !== t) { b.style.opacity = "0"; setTimeout(() => { b.textContent = t; b.style.opacity = ""; }, b.textContent ? 350 : 0); } };
+    const sync = () => { const t = fmt ? fmt(a.textContent) : a.textContent; if (b.textContent !== t) { b.style.transition = "opacity .3s ease"; b.style.opacity = "0"; clearTimeout(b._t); b._t = setTimeout(() => { b.textContent = t; b.style.opacity = ""; setTimeout(() => { b.style.transition = ""; }, 400); }, b.textContent ? 300 : 0); } };
     new MutationObserver(sync).observe(a, { childList: true, characterData: true, subtree: true }); sync();
   };
   // status-mini is driven directly by client.js (odometer).

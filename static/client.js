@@ -137,7 +137,7 @@
   // Off-screen staging buffer: 2 strips + the inpaint context band, so repaints and arrivals happen out of view.
   // Calibrated hold-back: one full strip (the next arrival) + the inpaint band it repaints over its predecessor (+32px margin).
   // Together with the decode-aware limit below, the visible right edge only ever shows final pixels.
-  let maxOv = 128, drawExcess = 0;
+  let maxOv = 128, drawExcess = 0, drawCenter = null;
   const BAND = () => maxOv + 32;
   const STAGE = () => 2 * SW() + BAND();   // + one more full strip of margin (user-calibrated)
   const panoramaWidth = () => (maxIndex + 1) * SW();
@@ -461,7 +461,9 @@
     return d.toDateString() === now.toDateString() ? hm : d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + hm;
   }
   const tl = $("timeline"), tlHead = $("tl-head"), tlTip = $("tl-tip");
-  function centerIdx() { return (viewLeft() + viewWorld() / 2) / SW(); }
+  // Centre of what's actually drawn (render offset + ribbon anchor included), as a strip index; strip i covers
+  // [i*SW - overlap, (i+1)*SW - overlap), and the -0.5 makes callers' Math.round() pick the strip under the centre.
+  function centerIdx() { const c = drawCenter != null ? drawCenter : viewLeft() + viewWorld() / 2; return (c + maxOv) / SW() - 0.5; }
   function updateTimeline() {
     if (!tl || maxIndex < 1) return;
     const f = Math.max(0, Math.min(1, centerIdx() / maxIndex));
@@ -583,6 +585,7 @@
     const left = Math.max(0, (center - (w / s) / 2) * (1 - ribbonAnchor) + (fullRight - w / s) * ribbonAnchor);
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
     if (window.__probe) window.__probe.push(left);
+    drawCenter = left + w / s / 2;
     if (livePos !== null) { drawExcess = Math.max(0, left + w / s - (livePos - STAGE())); window.__dx = drawExcess / SW(); }   // how far the drawn right edge reaches past the nominal staged edge (ribbon / zoom / portrait centring)
     const yOff = portrait() ? bandTopFor(h, config.height * s0) + (config.height * s0 - config.height * s) / 2 : ribbonTop(h, config.height * s);
     publishBand(yOff, config.height * s, h);
