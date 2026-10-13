@@ -306,8 +306,8 @@ class Autopilot:
             else:
                 st = self.valid_story(row)
                 if st and st["pid"] not in self._done_pids and (not self.story or self.story["pid"] != st["pid"]):
-                    if self.story and hasattr(self.director, "drop_auto"):
-                        self.director.drop_auto()  # "Play now" replaced the story: drop its queued scenes
+                    if hasattr(self.director, "drop_auto"):
+                        self.director.drop_auto()  # a new story starts right after the scene on stage
                     self.story = st
                     self._next_allowed = 0.0
                 elif not st:
