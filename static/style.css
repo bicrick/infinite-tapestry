@@ -1095,16 +1095,39 @@ body.idle .panel-btn, body.ambient .panel-btn, body.idle .top .status, body.ambi
 .drawer .tiers { padding: 0 var(--s4); gap: var(--s2); margin-top: var(--s3); }
 .fuel-big { padding: var(--s4) var(--s4) 0 !important; }
 
-/* ===== screensaver: browser fullscreen + idle — only a soft clock and the scene title, bottom-left, below the ribbon ===== */
-:root:fullscreen body.idle .top .brand-link, :root:fullscreen body.idle .snd-btn:not(.on), :root:fullscreen body.idle .hwheel,
-:root:fullscreen body.idle .top-right, :root:fullscreen body.idle .dock, :root:fullscreen body.idle .amb-time { opacity: 0 !important; pointer-events: none !important; }
-:root:fullscreen body.idle .snd-btn.on { opacity: .35 !important; }
-#top-clock, .amb-title { transition: opacity .6s var(--ease), font-size .6s var(--ease), color .6s var(--ease); }
-:root:fullscreen body.idle #top-clock { position: fixed; left: var(--s6); bottom: calc(var(--s6) + 22px); margin: 0; padding: 0; border: 0;
-  font-size: 48px !important; font-weight: 200; letter-spacing: -.02em; line-height: 1; color: rgba(var(--ink),.42); }
-:root:fullscreen body.idle .amb-title { position: fixed; left: var(--s6); right: auto; top: auto; bottom: var(--s6); text-align: left; max-width: 50vw;
-  font-size: var(--t-md); color: rgba(var(--ink),.32); opacity: 1 !important; }
+/* ===== screensaver: body.saver (fullscreen) — only a soft clock + title, centred at the top, above the ribbon ===== */
+body.saver .top .brand-link, body.saver .snd-btn:not(.on), body.saver .hwheel, body.saver .top-right, body.saver .dock, body.saver .amb-time,
+body.saver .toast, body.saver .share-toast, body.saver .nudge-line, body.saver #live-btn { opacity: 0 !important; pointer-events: none !important; }
+body.saver .snd-btn.on { opacity: .3 !important; }
+body.saver { cursor: none; }
+body.saver .top-clock { position: fixed; left: 0; right: 0; margin: 0 auto; padding: 0; border: 0; width: max-content; text-align: center;
+  top: max(var(--s4), calc(var(--band-top, 30vh) - 34px - 64px)); font-size: 44px !important; font-weight: 200; letter-spacing: -.02em; line-height: 1;
+  color: rgba(var(--ink),.5); }
+body.saver .amb-title { opacity: 1 !important; color: rgba(var(--ink),.38); font-size: var(--t-md); letter-spacing: .02em; translate: none; }
 .drawer .build-id { bottom: calc(52px + env(safe-area-inset-bottom)) !important; left: var(--s4) !important; }
 .sheet { z-index: 90 !important; }
 @media (min-width: 561px) { .sheet { place-items: center !important; } }
 body:has(.drawer.open) .hwheel { opacity: 0 !important; pointer-events: none !important; }
+
+/* ===== drawer v3 ===== */
+.top-fs { display: inline-grid !important; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer;
+  transition: color .2s, background-color .2s, opacity .5s var(--ease) !important; }
+.top-fs:hover { color: var(--fg); background: rgba(var(--ink),.06); }
+.top-fs svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+body.idle .top-fs, body.ambient .top-fs { opacity: 0 !important; pointer-events: none !important; }
+/* collapsed rows: title + source; tap to expand */
+#queue-list .item, #idea-list .item, #current-card { cursor: pointer; }
+#current-card .p, #queue-list .item .p, #idea-list .item .acts { display: none !important; }
+#current-card.open .p { display: -webkit-box !important; -webkit-line-clamp: unset; }
+#queue-list .item.open .p { display: block !important; margin-top: var(--s1); font-size: var(--t-sm); line-height: 1.5; color: var(--muted); -webkit-line-clamp: unset; }
+#idea-list .item .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#idea-list .item.open .t { white-space: normal; }
+#idea-list .item.open .acts { display: flex !important; }
+#idea-list .item .thumb { display: none; } #idea-list .item.open .thumb { display: block; }
+#current-card .t { margin-bottom: 0; }
+#panel-next .drawer-sub { padding-top: var(--s5) !important; }
+/* fuel chart */
+.fuel-chart { display: block; width: calc(100% - 2 * var(--s4)); height: 120px; margin: var(--s4) var(--s4) 0; color: var(--fg); }
+/* footer: build label sits on its own line above the bar */
+.drawer .build-id { position: static !important; padding: 0 var(--s4) var(--s1); order: 98; flex: none; }
+.drawer-bar { order: 99; }

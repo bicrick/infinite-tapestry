@@ -498,6 +498,28 @@ async function boot() {
   });
   refreshFuel();
   setInterval(refreshFuel, 60000);
+  // Fuel history chart (hourly ledger), drawn once per open of the Fuel tab.
+  let chartAt = 0;
+  async function fuelChart() {
+    if (Date.now() - chartAt < 120000) return; chartAt = Date.now();
+    const svg = $("fuel-chart"); if (!svg) return;
+    const usd = (c) => "$" + (c / 100).toFixed(c >= 10000 ? 0 : 2);
+    try {
+      const d = await (await fetch("/api/about?kind=transparency")).json();
+      const series = d.series || [], W = 600, H = 160, pad = 4;
+      if (!series.length) { svg.innerHTML = `<text x="300" y="85" text-anchor="middle" font-size="13" fill="currentColor" opacity=".45">No fuel history yet</text>`; return; }
+      const t0 = +new Date(series[0].t), t1 = Math.max(+new Date(series[series.length - 1].t) + 36e5, t0 + 36e5);
+      const maxB = Math.max(...series.map((s) => +s.bal), 1), maxBurn = Math.max(...series.map((s) => +s.burn), 1);
+      const x = (t) => pad + (W - 2 * pad) * ((+new Date(t) + 18e5 - t0) / (t1 - t0));
+      const y = (v) => H - 6 - (H - 20) * (v / maxB);
+      const bw = Math.max(1.5, (W - 2 * pad) / ((t1 - t0) / 36e5) * 0.55);
+      const bars = series.map((s) => `<rect x="${x(s.t) - bw / 2}" y="${H - 6 - 30 * (s.burn / maxBurn)}" width="${bw}" height="${30 * (s.burn / maxBurn)}" fill="currentColor" opacity=".14"/>`).join("");
+      const pts = series.map((s) => `${x(s.t).toFixed(1)},${y(+s.bal).toFixed(1)}`).join(" ");
+      svg.innerHTML = `<line x1="0" x2="${W}" y1="${H - 6}" y2="${H - 6}" stroke="currentColor" opacity=".12"/>${bars}<polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
+      const burn = +d.burn_cents_per_hour || 0;
+      $("fuel-chart-note").textContent = `${usd(+d.balance_cents || 0)} in the tank · ${burn > 0 ? usd(burn) + "/h" : "idle"} · since ${new Date(series[0].t).toLocaleDateString([], { month: "short", day: "numeric" })}`;
+    } catch (_) { svg.innerHTML = ""; }
+  }
 
   const refreshDonors = () => {};   // donor wall lives only on /about
 
@@ -562,6 +584,7 @@ async function boot() {
 
   // ---------- tabs ----------
   function openTab(name) {
+    if (name === "ideas") name = "next";
     if (name === "you") {   // your profile when signed in, otherwise sign in
       if (!S.session) { $("drawer").classList.remove("open"); openAuth(); return; }
     }
@@ -569,8 +592,8 @@ async function boot() {
     if (name === "next" && window.TapestryWS) window.TapestryWS.send({ type: "upcoming_request" });
     document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("hidden", p.id !== "panel-" + name));
-    if (name === "fuel") { refreshFuel(); refreshDonors(); }
-    if (name === "ideas") refreshIdeas();
+    if (name === "fuel") { refreshFuel(); fuelChart(); refreshDonors(); }
+    if (name === "next") refreshIdeas();
     if (name === "audit") refreshAudit();
   }
   S.openTab = openTab;

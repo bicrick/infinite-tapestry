@@ -157,3 +157,19 @@
   document.addEventListener("visibilitychange", () => { if (!P || !want) return; document.hidden ? P.stop() : P.start(); });
 })();
 
+
+// Drawer rows: collapsed to title + source; tap to expand the prompt/details.
+(() => { const d = document.getElementById("drawer"); if (!d) return;
+  d.addEventListener("click", (e) => {
+    if (e.target.closest("button, a, input, textarea, label")) return;
+    const it = e.target.closest("#queue-list .item, #idea-list .item, #current-card"); if (it) it.classList.toggle("open");
+  });
+})();
+
+// Screensaver: browser fullscreen starts in screensaver; any pointer/key activity shows controls briefly.
+(() => { const b = document.body; let t = 0;
+  const rest = () => { clearTimeout(t); t = setTimeout(() => { if (document.fullscreenElement && !document.getElementById("drawer").classList.contains("open")) b.classList.add("saver"); }, 2500); };
+  const wake = () => { if (!document.fullscreenElement) return; if (b.classList.contains("saver")) b.classList.remove("saver"); rest(); };
+  document.addEventListener("fullscreenchange", () => { clearTimeout(t); b.classList.toggle("saver", !!document.fullscreenElement); });
+  ["pointermove", "pointerdown", "keydown"].forEach((ev) => addEventListener(ev, wake, { passive: true }));
+})();

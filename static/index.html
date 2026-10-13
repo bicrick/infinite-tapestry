@@ -41,6 +41,7 @@
   <header class="top ui">
     <div class="brand"><a class="brand-link" href="/about" aria-label="About Infinite Tapestry"><img class="brand-mark" src="brand/mark-plain.svg" alt="" /></a>Infinite Tapestry<span id="top-clock" class="top-clock" aria-label="Local time"></span><button id="snd-btn" class="snd-btn" type="button" aria-label="Ambient sound" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6v4h2.5l3.5 3V3L5 6z"/><path class="w1" d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8"/><path class="w2" d="M12.6 3.8a6 6 0 0 1 0 8.4"/><path class="x" d="M11 6l3.5 4M14.5 6L11 10"/></svg></button></div>
     <div class="top-right">
+      <button id="fs-btn" class="fs-btn top-fs" type="button" aria-label="Full screen" title="Full screen (Esc exits)"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
       <div id="status" class="status"><span class="dot"></span><span id="status-text">connecting</span><span id="status-mini" class="status-mini"></span></div>
       <button id="queue-btn" type="button" class="panel-btn" title="Panel" aria-label="Open panel"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M10 3v10"/></svg><span id="queue-count" class="panel-n"></span></button>
     </div>
@@ -181,9 +182,8 @@
     <div class="grab phone-only" id="drawer-grab" aria-hidden="true"><span></span></div>
     <div class="drawer-head">
       <nav class="tabs" id="tabs">
-        <button data-tab="next" class="on">Next</button>
-        <button data-tab="ideas" class="social-only hidden">Ideas</button>
-        <button data-tab="fuel" class="social-only hidden">Fuel</button>
+        <button data-tab="next" class="on">Queue</button>
+                <button data-tab="fuel" class="social-only hidden">Fuel</button>
         <button data-tab="chat" class="social-only phone-tab hidden">Chat</button>
         <button data-tab="audit" class="admin-only hidden">Audit</button>
         <button data-tab="you" id="you-tab" type="button">You</button>
@@ -200,6 +200,12 @@
     <div id="current-card" class="card current"></div>
     <ol id="queue-list" class="list skeleton"></ol>
     <div id="queue-empty" class="empty hidden">Nothing queued. Type a destination below.</div>
+      <div class="drawer-sub social-only hidden">Ideas</div>
+      <p class="fine pad social-only hidden">From everyone. The most-loved are woven in next.</p>
+      <ol id="idea-list" class="list social-only"></ol>
+      <div id="idea-empty" class="empty hidden">The pool is empty. Auto is improvising.</div>
+      <div class="drawer-sub social-only hidden">Woven in</div>
+      <ol id="woven-list" class="list woven social-only"></ol>
     <div class="drawer-foot">
       <div class="auto-row">
         <label class="toggle"><input id="autopilot" type="checkbox" checked /><span class="sw"></span><b class="spark">✦</b> Autopilot</label>
@@ -211,16 +217,11 @@
       <button id="clear" type="button" class="ghost">Clear</button>
     </div>
     </section>
-    <section class="panel hidden" id="panel-ideas">
-      <p class="fine pad">Ideas from everyone. The most-loved are woven in next.</p>
-      <ol id="idea-list" class="list"></ol>
-      <div id="idea-empty" class="empty hidden">The pool is empty. Auto is improvising.</div>
-      <div class="drawer-sub">Woven in</div>
-      <ol id="woven-list" class="list woven"></ol>
-    </section>
     <section class="panel hidden" id="panel-fuel">
       <div class="fuel-big"><div class="fuel-line big"><span id="fuel-fill-big"></span></div>
         <div class="fuel-caption"><span id="fuel-hours">…</span><span class="muted"> of painting left</span></div></div>
+      <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="Fuel balance over time"></svg>
+      <p id="fuel-chart-note" class="fine pad"></p>
       <p class="fine pad">Fuel pays for the GPU (about $0.17 an hour) and the AI director. When it runs out, the tapestry sleeps until someone adds more.</p>
       <div class="tiers" id="tiers">
         <button data-cents="300">$3<small>~17 h</small></button>
@@ -237,7 +238,6 @@
     <div class="drawer-bar">
       <button id="fuel-chip" class="fuel-chip hidden" type="button" title="Painting left (fuel)"><span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span></button>
       <button id="clip-btn" class="bar-btn" type="button" title="Share the last 10 seconds">Clip</button>
-      <button id="fs-btn" class="bar-btn fs-btn" type="button" aria-label="Full screen" title="Full screen (Esc exits)"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
       <div class="drawer-theme" role="group" aria-label="Theme"><button data-theme="">Auto</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
     </div>
   </aside>

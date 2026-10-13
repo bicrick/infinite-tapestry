@@ -1194,7 +1194,7 @@
     let prev = null;
     items.forEach((s, i) => {
       const key = String(s.id);
-      const sig = JSON.stringify([i, s.title, s.origin, s.by, s.kind]);
+      const sig = JSON.stringify([i, s.title, s.origin, s.by, s.kind, s.prompt]);
       let li = old.get(key);
       if (li && li.dataset.sig === sig) {
         old.delete(key);
@@ -1218,7 +1218,7 @@
       }
       // View-only queue: no reorder, drag, edit or remove controls.
       li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t">${esc(s.title)}</div>` +
-        `<div class="meta">${s.origin === "auto" ? "Auto" : s.by ? esc(s.by) : "Audience"}</div></div>`;
+        `<div class="meta">${s.origin === "auto" ? "Auto" : s.by ? esc(s.by) : "Audience"}</div>${s.prompt && s.prompt !== s.title ? `<div class="p">${esc(s.prompt)}</div>` : ""}</div>`;
       list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
       prev = li;
     });
