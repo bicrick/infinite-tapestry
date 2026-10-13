@@ -75,6 +75,9 @@ MAX_HOLD = 4  # scenes should switch often; long holds read as stalls
 _scene_ids = __import__("itertools").count(1)
 
 
+from .themes import clean_title as _clean_title  # noqa: E402
+
+
 def make_scene(
     prompt: str,
     negative: str = "",
@@ -91,7 +94,8 @@ def make_scene(
     prompt = str(prompt).strip()[:600]
     return {
         "id": next(_scene_ids),
-        "title": (str(title).strip() or prompt.split(",")[0])[:80],
+        "title": (_clean_title(title) or _clean_title(prompt.split(",")[0]) or str(title).strip()
+                  or prompt.split(",")[0])[:80],
         "prompt": prompt,
         "negative": str(negative or "").strip()[:400],
         "transition": None if transition is None else max(MIN_TRANSITION, min(MAX_TRANSITION, int(transition))),

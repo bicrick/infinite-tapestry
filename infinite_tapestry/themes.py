@@ -62,6 +62,38 @@ def has_cliche(text: str) -> bool:
     return bool(_CLICHE_RE.search(text or ""))
 
 
+def find_cliche(text: str) -> str | None:
+    """The (normalized) classic subject a scene uses, e.g. 'nebula', or None."""
+    m = _CLICHE_RE.search(text or "")
+    return m.group(1).lower() if m else None
+
+
+class ClicheBudget:
+    """Classic subjects (reefs, nebulae, auroras...) are welcome now and then, not as a default:
+    at most one in every `every` Auto scenes (so never two in a row), and the same classic
+    subject not again within `distinct` scenes."""
+
+    def __init__(self, every: int = 6, distinct: int = 20) -> None:
+        self.every, self.distinct = every, distinct
+        self.log: collections.deque[str | None] = collections.deque(maxlen=max(every, distinct))
+
+    def _recent(self, n: int) -> list[str | None]:
+        return list(self.log)[-n:] if n > 0 else []
+
+    def open(self) -> bool:
+        """A classic subject may be used by the next scene."""
+        return not any(self._recent(self.every - 1))
+
+    def blocked(self) -> list[str]:
+        return sorted({c for c in self._recent(self.distinct) if c})
+
+    def allows(self, cliche: str | None) -> bool:
+        return cliche is None or (self.open() and cliche not in self.blocked())
+
+    def record(self, cliche: str | None) -> None:
+        self.log.append(cliche)
+
+
 class HeadlineCache:
     def __init__(self, feeds: list[str] | None = None, refresh_s: float = REFRESH_S, timeout: float = 8.0) -> None:
         self.feeds = feeds if feeds is not None else (
@@ -130,14 +162,24 @@ def pick_mode(rng: random.Random | None = None, have_news: bool = True) -> str:
     return r.choices([m for m, _ in modes], [w for _, w in modes])[0]
 
 
-def brief(mode: str, headlines: list[str], memory: ThemeMemory, relax: bool = False, spark: bool = True) -> str:
+def brief(mode: str, headlines: list[str], memory: ThemeMemory, relax: bool = False, spark: bool = True,
+          budget: "ClicheBudget | None" = None) -> str:
     s = ("THEME FOR THIS BATCH -> " + MODE_BRIEF[mode] +
          "")
     if spark:
         s += "\nRandom spark for originality (use loosely or ignore): " + random.choice(SPARKS)
     if mode == "news" and headlines:
         s += "\nToday's headlines (pick one, render it visually):\n" + "\n".join(f"- {h}" for h in headlines)
-    if relax:
+    if budget is not None and budget.open():
+        used = budget.blocked()
+        s += ("\nClassic subjects (" + ", ".join(CLICHES) + ") are welcome OCCASIONALLY: at most ONE scene in this "
+              "batch may use one, and only if it truly suits the mood; make it SPECIFIC (named place, unusual vantage, "
+              "distinctive light), never generic postcard filler. The other scene must avoid them all."
+              + (" Used recently, do NOT use again: " + ", ".join(used) + "." if used else ""))
+    elif budget is not None:
+        s += ("\nClassic subjects were used just recently, so NONE this batch (never use): " + ", ".join(CLICHES) +
+              ". Also avoid generic forests, generic landscapes and pretty-but-empty postcard scenes.")
+    elif relax:
         s += "\nClassic beautiful subjects are allowed for this mood, but make them SPECIFIC (named place, unusual vantage, distinctive light), never generic postcard filler."
     else:
         s += ("\nBANNED cliches (never use): " + ", ".join(CLICHES) +
@@ -154,3 +196,20 @@ _MINOR_RE = re.compile(r"\b(child\w*|kid|kids|toddler\w*|bab(y|ies)|infant\w*|te
 
 def mentions_minor(text: str) -> bool:
     return bool(_MINOR_RE.search(text or ""))
+
+
+def clean_title(text: str) -> str:
+    """Keep Latin letters (incl. accents), digits, spaces and ordinary punctuation; drop stray
+    non-Latin characters a model sometimes leaks into titles (e.g. a lone CJK ideograph)."""
+    import unicodedata
+
+    out = []
+    for ch in str(text or ""):
+        if ch.isascii():
+            out.append(ch)
+            continue
+        o = ord(ch)
+        if "LATIN" in unicodedata.name(ch, "") or 0xA0 <= o <= 0xBF or 0x2000 <= o <= 0x206F:
+            out.append(ch)
+    t = re.sub(r"\s+", " ", "".join(out)).strip()
+    return re.sub(r"^[\s,;:.\-–—]+|[\s,;:\-–—]+$", "", t)

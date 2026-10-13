@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from .prompts import make_scene
 from .moods import MoodRotator
-from .themes import HeadlineCache, ThemeMemory, brief, has_cliche, mentions_minor, pick_mode
+from .themes import ClicheBudget, HeadlineCache, ThemeMemory, brief, clean_title, find_cliche, mentions_minor, pick_mode
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,7 @@ class Autopilot:
         self.last_error = ""
         self.headlines = HeadlineCache()
         self.memory = ThemeMemory(40)
+        self.cliches = ClicheBudget(every=6, distinct=20)
         self.last_mode = ""
         self.moods = MoodRotator()
         self.last_mood = ""
@@ -162,19 +163,29 @@ class Autopilot:
                 mode = "news" if mood == "topical" and heads else "cinematic"
                 self.last_mode = mode
                 text = brief(mode, heads, self.memory, relax=self.moods.relax_cliche(mood),
-                             spark=not self.moods.is_beautiful(mood)) + "\n" + self.moods.brief(mood)
+                             spark=not self.moods.is_beautiful(mood), budget=self.cliches) + "\n" + self.moods.brief(mood)
             self.last_mood = mood
-            relax = bool(mood) and self.moods.relax_cliche(mood)
             plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
             from .guard import is_disallowed
 
-            plan["scenes"] = [x for x in plan["scenes"] if not is_disallowed(x["prompt"])
-                              and not mentions_minor(x.get("title", "") + " " + x["prompt"])
-                              # the carried-over user theme is exempt from the cliche/repeat filters
-                              and (mom or ((relax or not has_cliche(x.get("title", "") + " " + x["prompt"]))
-                                           and not self.memory.is_repeat(x.get("title", ""))))]
+            kept = []
+            for x in plan["scenes"]:
+                x["title"] = clean_title(x.get("title", "")) or clean_title(x["prompt"].split(",")[0])[:60]
+                text_ = x["title"] + " " + x["prompt"]
+                if is_disallowed(x["prompt"]) or mentions_minor(text_):
+                    continue
+                if mom:  # the carried-over user theme is exempt from the cliche/repeat filters
+                    self.cliches.record(find_cliche(text_))
+                    kept.append(x)
+                    continue
+                c = find_cliche(text_)
+                if not self.cliches.allows(c) or self.memory.is_repeat(x["title"]):
+                    continue
+                self.cliches.record(c)  # one classic subject per ~6 scenes, same one not within 20
+                kept.append(x)
+            plan["scenes"] = kept
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
             logger.info("autoplan mood=%s titles=%s", mood or self.last_mode, [s.get("title") for s in plan["scenes"]])
