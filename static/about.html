@@ -3,40 +3,44 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Infinite Tapestry · a live AI art stream that never ends</title>
+  <title>Infinite Tapestry · a live AI art stream and AI screensaver that never ends</title>
   <meta name="description" content="An endless AI painting, streamed live around the clock. Type an idea and watch it get painted into the scroll for everyone watching. Use it as a free AI screensaver." />
-  <link rel="canonical" href="https://infinite-tapestry.vercel.app/about" />
+  <link rel="canonical" href="https://infinitetapestry.app/about" />
   <meta name="theme-color" content="#0b0b0c" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Infinite Tapestry" />
-  <meta property="og:url" content="https://infinite-tapestry.vercel.app/about" />
+  <meta property="og:url" content="https://infinitetapestry.app/about" />
   <meta property="og:title" content="Infinite Tapestry · a live AI art stream that never ends" />
   <meta property="og:description" content="An endless AI painting, streamed live. Type an idea and watch it get painted in." />
-  <meta property="og:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
+  <meta property="og:image" content="https://infinitetapestry.app/about-img/og-about.jpg" />
   <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Infinite Tapestry · a live AI art stream" />
-  <meta name="twitter:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
+  <meta name="twitter:image" content="https://infinitetapestry.app/about-img/og-about.jpg" />
   <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
   <link rel="stylesheet" href="/about.css" />
   <script src="/theme.js"></script>
+  <script src="/config.js"></script>
+  <script>try{var k=Object.keys(localStorage).find(function(x){return /^sb-.*-auth-token$/.test(x)}),j=k&&JSON.parse(localStorage.getItem(k));if(j&&j.access_token&&j.expires_at*1000>Date.now())document.documentElement.classList.add("signed")}catch(e){}</script>
 </head>
 <body>
   <nav class="nav">
     <a href="/" aria-label="Infinite Tapestry, live"><img class="mark" src="/brand/mark-plain.svg" alt="" />Infinite Tapestry</a>
-    <div class="links"><a class="hide-m" href="#how">How it works</a><a class="hide-m" href="/time-machine">Time Machine</a><a href="/">Live →</a></div>
+    <div class="links"><a class="hide-m" href="#how">How it works</a><a class="hide-m" href="/time-machine">Time Machine</a><span class="acct" id="acct"><a id="acct-in" href="/?signin=1">Sign in</a><a id="acct-me" class="me" href="/" hidden></a><button id="acct-out" type="button" hidden>Sign out</button></span><a class="live-l" href="/">Live →</a></div>
   </nav>
 
   <header class="hero">
     <div class="wrap">
-      <p class="eyebrow reveal">A live AI art stream</p>
       <h1 class="reveal">Infinite Tapestry</h1>
-      <p class="lede reveal">An endless painting, live around the clock. You choose where it goes.</p>
+      <p class="lede reveal">An endless painting. You choose where it goes.</p>
       <a class="cta reveal" href="/">Enter the tapestry <span>→</span></a>
     </div>
     <div class="band" aria-label="The Egypt sequence from the real tapestry, drifting">
       <div class="reel"><img src="/about-img/egypt.webp" width="5212" height="600" alt="The Great Pyramids at night become an Egyptian tomb, a sarcophagus and a mummy's face" fetchpriority="high" /><img src="/about-img/egypt.webp" width="5212" height="600" alt="" aria-hidden="true" /></div>
+      <div class="glow" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="lights" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="sheen" aria-hidden="true"></div>
       <div class="live"><span class="dot"></span>painted live, one strip every few seconds</div>
       <div class="cap">Giza → the tomb → the mummy · Oct 13, unedited</div>
     </div>
@@ -74,35 +78,23 @@
 
     <section style="padding-top:0">
       <div class="wrap">
-        <p class="eyebrow reveal">The interface</p>
+        <p class="eyebrow reveal">More to explore</p>
         <h2 class="reveal">Almost nothing on screen. The painting is the point.</h2>
         <div class="feats">
-          <div class="feat wide reveal">
-            <div class="shot"><img src="/about-img/hagia.webp" alt="Light falling through a great dome" loading="lazy" decoding="async" />
-              <div class="ui-over top"><div class="glass bar"><span><i class="dot"></i>live · 214</span><span class="icons"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/></svg><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" fill="none" stroke="currentColor"/></svg></span></div></div>
-              <div class="caption bottom">Hagia Sophia Dome Light<small>Auto</small></div></div>
-            <h3>A quiet top bar</h3><p>How many people are watching, a panel button for the drawer, and fullscreen. That's it.</p>
-          </div>
-          <div class="feat wide reveal">
-            <div class="shot"><img src="/about-img/interior.webp" alt="Inside the Great Pyramid" loading="lazy" decoding="async" />
-              <div class="drawer glass"><div class="tabs"><span>Queue</span><span>Fuel</span><b>Chat</b><span>You</span></div>
-                <p><i>@tide</i> do the inside next</p><p><i>@moth</i> the tomb!!</p><p><i>a guest</i> this is unreal</p></div></div>
-            <h3>The drawer</h3><p>Queue, Fuel, Chat and You live in one panel that slides in and out of the way.</p>
-          </div>
           <div class="feat reveal">
             <div class="shot"><img src="/about-img/dolomites.webp" alt="Alpenglow on mountain spires" loading="lazy" decoding="async" />
               <div class="ui-over"><div class="glass story"><span class="small-l">Story · Ancient Egypt</span><div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div></div></div></div>
-            <h3>Story mode</h3><p>Between ideas, Auto paints journeys of about seven scenes, from the outside in.</p>
+            <h3>Story mode</h3><p>When the queue is quiet, Auto paints journeys of about seven scenes, from the outside in.</p>
           </div>
           <div class="feat reveal">
             <div class="shot"><img src="/about-img/bookshop.webp" alt="A lamplit bookshop" loading="lazy" decoding="async" />
               <div class="ui-over"><div class="glass cal"><div class="m">October</div><div class="g">
-                <i></i><i></i><i></i><i class="d">1</i><i class="d">2</i><i class="d">3</i><i class="d">4</i><i class="d">5</i><i class="d">6</i><i class="d">7</i><i class="d">8</i><i class="d">9</i><i class="d">10</i><i class="d">11</i><i class="d on">12</i><i class="d">13</i></div></div></div></div>
+                <i></i><i></i><i></i><i class="d">1</i><i class="d">2</i><i class="d">3</i><i class="d">4</i><i class="d">5</i><i class="d">6</i><i class="d">7</i><i class="d">8</i><i class="d">9</i><i class="d">10</i><i class="d">11</i><i class="d">12</i><i class="d on">13</i></div></div></div></div>
             <h3>Time Machine</h3><p>Pick any day on the <a href="/time-machine">calendar</a> and replay everything that was painted.</p>
           </div>
           <div class="feat reveal">
             <div class="shot"><img src="/about-img/ukiyoe.webp" alt="Ukiyo-e waves at dawn" loading="lazy" decoding="async" /></div>
-            <h3>An AI screensaver</h3><p>Go fullscreen and the interface fades away, leaving just the painting drifting by.</p>
+            <h3>A living screensaver</h3><p>Go fullscreen and the controls fade away, leaving just the painting drifting by.</p>
           </div>
         </div>
       </div>
@@ -156,6 +148,7 @@
     <span><a href="/time-machine">Time Machine</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/">Live</a></span>
   </footer>
   <script src="/about.js" defer></script>
+  <script type="module" src="/about-auth.js"></script>
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>

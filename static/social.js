@@ -139,6 +139,8 @@ async function boot() {
   try { await Promise.race([loadProfile(), new Promise((_, no) => setTimeout(() => no(new Error("profile timeout")), 5000))]); }
   catch (e) { console.warn("profile", e); }
   if (S.session && S.profile && !S.profile.handle) openAuth();
+  // /?signin=1 (from /about and other static pages): open the same sign-in sheet, then tidy the URL
+  if (new URLSearchParams(location.search).get("signin") === "1") { history.replaceState(null, "", location.pathname); if (!(S.session && S.profile && S.profile.handle)) openAuth(); }
   sb.auth.onAuthStateChange(async (ev, sess) => {
     const was = S.session && S.session.user.id;
     S.session = sess;
