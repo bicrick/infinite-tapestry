@@ -1157,4 +1157,7 @@ body.idle .top-fs, body.ambient .top-fs { opacity: 0 !important; pointer-events:
 }
 [data-tip].tip-on::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 6px); white-space: nowrap; pointer-events: none;
   background: var(--glass-strong, rgba(20,20,20,.85)); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-size: 11px; z-index: 5; }
-#now-title[data-href] { cursor: pointer; }
+#now-title[data-href], #amb-title[data-href] { cursor: pointer; }
+#amb-title[data-tip]:hover::after, #amb-title[data-tip].tip-on::after {
+  left: 50%; transform: translateX(-50%); bottom: calc(100% + 8px);
+}

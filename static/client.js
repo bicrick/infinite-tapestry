@@ -207,7 +207,9 @@
     requested.delete(r.i);
     // Live strips arrive ahead of the view: prefetch once the CDN upload has landed.
     const e = strips.get(r.i);
-    setTimeout(() => ensureDecoded(e), live ? 2500 : 0);
+    // Live refs are broadcast before the R2 upload finishes. Don't hit the CDN until the
+    // strip is near the view (draw loop / pre-decode); only history refs prefetch immediately.
+    if (!live) setTimeout(() => ensureDecoded(e), 0);
     if (r.i > maxIndex) {
       maxIndex = r.i;
       if (!liveInitialized) {
@@ -392,23 +394,31 @@
     tlScenes.push([i, sc[0], sc[1], sc[2], sc[3]]);
   }
   let liveCapKey = null;
-  (() => {
-    const el = $("now-title"); if (!el) return;
+  function wireTitleClick(el) {
+    if (!el || el.dataset.tipWired) return;
+    el.dataset.tipWired = "1";
     let t = 0, long = false;
     el.addEventListener("click", (e) => { if (long) { long = false; return; } if (el.dataset.href) { e.stopPropagation(); window.open(el.dataset.href, "_blank", "noopener"); } });
     el.addEventListener("touchstart", () => { long = false; t = setTimeout(() => { long = true; el.classList.add("tip-on"); setTimeout(() => el.classList.remove("tip-on"), 1800); }, 450); }, { passive: true });
     el.addEventListener("touchend", () => clearTimeout(t), { passive: true });
     el.addEventListener("touchmove", () => clearTimeout(t), { passive: true });
-  })();
+  }
+  wireTitleClick($("now-title"));
+  wireTitleClick($("amb-title"));
   function srcLabel(by, origin) { const c = credit(by, origin); return c === "Auto" ? "✦ Auto" : by ? "by " + c : origin === "user" ? "Audience" : "Now"; }
   // On-stage title: tooltip with who suggested it, click opens the scene's share page (/s/<a>-<b>).
+  // Wire both #now-title (dock) and #amb-title (visible ambient title); mobile.js only mirrors text.
   function stageTitle(index, title, by, origin) {
-    const el = $("now-title");
     const c = credit(by, origin);
-    el.dataset.tip = c === "Auto" ? "Auto" : "Suggested by " + c;
+    const tip = c === "Auto" ? "Auto" : "Suggested by " + c;
     let b = index + 15;
     for (const r of tlScenes) if (r[0] > index) { b = r[0] - 1; break; }
-    if (typeof index === "number" && index >= 0) el.dataset.href = `/s/${index}-${Math.min(b, index + 63)}`; else delete el.dataset.href;
+    const href = (typeof index === "number" && index >= 0) ? `/s/${index}-${Math.min(b, index + 63)}` : "";
+    for (const id of ["now-title", "amb-title"]) {
+      const el = $(id); if (!el) continue;
+      el.dataset.tip = tip;
+      if (href) el.dataset.href = href; else delete el.dataset.href;
+    }
   }
   function centerScene() {
     if (!tlScenes.length) return null;
@@ -1200,6 +1210,7 @@
   let dragId = null;
 
   let upSeq = -1;  // latest canonical upcoming snapshot rendered
+  window.addEventListener("tapestry:social", () => { if (director) { upSeq = -1; renderQueue(director); } });
   function renderQueue(d) {
     const list = $("queue-list");
     if (typeof d.upcoming_seq === "number") {

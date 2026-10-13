@@ -110,10 +110,11 @@ async function boot() {
   A.googleEnabled().then((on) => { google = on; $("auth-google").classList.toggle("hidden", !!S.session); });
 
   // Hoisted above first loadProfile(): loadVotes/renderIdeas run from loadProfile
-  // and must not hit TDZ (was: ReferenceError myVotes before initialization).
+  // and must not hit TDZ (was: ReferenceError myVotes / listRows before initialization).
   let myVotes = new Set();
   let ideas = [];
   let hourCents = Number(CFG.centsPerHour) || 20;
+  let qsort = "up", listRows = [], listDone = false, listBusy = false, upFull = false;
 
   // ---------- auth ----------
   async function loadProfile() {
@@ -324,6 +325,7 @@ async function boot() {
       (data || []).forEach((r) => myVotes.add(r.idea_id));
     }
     renderIdeas();
+    window.dispatchEvent(new Event("tapestry:social"));  // refresh Up-next hearts / voted state
   }
   // Pending + playing ideas for fun.js ("your idea is on") and the expired notice. Debounced: realtime
   // fires on every idea change, so at scale this must not run per event.
@@ -360,7 +362,6 @@ async function boot() {
   }
 
   // ---------- Queue tab: sort toggle (display only) over the whole pending set, paged on the server ----------
-  let qsort = "up", listRows = [], listDone = false, listBusy = false;
   const PAGE = 50;
   async function loadList(reset) {
     if (listBusy || (!reset && listDone)) return;
@@ -380,7 +381,7 @@ async function boot() {
     $("idea-empty").classList.toggle("hidden", qsort === "up" || listRows.length > 0);
     $("q-more").classList.toggle("hidden", listDone || (qsort === "up" && !listRows.length && !upFull));
   }
-  let upFull = false;   // the server's Up-next pool is capped at 20: offer "Show more" past it
+  // the server's Up-next pool is capped at 20: offer "Show more" past it
   window.addEventListener("tapestry:pool", (e) => { upFull = (e.detail || 0) >= 20; if (qsort === "up") $("q-more").classList.toggle("hidden", !upFull || listDone && listRows.length > 0); });
   const etaLabel = (s) => (s == null ? "" : s < 60 ? "soon" : s < 3600 ? `~${Math.round(s / 60)} min` : `~${Math.round(s / 360) / 10} h`);
   S.etaLabel = etaLabel;
@@ -400,6 +401,8 @@ async function boot() {
     return `<button class="heart${myVotes.has(id) ? " on" : ""}" type="button" data-vote="${id}" aria-label="Like">${HEART}<span>${n || 0}</span></button>`;
   }
   S.heart = heart;
+  S.myVotes = () => myVotes;
+  window.dispatchEvent(new Event("tapestry:social"));
   document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-vote]");
     if (!b) return;
@@ -436,7 +439,6 @@ async function boot() {
   S.placeToast = placeToast;
   $("q-more").addEventListener("click", () => loadList(listRows.length === 0));
   function renderIdeas() { if (listRows.length) renderList(qsort === "up" ? $("queue-more") : $("idea-list")); }
-  S.myVotes = () => myVotes;
   refreshIdeas();
   sb.channel("ideas").on("postgres_changes", { event: "*", schema: "public", table: "ideas" }, (p) => { refreshIdeas(); window.dispatchEvent(new CustomEvent("tapestry:idea", { detail: p })); }).subscribe();
   setInterval(refreshIdeas, 60000);
@@ -444,19 +446,21 @@ async function boot() {
   // ---------- chat ----------
   const chatList = $("chat-list");
   const seen = new Set();
+  const hideHandle = (h) => { const x = String(h || "").replace(/^@/, "").toLowerCase(); return !x || x === "bicrick" || x === "claude"; };
   function addChat(m) {
     if (seen.has(m.id) || m.hidden) return;
     seen.add(m.id);
     const li = document.createElement("li");
     li.dataset.id = m.id;
-    li.innerHTML = `<b>${esc(m.handle)}</b>${esc(m.body)}<span class="mod" data-a="hide">hide</span><span class="mod" data-a="mute">mute</span><span class="mod" data-a="ban">ban</span>`;
+    const who = hideHandle(m.handle) ? "" : `<b>${esc(m.handle)}</b>`;
+    li.innerHTML = `${who}${esc(m.body)}<span class="mod" data-a="hide">hide</span><span class="mod" data-a="mute">mute</span><span class="mod" data-a="ban">ban</span>`;
     li.querySelectorAll(".mod").forEach((x) => x.addEventListener("click", async () => {
       const a = x.dataset.a;
       const { error } = a === "hide" ? await sb.rpc("admin_hide_chat", { p_id: m.id })
         : await sb.rpc("admin_sanction", { p_user: m.user_id, p_kind: a, p_minutes: a === "mute" ? 60 : null, p_reason: "chat moderation" });
       if (error) return toast(friendly(error));
       if (a === "hide") li.remove();
-      toast(a === "hide" ? "Message hidden" : `@${esc(m.handle)} ${a === "mute" ? "muted for an hour" : "banned"}`);
+      toast(a === "hide" ? "Message hidden" : `${hideHandle(m.handle) ? "User" : "@" + esc(m.handle)} ${a === "mute" ? "muted for an hour" : "banned"}`);
     }));
     chatList.appendChild(li);
     while (chatList.children.length > 30) chatList.firstChild.remove();
