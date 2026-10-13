@@ -5,29 +5,94 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-
       - name: Install package (dev)
         run: pip install -e ".[dev]"
-
       - name: pytest
         run: pytest -q
-
       - name: Syntax-check JS (static/ and web/)
         run: |
           set -e
           find static web -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -print0 \
             | xargs -0 -n1 node --check
+      - name: Never show "Claude" in the UI
+        run: |
+          if grep -rIl "Claude" static/*.html static/*.js static/*.css; then echo "UI mentions Claude"; exit 1; fi
+
+  # Versioned pod worker: every green main commit becomes deploy/worker/<sha>.tgz; the pod pulls latest on restart.
+  publish-worker:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish worker release
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bash scripts/publish_worker.sh
+
+  deploy-web:
+    needs: test
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: true
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_wWQb6uWytPTAvJCeSYirxFb5
+      VERCEL_PROJECT_ID: prj_e5dEKiID5ny43SV89OWxDOvSgjrG
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build
+        env:
+          WS_URL: wss://zdv2dvvabzk76k-8000.proxy.runpod.net/ws
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
+        run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
+      - name: Deploy to production, smoke-test, then point the domains at it
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_BYPASS: ${{ secrets.VERCEL_BYPASS }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/web"
+          # Guard: the built public config must match what prod serves (apart from buildId) - catches missing/blank secrets.
+          diff <(curl -sf "https://infinite-tapestry.vercel.app/config.js?x=$GITHUB_RUN_ID" | grep -v buildId) <(grep -v buildId config.js) \
+            || { echo "::error::built config.js differs from prod; refusing to deploy"; exit 1; }
+          URL=$(npx -y vercel@latest deploy --prod --yes --skip-domain --token "$VERCEL_TOKEN" | grep -o 'https://[a-z0-9.-]*\.vercel\.app' | tail -1)
+          echo "deployed $URL"
+          # smoke test before the domain moves (deployment URLs are protected; the bypass secret gets through)
+          curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
+          curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'client.js'
+          BID=$(curl -sf "$URL/build.json?x-vercel-protection-bypass=$VERCEL_BYPASS")
+          echo "build $BID"
+          # Only the newest main commit may take the domain (a manual deploy or a later push wins otherwise).
+          HEAD=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)
+          if [ "$HEAD" != "$GITHUB_SHA" ]; then echo "main moved on ($HEAD); leaving the domains alone"; exit 0; fi
+          for d in infinite-tapestry.vercel.app infinite-tapestry-preview.vercel.app; do
+            npx -y vercel@latest alias set "$URL" "$d" --token "$VERCEL_TOKEN"
+          done
+          sleep 3
+          curl -sf "https://infinite-tapestry.vercel.app/build.json?x=$GITHUB_RUN_ID" | tee /dev/stderr | grep -q "${GITHUB_SHA:0:7}"
