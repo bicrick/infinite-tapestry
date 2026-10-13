@@ -861,7 +861,7 @@ body.away .dock .now { opacity: 0 !important; pointer-events: none; }
 /* Mobile lock: fixed layout, no zoom; only the compose sheet rides above the keyboard (transform) */
 html:not(.page):not(:has(body.page)) { height: 100%; overflow: hidden; }
 body:not(.page) { position: fixed; inset: 0; width: 100%; overflow: hidden; }
-body, .ui, button, .dock, .top { touch-action: manipulation; }
+body, .ui, button, .dock, .top { touch-action: manipulation; pointer-events: auto; }
 input, textarea, select, #cmd-input { font-size: max(16px, 1em); }
 @media (max-width: 760px), (pointer: coarse) {
   input, textarea, select, #cmd-input, #chat-input, .item textarea, .p-banner-edit input { font-size: 16px !important; }
@@ -894,3 +894,11 @@ body.composing:not(.away) .dock .cmd-terms { margin-top: 10px; font-size: 10px; 
 body.composing:not(.away) .dock .cmd-terms { white-space: normal; text-wrap: balance; overflow: visible; }
 body.composing:not(.away) .dock { translate: 0 calc(-1 * max(14px, var(--kb, 0px) - 14px - var(--sb, 0px))); }
 body.composing:not(.away) .dock .cmd-terms { max-height: none !important; line-height: 1.35; }
+/* ambient sound toggle (next to the clock) */
+.snd-btn { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-left: 8px; padding: 0; border: 0; border-radius: 50%; background: none;
+  color: var(--muted); opacity: .7; cursor: pointer; vertical-align: middle; transition: opacity .3s var(--ease), background-color .3s var(--ease); touch-action: manipulation; pointer-events: auto; }
+.snd-btn:hover { opacity: 1; background: rgba(var(--ink), .06); }
+.snd-btn .w1, .snd-btn .w2 { opacity: 0; transition: opacity .4s var(--ease); }
+.snd-btn .x { opacity: 1; transition: opacity .4s var(--ease); }
+.snd-btn.on { opacity: 1; color: var(--fg); }
+.snd-btn.on .w1, .snd-btn.on .w2 { opacity: 1; } .snd-btn.on .x { opacity: 0; }

@@ -142,3 +142,18 @@
   setTimeout(check, 4000); setInterval(check, 90000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
 })();
+
+// Ambient sound: opt-in toggle near the clock; engine lazy-loaded on first use
+(() => {
+  const b = document.getElementById("snd-btn"); if (!b) return;
+  const KEY = "tapestry.sound"; let P = null, want = localStorage.getItem(KEY) === "1";
+  const ui = on => { b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); };
+  const load = async () => { if (!P) { const v = (window.TAPESTRY_CONFIG || {}).buildId || ""; P = (await import("./ambient.js?v=" + v)).player(); } return P; };
+  const set = async on => { want = on; localStorage.setItem(KEY, on ? "1" : "0"); ui(on); try { const p = await load(); on && !document.hidden ? await p.start() : p.stop(); } catch (_) {} };
+  b.addEventListener("click", e => { e.stopPropagation(); set(!want); });
+  ui(false);
+  if (want) { const first = () => { removeEventListener("pointerdown", first, true); removeEventListener("keydown", first, true); if (want && !b.classList.contains("on")) set(true); };
+    addEventListener("pointerdown", first, true); addEventListener("keydown", first, true); }
+  document.addEventListener("visibilitychange", () => { if (!P || !want) return; document.hidden ? P.stop() : P.start(); });
+})();
+
