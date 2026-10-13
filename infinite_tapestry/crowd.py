@@ -34,7 +34,7 @@ def direct_plan(bodies: list[str], hold: int = 4) -> dict:
 
 logger = logging.getLogger(__name__)
 
-GPU_CENTS_PER_HOUR = float(os.environ.get("TAPESTRY_GPU_CENTS_PER_HOUR", "90"))
+GPU_CENTS_PER_HOUR = float(os.environ.get("TAPESTRY_GPU_CENTS_PER_HOUR", "89"))
 # Haiku pricing used for the fuel meter (input, output) in cents per token.
 CLAUDE_CENTS_PER_TOKEN = float(os.environ.get("TAPESTRY_CLAUDE_CENTS_PER_MTOK", "30")) / 1_000_000
 

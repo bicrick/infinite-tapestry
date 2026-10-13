@@ -543,60 +543,59 @@ async function boot() {
   });
 
   // ---------- fuel & donations ----------
-  let fuel = { balance_cents: null, pod_status: null };
+  // Fuel = donations received vs. what painting has cost so far. Never a negative "tank".
+  let fuel = { balance_cents: null, pod_status: null }, FS = null, fuelAt = 0;
+  const usd = (c) => "$" + (c / 100).toFixed(c >= 10000 ? 0 : 2);
+  const dur = (h) => h >= 48 ? `${Math.round(h / 24)} days` : h >= 20 ? `${(h / 24).toFixed(1).replace(/\.0$/, "")} day${h >= 36 ? "s" : ""}` : h >= 1 ? `${Math.round(h)} h` : `${Math.max(1, Math.round(h * 60))} min`;
+  const net = (c) => Math.max(0, c * 0.971 - 30); // Stripe fees come out before fuel is credited
   function renderFuel() {
-    if (fuel.balance_cents == null) return;
-    const cents = Math.max(0, Number(fuel.balance_cents));
-    const rate = hourCents || Number(CFG.centsPerHour) || 20;
-    const hours = cents / rate;
-    const pct = Math.min(100, (hours / 48) * 100);  // full bar = two days
+    if (!FS) return;
+    const covered = FS.hours_covered || 0, painted = FS.hours_painted || 0, rate = FS.rate_cents_per_hour || 89;
+    const pct = painted ? Math.min(100, (covered / painted) * 100) : 0;
     $("fuel-fill").style.width = pct + "%";
     $("fuel-fill-big").style.width = pct + "%";
-    const label = hours >= 48 ? `${Math.floor(hours / 24)} days` : hours >= 1 ? `${Math.floor(hours)} h` : `${Math.round(hours * 60)} min`;
-    $("fuel-text").textContent = label;
-    $("fuel-hours").textContent = label;
-    $("fuel-chip").classList.toggle("low", hours < 3);
-    // Fuel is display-only: it never puts the tapestry to sleep.
+    $("fuel-text").textContent = covered > 0 ? `${dur(covered)} fueled` : "Fuel";
+    $("fuel-chip").classList.remove("low");
+    $("fuel-caption").innerHTML = covered > 0
+      ? `Fuel covered ${esc(dur(covered))}<span class="muted"> of ${esc(dur(painted))} painted</span>`
+      : `Running on the creator's dime<span class="muted"> · ${esc(dur(painted || 0))} painted</span>`;
+    $("fuel-sub").textContent = `${usd(FS.donated_cents)} donated · ${usd(FS.cost_cents)} spent painting${FS.since ? " since " + new Date(FS.since).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}`;
+    $("fuel-rate-note").textContent = `Painting costs about ${usd(rate)} an hour (GPU ${usd(FS.gpu_cents_per_hour)}${FS.director_cents_per_hour ? ` + Auto ${usd(FS.director_cents_per_hour)}` : ""}). Fuel helps cover it; the tapestry keeps painting around the clock either way.`;
+    document.querySelectorAll("#tiers button").forEach((b) => { const sm = b.querySelector("small"); if (sm) sm.textContent = "~" + dur(net(Number(b.dataset.cents)) / rate); });
   }
-  async function refreshFuel() {
-    const { data } = await sb.from("fuel_status").select("*").maybeSingle();
-    if (data) { fuel = data; renderFuel(); }
+  async function refreshFuel(force) {
+    if (!force && Date.now() - fuelAt < 50000) return; fuelAt = Date.now();
+    try { const d = await (await fetch("/api/about?kind=transparency")).json(); if (d && d.fuel) { FS = d.fuel; FS._series = d.series || []; renderFuel(); } } catch (_) {}
   }
-  window.addEventListener("tapestry:config", (e) => {
-    const r = e.detail && e.detail.gpu_cents_per_hour;
-    if (r) { hourCents = Number(r) || hourCents; renderFuel(); }
-  });
   window.addEventListener("tapestry:fuel", (e) => {
     const f = (e.detail && e.detail.fuel) || {};
     if (f.queue_mode && f.queue_mode !== queueMode) { queueMode = f.queue_mode; refreshIdeas(); }
-    if (f.gpu_cents_per_hour) hourCents = Number(f.gpu_cents_per_hour) || hourCents;
-    const cents = f.cents ?? e.detail.balance_cents;
-    if (cents != null) fuel = { ...fuel, balance_cents: cents };
-    renderFuel();
   });
-  refreshFuel();
-  setInterval(refreshFuel, 60000);
-  // Fuel history chart (hourly ledger), drawn once per open of the Fuel tab.
-  let chartAt = 0;
+  refreshFuel(true);
+  setInterval(() => refreshFuel(), 300000);
+  // Chart: daily painting cost (bars) vs. donations (accent bars), last 14 days.
   async function fuelChart() {
-    if (Date.now() - chartAt < 120000) return; chartAt = Date.now();
-    const svg = $("fuel-chart"); if (!svg) return;
-    const usd = (c) => "$" + (c / 100).toFixed(c >= 10000 ? 0 : 2);
-    try {
-      const d = await (await fetch("/api/about?kind=transparency")).json();
-      const series = d.series || [], W = 600, H = 160, pad = 4;
-      if (!series.length) { svg.innerHTML = `<text x="300" y="85" text-anchor="middle" font-size="13" fill="currentColor" opacity=".45">No fuel history yet</text>`; return; }
-      const t0 = +new Date(series[0].t), t1 = Math.max(+new Date(series[series.length - 1].t) + 36e5, t0 + 36e5);
-      const maxB = Math.max(...series.map((s) => +s.bal), 1), maxBurn = Math.max(...series.map((s) => +s.burn), 1);
-      const x = (t) => pad + (W - 2 * pad) * ((+new Date(t) + 18e5 - t0) / (t1 - t0));
-      const y = (v) => H - 6 - (H - 20) * (v / maxB);
-      const bw = Math.max(1.5, (W - 2 * pad) / ((t1 - t0) / 36e5) * 0.55);
-      const bars = series.map((s) => `<rect x="${x(s.t) - bw / 2}" y="${H - 6 - 30 * (s.burn / maxBurn)}" width="${bw}" height="${30 * (s.burn / maxBurn)}" fill="currentColor" opacity=".14"/>`).join("");
-      const pts = series.map((s) => `${x(s.t).toFixed(1)},${y(+s.bal).toFixed(1)}`).join(" ");
-      svg.innerHTML = `<line x1="0" x2="${W}" y1="${H - 6}" y2="${H - 6}" stroke="currentColor" opacity=".12"/>${bars}<polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
-      const burn = +d.burn_cents_per_hour || 0;
-      $("fuel-chart-note").textContent = `${usd(+d.balance_cents || 0)} in the tank · ${burn > 0 ? usd(burn) + "/h" : "idle"} · since ${new Date(series[0].t).toLocaleDateString([], { month: "short", day: "numeric" })}`;
-    } catch (_) { svg.innerHTML = ""; }
+    await refreshFuel(true);
+    const svg = $("fuel-chart"); if (!svg || !FS) return;
+    const days = new Map();
+    for (const s of FS._series) {
+      const k = new Date(s.t).toLocaleDateString("en-CA");
+      const d = days.get(k) || { k, cost: 0, don: 0 }; d.cost += +s.burn || 0; d.don += +s.donated || 0; days.set(k, d);
+    }
+    const list = [...days.values()].slice(-14), W = 600, H = 160, base = H - 22;
+    if (!list.length) { svg.innerHTML = `<text x="300" y="85" text-anchor="middle" font-size="13" fill="currentColor" opacity=".45">No history yet</text>`; $("fuel-chart-note").textContent = ""; return; }
+    const max = Math.max(1, ...list.map((d) => Math.max(d.cost, d.don)));
+    const slot = W / Math.max(list.length, 7), bw = Math.min(28, slot * 0.32);
+    const h = (v) => (base - 10) * (v / max);
+    const out = [`<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="currentColor" opacity=".15"/>`];
+    list.forEach((d, i) => {
+      const cx = slot * (i + 0.5);
+      out.push(`<rect x="${cx - bw - 1}" y="${base - h(d.cost)}" width="${bw}" height="${h(d.cost)}" rx="2" fill="currentColor" opacity=".22"><title>${d.k}: ${usd(d.cost)} cost</title></rect>`);
+      out.push(`<rect x="${cx + 1}" y="${base - h(d.don)}" width="${bw}" height="${Math.max(d.don ? 2 : 0, h(d.don))}" rx="2" fill="#e0a84a"><title>${d.k}: ${usd(d.don)} donated</title></rect>`);
+      if (list.length <= 7 || i % 2 === list.length % 2 - 1 || i === list.length - 1) out.push(`<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="11" fill="currentColor" opacity=".5">${new Date(d.k + "T12:00").toLocaleDateString([], { month: "short", day: "numeric" })}</text>`);
+    });
+    svg.innerHTML = out.join("");
+    $("fuel-chart-note").innerHTML = `<span class="lg cost"></span>Daily cost <span class="lg don"></span>Donations`;
   }
 
   const refreshDonors = () => {};   // donor wall lives only on /about
@@ -621,13 +620,13 @@ async function boot() {
   if (qs.get("thanks")) {
     toast("Thank you. The tapestry has more fuel.", 6000);
     history.replaceState(null, "", location.pathname);
-    setTimeout(() => { refreshFuel(); refreshDonors(); refreshIdeas(); }, 2500);
+    setTimeout(() => { refreshFuel(true); refreshDonors(); refreshIdeas(); }, 2500);
   }
 
   // ---------- sleep state ----------
   let wsOpen = false, closedSince = Date.now();
   window.addEventListener("tapestry:ws", (e) => { wsOpen = e.detail.open; if (!wsOpen) closedSince = Date.now(); else setSleeping(false); });
-  setInterval(() => { if (!wsOpen && Date.now() - closedSince > 8000) refreshFuel().then(() => { if (Number(fuel.balance_cents) > 0) $("sleep-note").textContent = "Waking up…"; }); }, 15000);
+  setInterval(() => { if (!wsOpen && Date.now() - closedSince > 8000) $("sleep-note").textContent = "Waking up…"; }, 15000);
   let snapLoaded = false;
   function setSleeping(on) {
     document.body.classList.toggle("sleeping", on);
@@ -650,7 +649,7 @@ async function boot() {
     if (name === "next" && window.TapestryWS) window.TapestryWS.send({ type: "upcoming_request" });
     document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("hidden", p.id !== "panel-" + name));
-    if (name === "fuel") { refreshFuel(); fuelChart(); refreshDonors(); }
+    if (name === "fuel") { fuelChart(); refreshDonors(); }
     if (name === "next") refreshIdeas();
     if (name === "audit") refreshAudit();
   }

@@ -10,6 +10,20 @@ const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svc = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
 const SESSION = () => env("TAPESTRY_STORAGE_PREFIX", "live-sdxl");
 
+// Honest fuel summary: donations received vs. what painting has cost (GPU + Auto director), no "tank".
+// Rate = GPU price from config (TAPESTRY_GPU_CENTS_PER_HOUR, default 89c = the RTX 4090 pod) + measured director cost.
+function fuelSummary(series) {
+  const gpu = Number(env("TAPESTRY_GPU_CENTS_PER_HOUR", "89")) || 89;
+  let cost = 0, donated = 0, hours = 0;
+  for (const s of series) { const b = Number(s.burn) || 0; cost += b; donated += Number(s.donated) || 0; if (b > 0) hours++; }
+  const measured = hours ? cost / hours : 0;
+  const director = Math.max(0, Math.round(measured - gpu));
+  const rate = gpu + director;
+  return { since: series.length ? series[0].t : null, hours_painted: hours, cost_cents: Math.round(cost), donated_cents: Math.round(donated),
+           gpu_cents_per_hour: gpu, director_cents_per_hour: director, rate_cents_per_hour: rate,
+           hours_covered: +(donated / rate).toFixed(1) };
+}
+
 async function transparency() {
   const [t, recent, top] = await Promise.all([
     fetch(`${SB()}/rest/v1/rpc/transparency`, { method: "POST", headers: { ...svc(), "content-type": "application/json" }, body: "{}" }).then(r => r.json()),
@@ -17,7 +31,7 @@ async function transparency() {
     rest("GET", "donors_top?select=handle,total_cents,gifts,tagline,url&limit=10").catch(() => []),
   ]);
   const bal = Number(t.balance_cents) || 0, burn = Number(t.burn_cents_per_hour) || 0;
-  return { ...t, hours_left: burn > 0 ? +(bal / burn).toFixed(1) : null, donors: { recent: Array.isArray(recent) ? recent : [], top: Array.isArray(top) ? top : [] } };
+  return { ...t, hours_left: burn > 0 ? +(bal / burn).toFixed(1) : null, fuel: fuelSummary(t.series || []), donors: { recent: Array.isArray(recent) ? recent : [], top: Array.isArray(top) ? top : [] } };
 }
 
 async function allStrips() {

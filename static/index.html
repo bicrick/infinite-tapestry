@@ -227,14 +227,15 @@
     </section>
     <section class="panel hidden" id="panel-fuel">
       <div class="fuel-big"><div class="fuel-line big"><span id="fuel-fill-big"></span></div>
-        <div class="fuel-caption"><span id="fuel-hours">…</span><span class="muted"> of GPU time covered</span></div></div>
-      <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="Fuel balance over time"></svg>
-      <p id="fuel-chart-note" class="fine pad"></p>
-      <p class="fine pad">Fuel helps cover the GPU (about $0.90 an hour) and the AI director. The tapestry keeps painting around the clock either way.</p>
+        <div class="fuel-caption" id="fuel-caption">…</div>
+        <p class="fine" id="fuel-sub"></p></div>
+      <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" role="img" aria-label="Daily painting cost versus donations"></svg>
+      <p id="fuel-chart-note" class="fine pad fuel-legend"></p>
+      <p class="fine pad" id="fuel-rate-note">Fuel helps cover the GPU and Auto, the director. The tapestry keeps painting around the clock either way.</p>
       <div class="tiers" id="tiers">
-        <button data-cents="300">$3<small>~17 h</small></button>
-        <button data-cents="1000">$10<small>~2 days</small></button>
-        <button data-cents="2500">$25<small>~6 days</small></button>
+        <button data-cents="300">$3<small>&nbsp;</small></button>
+        <button data-cents="1000">$10<small>&nbsp;</small></button>
+        <button data-cents="2500">$25<small>&nbsp;</small></button>
       </div>
       <input id="donor-note" class="vibe pad-x" maxlength="140" placeholder="A note for the wall (optional)" />
       <p class="fine pad">Totally optional. Donors are thanked on the <a href="/about">about page</a>.</p>
@@ -244,7 +245,7 @@
       <ol id="audit-list" class="list audit"></ol>
     </section>
     <div class="drawer-bar">
-      <button id="fuel-chip" class="fuel-chip hidden" type="button" title="GPU time covered by fuel"><span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span></button>
+      <button id="fuel-chip" class="fuel-chip hidden" type="button" title="Fuel"><span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span></button>
       <button id="clip-btn" class="bar-btn" type="button" title="Share the last 10 seconds">Clip</button>
       <div class="drawer-theme" role="group" aria-label="Theme"><button data-theme="">Auto</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
     </div>
