@@ -29,7 +29,7 @@
   const lazy = new IntersectionObserver((es) => es.forEach((e) => {
     if (!e.isIntersecting) return; const el = e.target; lazy.unobserve(el);
     const img = new Image(); img.decoding = "async"; img.onload = () => { el.style.backgroundImage = `url(${img.src})`; el.classList.add("in"); }; img.src = el.dataset.src;
-  }), { rootMargin: "200px" });
+  }), { rootMargin: "600px" });
 
   $("d-hours").innerHTML = '<li class="skel"></li>'.repeat(6);   // reserve space while history loads (no jump)
   // ---- calendar ----
