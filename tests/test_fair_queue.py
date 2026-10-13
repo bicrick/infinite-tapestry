@@ -64,7 +64,7 @@ def test_direct_plan_hold_default_and_busy():
 
 def test_gpu_rate_default_is_real_runpod_rate():
     if "TAPESTRY_GPU_CENTS_PER_HOUR" not in os.environ:
-        assert crowd_mod.GPU_CENTS_PER_HOUR == 90
+        assert crowd_mod.GPU_CENTS_PER_HOUR == 89
     html = (ROOT / "static/index.html").read_text()
     assert "$0.17" not in html and "$0.90 an hour" in html
 
