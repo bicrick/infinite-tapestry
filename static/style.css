@@ -1285,3 +1285,10 @@ body.chat-open { overscroll-behavior: none; }
 @media (max-width: 1199px), (orientation: portrait) {
   body.chat-open .chat { background: color-mix(in srgb, var(--bg) 93%, transparent); }   /* readable even where backdrop blur is unavailable */
 }
+
+/* Phones: "Back to live" takes the chat strip's slot above the composer (composer stays usable); the strip returns at live */
+@media (pointer: coarse) and (max-width: 820px) {
+  .dock .pill#live-btn { bottom: calc(100% + 14px); height: 40px; padding: 0 18px; border-radius: 20px; font-size: 14px; }
+  body.away .dock .cmd, body.away .dock .cmd-terms { opacity: 1; transform: none; pointer-events: auto; }
+  body.away:not(.chat-open) .chat { opacity: 0 !important; pointer-events: none !important; transition: opacity .3s var(--ease) !important; }
+}

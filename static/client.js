@@ -929,8 +929,11 @@
     panVel = 0;
     samples = [[performance.now(), panPos]];
   }
+  const EDGE_DEAD = 20;          // touch: leave the screen edges to iOS back/forward swipes
+  const TOUCH_LOCK = 9;          // touch: px before we decide horizontal (scrub) vs anything else
   canvas.addEventListener("pointerdown", (ev) => {
-    if (activePointer !== null) return;
+    // A second finger (pinch) cancels a touch scrub that hasn't committed; a committed one just ends with momentum.
+    if (activePointer !== null) { if (ev.pointerType === "touch" && gesture && gesture.touch) gesture.dead = true; return; }
     wheelGlide = false;
     activePointer = ev.pointerId;
     try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
@@ -938,8 +941,10 @@
     lastPX = ev.clientX;
     const armed = panMode === "live";
     // Touch: the painting is never a scrubber. Taps toggle the UI; scrubbing is the timeline's job.
+    // Touch: a tap toggles the UI; a clearly horizontal swipe scrubs time 1:1 with momentum (see pointermove).
     if (ev.pointerType === "touch") {
-      gesture = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), moved: 0, wasIdle: document.body.classList.contains("idle"), armed: true, touch: true, hist: [[performance.now(), ev.clientX]] };
+      gesture = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), moved: 0, wasIdle: document.body.classList.contains("idle"), armed, touch: true,
+        dead: ev.clientX < EDGE_DEAD || ev.clientX > innerWidth - EDGE_DEAD, hist: [[performance.now(), ev.clientX]] };
       return;
     }
     gesture = { x0: ev.clientX, y0: ev.clientY, t0: performance.now(), moved: 0, wasIdle: document.body.classList.contains("idle"), armed, hist: [[performance.now(), ev.clientX]] };
@@ -955,7 +960,19 @@
     gesture.moved = Math.max(gesture.moved, Math.hypot(ev.clientX - gesture.x0, ev.clientY - gesture.y0));
     gesture.hist.push([now, ev.clientX]);
     while (gesture.hist.length > 2 && now - gesture.hist[0][0] > 80) gesture.hist.shift();
-    if (gesture.touch) return;
+    if (gesture.touch) {
+      if (gesture.dead) return;
+      const dx = ev.clientX - gesture.x0, dy = ev.clientY - gesture.y0;
+      if (Math.hypot(dx, dy) < TOUCH_LOCK) return;
+      if (Math.abs(dx) < Math.abs(dy) * 1.3) { gesture.dead = true; return; }   // vertical-ish: not ours
+      gesture.touch = false; gesture.scrub = true;
+      if (gesture.armed && panMode !== "live") gesture.armed = false;
+      if (gesture.armed && dx > 0) { gesture.armed = false; commitRewind(); }     // swipe right at live = back in time, 1:1 from here
+      else if (!gesture.armed) { panPos = shownPan(); panMode = "drag"; panVel = 0; samples = [[now, panPos]]; }
+      lastPX = ev.clientX;
+      if (gesture.armed) gesture.x0 = ev.clientX;                                 // swiping left at live: elastic nudge only
+      return;
+    }
     if (gesture.armed) {
       const back = ev.clientX - gesture.x0;   // dragging right = looking back in time
       const h0 = gesture.hist[0], v = (ev.clientX - h0[1]) / Math.max(1, now - h0[0]);
