@@ -33,3 +33,9 @@
 .hr.on:hover i { opacity:1; }
 .hr em { font-style:normal; font-size:11px; min-width:18px; height:18px; line-height:18px; text-align:center; border-radius:9px; background:var(--faint); color:var(--fg); }
 .hr:not(.on) i { opacity:.2; }
+.tm a.chip, .tm a.hr { text-decoration:none; }
+.hr { grid-template-columns:48px 1fr; }
+.hchips { display:flex; flex-wrap:wrap; gap:4px; padding:4px 0 8px 60px; }
+.hchips .chip { padding:3px 10px; font-size:11px; max-width:calc(100% - 8px); display:inline-block; }
+.hchips .more { all:unset; cursor:pointer; padding:3px 10px; border-radius:999px; border:1px solid var(--line); font-size:11px; color:var(--muted); }
+.hchips .rest { display:none; } .hchips.all .rest { display:contents; }

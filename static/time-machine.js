@@ -65,20 +65,23 @@
     $("d-title").textContent = new Date(k + "T12:00:00").toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
     $("d-meta").textContent = `${fmtT(new Date(d.t0))} – ${fmtT(new Date(d.t1))} · ${d.scene_count} scenes`;
     const ideas = (d.ideas || []).slice().sort((x, y) => x.a - y.a);
-    $("d-chips").innerHTML = ideas.map((x) => `<a class="chip" href="/?at=${x.a}" title="${esc(x.text)}">“${esc(x.text)}”<small>${fmtT(timeAt(d, x.a))}</small></a>`).join("");
+    $("d-chips").innerHTML = "";
+    const chip = (x) => `<a class="chip" href="/?at=${x.a}" title="${esc(x.text)}">${esc(x.text)}</a>`;
     const [Y, M, D] = k.split("-").map(Number);
     let rows = "";
     for (let h = 0; h < 24; h++) {
       const t0 = new Date(Y, M - 1, D, h).getTime(), ia = idxAt(d, Math.max(t0, +new Date(d.t0))), ib = idxAt(d, Math.min(t0 + 36e5 - 1, +new Date(d.t1)));
       const live = ia >= 0 && t0 + 36e5 > +new Date(d.t0) && t0 <= +new Date(d.t1);
-      const n = ideas.filter((x) => { const t = +timeAt(d, x.a); return t >= t0 && t < t0 + 36e5; }).length;
+      const hi = ideas.filter((x) => { const t = +timeAt(d, x.a); return t >= t0 && t < t0 + 36e5; });
+      const chipsHtml = hi.length ? `<div class="hchips">${hi.slice(0, 3).map(chip).join("")}${hi.length > 3 ? `<button class="chip more" type="button">+${hi.length - 3}</button><span class="rest">${hi.slice(3).map(chip).join("")}</span>` : ""}</div>` : "";
       rows += live
-        ? `<li><a class="hr on" href="/?at=${ia}"><span class="hl">${fmtH(h)}</span><i data-src="${thumb(Math.round((ia + Math.max(ia, ib)) / 2))}"></i>${n ? `<em>${n}</em>` : ""}</a></li>`
+        ? `<li><a class="hr on" href="/?at=${ia}"><span class="hl">${fmtH(h)}</span><i data-src="${thumb(Math.round((ia + Math.max(ia, ib)) / 2))}"></i></a>${chipsHtml}</li>`
         : `<li><span class="hr"><span class="hl">${fmtH(h)}</span><i></i></span></li>`;
     }
     $("d-hours").innerHTML = rows;
     $("d-hours").querySelectorAll("i[data-src]").forEach((i) => lazy.observe(i));
     $("day").classList.add("show");
+    $("d-hours").onclick = (e) => { const m = e.target.closest(".more"); if (m) { m.parentElement.classList.add("all"); m.remove(); } };
   }
 
   fetch(`/api/about?kind=history&tz=${encodeURIComponent(tz)}`).then((r) => r.json()).then((h) => {
