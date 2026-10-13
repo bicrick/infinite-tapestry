@@ -54,6 +54,41 @@ def momentum_brief(recent: list[dict]) -> str:
             "stay gross or absurd). Theme momentum overrides the usual repeat rules for this world.")
 
 
+def _daypart(h: int) -> str:
+    return ("deep night" if h < 5 else "dawn" if h < 8 else "morning" if h < 12 else "afternoon" if h < 17
+            else "golden evening" if h < 20 else "night")
+
+
+def director_brief(recent: list[dict], journey: dict | None, steer: str, flavor: str, flavor_text: str) -> str:
+    """Auto as a playful director: it sees the recent run, its own journey state and the time of day, and freely picks
+    the next move (a surprising detour, a short drift, or an invented multi-scene journey from the outside in)."""
+    from datetime import datetime
+    titles = [str(r.get("title") or "").strip() for r in recent[-20:] if r.get("title")]
+    now = datetime.now()
+    lines = ["DIRECTOR MODE. You are a playful, intelligent director steering the tapestry with nobody else at the wheel.",
+             "Last scenes, oldest first: " + (" | ".join(titles) or "(none)"),
+             f"Local time for most viewers: {now.strftime('%A')} {_daypart(now.hour)}."]
+    if journey and journey.get("total") and (journey.get("step") or 0) < journey["total"]:
+        lines.append(f"You are on your journey \"{journey.get('journey','')}\", scene {journey.get('step')} of {journey['total']} "
+                     f"(why: {journey.get('reason','')[:160]}). Usually continue it, moving closer in (outside to inside, wide to "
+                     "detail); you may end it early if it has run its course.")
+    else:
+        lines.append("You are free. Look at the recent run and decide the next move yourself: a single surprising detour, "
+                     "a short drift that evolves one element of the last scene, or set off on an invented journey of 4-7 "
+                     "scenes that travels from the outside in (e.g. a city skyline, its streets, a shop, a drawer, an object). "
+                     "Vary your moves over time; do not always pick the same kind. Never repeat a recent subject.")
+    lines.append("Keep continuity: the first new scene should flow out of the last one (shared color, light, shape or material) "
+                 "so the transition is smooth, even when the subject changes.")
+    if flavor_text:
+        lines.append(f"Optional flavor you may use for a detour or a new journey (ignore if it breaks the flow): {flavor_text}")
+    if steer:
+        lines.append(f"Hint from the curator (take it as a loose nudge, not an order): {steer[:300]}")
+    lines.append('Add to the JSON a "director" object: {"move":"detour|drift|journey|continue","journey":"short journey name '
+                 'or empty","step":<this batch\'s last scene number in the journey or null>,"total":<planned journey length or '
+                 'null>,"reason":"one playful sentence on why"}.')
+    return "\n".join(lines)
+
+
 class Autopilot:
     def __init__(
         self,
@@ -95,6 +130,9 @@ class Autopilot:
         self.story_done: Callable[[int], None] = lambda pid: None
         self.story_progress: Callable[[int, int], None] = lambda pid, k: None
         self._done_pids: set[int] = set()
+        self.steer = ""            # auto_config.steer: a live admin hint
+        self.journey: dict | None = None   # Auto's own journey state from its last decision
+        self.decision_log: Callable[[dict], None] = lambda d: None
 
     def state(self) -> dict[str, Any]:
         return {
@@ -229,19 +267,17 @@ class Autopilot:
             last_user = max((i for i, r in enumerate(recent) if r.get("origin") == "user"), default=None)
             since = len(recent) - 1 - last_user if last_user is not None else 99
             mood = ""
-            if mom:
+            if mom:   # a viewer's idea just played: stay in its world, then drift away (unchanged)
                 self.last_mode = "momentum"
                 text = mom
-                if since >= 2:  # drifting away: steer the new subject by a random mood
+                if since >= 2:
                     mood = self.moods.next(2)
                     text += "\nFor the drifting scenes, the NEW main subject follows this: " + self.moods.brief(mood)
+                self.journey = None
             else:
-                heads = await asyncio.to_thread(self.headlines.sample, 6)
                 mood = self.moods.next(2)
-                mode = "news" if mood == "topical" and heads else "cinematic"
-                self.last_mode = mode
-                text = brief(mode, heads, self.memory, spark=not self.moods.is_beautiful(mood)) + "\n" + self.moods.brief(mood)
-            self.last_mood = mood
+                self.last_mode = "director"
+                text = director_brief(d.recent(20), self.journey, self.steer, mood, self.moods.brief(mood))
             plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
@@ -258,7 +294,17 @@ class Autopilot:
             plan["scenes"] = kept
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
-            logger.info("autoplan mood=%s titles=%s", mood or self.last_mode, [s.get("title") for s in plan["scenes"]])
+            dec = plan.get("director") or {}
+            if not mom and dec:
+                self.journey = dec if dec.get("move") in ("journey", "continue") and dec.get("total") else None
+                self.last_mode = dec.get("move") or "director"
+                if dec.get("journey"):
+                    self.last_mood = dec["journey"]
+                try:
+                    self.decision_log({**dec, "titles": [s.get("title", "") for s in plan["scenes"]]})
+                except Exception:
+                    pass
+            logger.info("autoplan mood=%s move=%s titles=%s", mood or self.last_mode, dec.get("move"), [s.get("title") for s in plan["scenes"]])
             for s in plan["scenes"]:
                 self.memory.add(s.get("title", ""))
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
@@ -312,6 +358,7 @@ class Autopilot:
                     self._next_allowed = 0.0
                 elif not st:
                     logger.warning("invalid story config ignored; keeping the last good state")
+        self.steer = str(cfg.get("steer") or "").strip()[:300]
         w = cfg.get("mood_weights") or {}
         self.moods.weights = {str(k): float(v) for k, v in w.items() if isinstance(v, (int, float))}
 

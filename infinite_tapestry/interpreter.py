@@ -250,7 +250,24 @@ def parse_plan(text: str) -> dict[str, Any]:
         raise ValueError("refusal")
     flags = data.get("image_flags") or []
     return {"scenes": scenes, "note": str(data.get("note", ""))[:200],
-            "image_flags": [str(f).lower()[:20] for f in flags][:5] if isinstance(flags, list) else []}
+            "image_flags": [str(f).lower()[:20] for f in flags][:5] if isinstance(flags, list) else [],
+            "director": _director(data.get("director"))}
+
+
+def _director(d: Any) -> dict[str, Any]:
+    """Auto's own decision note (move, journey, step/total, reason); optional, sanitized."""
+    if not isinstance(d, dict):
+        return {}
+    def num(v: Any) -> int | None:
+        try:
+            n = int(v)
+            return n if 0 < n <= 12 else None
+        except Exception:
+            return None
+    move = str(d.get("move", "")).strip().lower()[:24]
+    return {"move": move if move in ("detour", "drift", "journey", "continue") else "drift",
+            "journey": str(d.get("journey", "") or "").strip()[:80], "step": num(d.get("step")), "total": num(d.get("total")),
+            "reason": str(d.get("reason", "") or "").strip()[:300]}
 
 
 def _salvage_truncated_plan(blob: str) -> dict[str, Any]:

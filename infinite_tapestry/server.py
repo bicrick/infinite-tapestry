@@ -226,7 +226,7 @@ def create_app(
     app.state.crowd = crowd
     if autopilot is not None and supa is not None:
         def _auto_cfg() -> dict | None:
-            rows = supa.rest("GET", "auto_config?id=eq.1&select=paused,theme,theme_until,mood_weights")
+            rows = supa.rest("GET", "auto_config?id=eq.1&select=*")
             cfg = dict(rows[0]) if rows else {}
             try:
                 st = supa.rest("GET", "story_playlist?status=in.(queued,playing)&order=position.asc,id.asc&limit=1"
@@ -246,6 +246,14 @@ def create_app(
         def _story_done(pid: int) -> None:
             supa.rest("PATCH", f"story_playlist?id=eq.{int(pid)}&status=in.(queued,playing)",
                       {"status": "done", "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, prefer="return=minimal")
+        def _decision(dec: dict) -> None:
+            def go() -> None:
+                try:
+                    supa.rest("POST", "auto_decisions", {k: dec.get(k) for k in ("move", "journey", "step", "total", "reason", "titles")})
+                except Exception:
+                    logger.warning("auto decision log failed")
+            threading.Thread(target=go, daemon=True).start()
+        autopilot.decision_log = _decision
         autopilot.story_progress = lambda pid, k: threading.Thread(target=_story_progress, args=(pid, k), daemon=True).start()
         autopilot.story_done = _story_done
     if generator is not None:
