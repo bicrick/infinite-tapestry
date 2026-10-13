@@ -71,6 +71,7 @@ jobs:
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
           R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
           SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
+          TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
         run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
       - name: Deploy to production, smoke-test, then point the domains at it
         env:
@@ -83,8 +84,8 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/web"
           SITE="${SITE_URL%/}"; HOST="${SITE#https://}"
-          # Guard: the built public config must match what prod serves (apart from buildId) - catches missing/blank secrets.
-          diff <(curl -sf "$SITE/config.js?x=$GITHUB_RUN_ID" | grep -v buildId) <(grep -v buildId config.js) \
+          # Guard: the built public config must match what prod serves (apart from buildId and the google feature flag) - catches missing/blank secrets.
+          diff <(curl -sf "$SITE/config.js?x=$GITHUB_RUN_ID" | grep -vE 'buildId|^[[:space:]]*google:') <(grep -vE 'buildId|^[[:space:]]*google:' config.js) \
             || { echo "::error::built config.js differs from prod; refusing to deploy"; exit 1; }
           URL=$(npx -y vercel@latest deploy --prod --yes --skip-domain --token "$VERCEL_TOKEN" | grep -o 'https://[a-z0-9.-]*\.vercel\.app' | tail -1)
           echo "deployed $URL"
