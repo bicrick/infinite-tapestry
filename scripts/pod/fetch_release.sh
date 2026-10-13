@@ -5,7 +5,7 @@ set -u
 set -a; . /root/.tapestry.env; set +a
 B="$SUPABASE_URL/storage/v1/object/deploy/worker"
 H=(-H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
-SHA=$(curl -sf --max-time 15 "${H[@]}" "$B/latest.txt" | tr -dc 'a-f0-9' | head -c 40) || SHA=""
+SHA=$(curl -sf --max-time 15 "${H[@]}" "$B/latest.txt?t=$(date +%s)" | tr -dc 'a-f0-9' | head -c 40) || SHA=""
 [ -n "$SHA" ] || { echo "fetch_release: no latest.txt, keeping /root/it"; exit 0; }
 D=/root/releases/$SHA
 if [ ! -f "$D/.ok" ]; then
