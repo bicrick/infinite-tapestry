@@ -14,7 +14,9 @@
     <div class="off-sub">${maint ? "Down for maintenance · back shortly." : "Back soon."}</div></div>`;
   document.body.appendChild(el);
   let open = !!window.__tapestryWsOpen, timer = 0, shown = false;
-  const show = () => { if (open) return; shown = true; document.body.classList.add("offline-on"); };
+  // The page can paint and replay history without the pod (/api/live + R2): only splash when there is nothing to show.
+  const canPaint = () => !maint && window.TapestryView && window.TapestryView.ready && window.TapestryView.ready();
+  const show = () => { if (open || canPaint()) return; shown = true; document.body.classList.add("offline-on"); };
   const hide = () => { if (!shown) return; shown = false; document.body.classList.remove("offline-on"); };
   const arm = () => { if (timer || shown) return; timer = setTimeout(() => { timer = 0; open = open || !!window.__tapestryWsOpen; if (!open) show(); }, GRACE); };   // repeated failed reconnects must not keep pushing it back
   window.addEventListener("tapestry:ws", (e) => { open = !!(e.detail && e.detail.open); if (open) { clearTimeout(timer); timer = 0; hide(); } else arm(); });
