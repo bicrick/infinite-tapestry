@@ -55,7 +55,7 @@ function render() {
   $("p-meta").textContent = bits.join(" · ");
   $("p-filter").classList.toggle("hidden", d.ideas.length < 3);
   document.querySelectorAll(".own-only").forEach((el) => el.classList.toggle("hidden", !d.own));
-  $("signout").classList.toggle("hidden", !d.own);
+  
   renderBanner(d);
   const bg = d.ideas.find((i) => i.start_strip != null);
   if (bg) $("page-bg").style.backgroundImage = `url(/api/og?id=${bg.id}&size=thumb)`;
@@ -135,6 +135,6 @@ document.addEventListener("click", async (e) => {
     render();
   }
 });
-$("signout").addEventListener("click", async () => { if (sb) await sb.auth.signOut(); location.href = "/"; });
+
 
 (async () => { await auth(); await load().catch(() => notFound()); })();

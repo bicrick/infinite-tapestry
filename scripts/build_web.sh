@@ -20,6 +20,8 @@ window.TAPESTRY_CONFIG = {
   centsPerHour: ${TAPESTRY_CENTS_PER_HOUR:-89}
 };
 CFG
+# Shared header/footer partials (web/lib/chrome.js) into every static page.
+node "$ROOT/scripts/inject_chrome.js" "$OUT"
 # Facebook/LinkedIn/iMessage need absolute og/twitter image URLs.
 SITE="${SITE_URL:-https://infinite-tapestry.vercel.app}"
 SITE="${SITE%/}"

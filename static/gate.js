@@ -15,6 +15,7 @@ else {
   document.title = "Admin · Infinite Tapestry";
   const st = document.createElement("style"); st.textContent = ui.css; document.head.append(st);
   document.getElementById("gate").remove();
+  document.querySelectorAll(".it-nav, .it-spacer, .it-foot").forEach((el) => el.remove());   // the dashboard has its own chrome
   document.body.insertAdjacentHTML("afterbegin", ui.html);
   const s = document.createElement("script"); s.type = "module"; s.textContent = ui.js; document.body.append(s);
 }

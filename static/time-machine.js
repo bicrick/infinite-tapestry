@@ -31,6 +31,7 @@
     const img = new Image(); img.decoding = "async"; img.onload = () => { el.style.backgroundImage = `url(${img.src})`; el.classList.add("in"); }; img.src = el.dataset.src;
   }), { rootMargin: "200px" });
 
+  $("d-hours").innerHTML = '<li class="skel"></li>'.repeat(6);   // reserve space while history loads (no jump)
   // ---- calendar ----
   const dowEl = $("dow"); const base = new Date(2023, 0, 1);   // a Sunday
   dowEl.innerHTML = [...Array(7)].map((_, i) => `<span>${new Date(base.getTime() + i * 864e5).toLocaleDateString([], { weekday: "narrow" })}</span>`).join("");
@@ -62,26 +63,34 @@
     $("grid").querySelectorAll(".sel").forEach((x) => x.classList.remove("sel"));
     $("grid").querySelector(`[data-k="${k}"]`)?.classList.add("sel");
     history.replaceState(null, "", "#" + k);
+    if (matchMedia("(max-width: 860px)").matches && pick.done) $("day").scrollIntoView({ behavior: "smooth", block: "start" });
+    pick.done = true;
     $("d-title").textContent = new Date(k + "T12:00:00").toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
     $("d-meta").textContent = `${fmtT(new Date(d.t0))} – ${fmtT(new Date(d.t1))} · ${d.scene_count} scenes`;
     const ideas = (d.ideas || []).slice().sort((x, y) => x.a - y.a);
-    $("d-chips").innerHTML = "";
     const who = (h) => (!h ? "Auto" : /^[a-z]+-\d{4}$/.test(h) ? "Suggested by a guest" : "Suggested by @" + h);
     const chip = (x) => `<a class="chip" href="${x.id ? "/s/" + x.id : "/?at=" + x.a}" title="${esc(who(x.handle))}">${esc(x.text)}</a>`;
     const [Y, M, D] = k.split("-").map(Number);
-    let rows = "";
+    let rows = "", gap = null;   // consecutive empty hours collapse into one quiet row
+    const flush = () => {
+      if (gap === null) return;
+      const label = gap.a === gap.b ? fmtH(gap.a) : `${fmtH(gap.a)}–${fmtH(gap.b + 1 === 24 ? 0 : gap.b + 1)}`;
+      rows += `<li><span class="hr gap"><span class="hl">${label}</span><em>${gap.future ? "Not yet" : "Nothing painted"}</em></span></li>`;
+      gap = null;
+    };
+    const nowMs = Date.now();
     for (let h = 0; h < 24; h++) {
       const t0 = new Date(Y, M - 1, D, h).getTime(), ia = idxAt(d, Math.max(t0, +new Date(d.t0))), ib = idxAt(d, Math.min(t0 + 36e5 - 1, +new Date(d.t1)));
       const live = ia >= 0 && t0 + 36e5 > +new Date(d.t0) && t0 <= +new Date(d.t1);
+      if (!live) { const fut = t0 > nowMs; if (gap && gap.future === fut) gap.b = h; else { flush(); gap = { a: h, b: h, future: fut }; } continue; }
+      flush();
       const hi = ideas.filter((x) => { const t = +timeAt(d, x.a); return t >= t0 && t < t0 + 36e5; });
       const chipsHtml = hi.length ? `<div class="hchips">${hi.slice(0, 3).map(chip).join("")}${hi.length > 3 ? `<button class="chip more" type="button">+${hi.length - 3}</button><span class="rest">${hi.slice(3).map(chip).join("")}</span>` : ""}</div>` : "";
-      rows += live
-        ? `<li><a class="hr on" href="/?at=${ia}"><span class="hl">${fmtH(h)}</span><i data-src="${thumb(Math.round((ia + Math.max(ia, ib)) / 2))}"></i></a>${chipsHtml}</li>`
-        : `<li><span class="hr"><span class="hl">${fmtH(h)}</span><i></i></span></li>`;
+      rows += `<li><a class="hr on" href="/?at=${ia}" aria-label="Replay ${fmtH(h)}"><span class="hl">${fmtH(h)}</span><i data-src="${thumb(Math.round((ia + Math.max(ia, ib)) / 2))}"></i></a>${chipsHtml}</li>`;
     }
+    flush();
     $("d-hours").innerHTML = rows;
     $("d-hours").querySelectorAll("i[data-src]").forEach((i) => lazy.observe(i));
-    $("day").classList.add("show");
     $("d-hours").onclick = (e) => { const m = e.target.closest(".more"); if (m) { m.parentElement.classList.add("all"); m.remove(); } };
   }
 
@@ -90,6 +99,6 @@
     (h.days || []).forEach((d) => byDay.set(d.day, d));
     const want = location.hash.slice(1), ks = [...byDay.keys()].sort(), k = byDay.has(want) ? want : ks[ks.length - 1];
     const [y, m] = (k || key(new Date().getFullYear(), new Date().getMonth(), 1)).split("-").map(Number);
-    month(y, m - 1); if (k) pick(k);
-  }).catch(() => { $("grid").innerHTML = `<p class="small">History is unavailable right now.</p>`; });
+    month(y, m - 1); if (k) pick(k); else $("d-hours").innerHTML = `<li class="tm-empty">Nothing painted yet.</li>`;
+  }).catch(() => { $("grid").innerHTML = ""; $("m-title").textContent = "Unavailable"; $("d-hours").innerHTML = `<li class="tm-empty">History is unavailable right now. Try again in a minute.</li>`; });
 })();

@@ -38,6 +38,7 @@
 
     <section class="view" id="view-stories">
       <header class="vh"><h1>Stories</h1><p class="fine" id="story-now"></p></header>
+      <p class="fine">Auto steers on its own between ideas and invents its own journeys. Stories here are ones you drafted in Talk to Auto, and they only play when you press Play now or queue them.</p>
       <div class="card-a"><h2>Playlist</h2><table id="playlist"></table></div>
       <div class="card-a"><h2>Library</h2><div id="library" class="library"></div></div>
       <div id="story-edit"></div>
@@ -71,7 +72,11 @@
         <div class="row"><input id="auto-theme" placeholder="Temporary theme or mood, e.g. autumn forests" maxlength="200" />
           <select id="auto-mins"><option value="30">30 min</option><option value="60" selected>1 h</option><option value="180">3 h</option><option value="720">12 h</option></select>
           <button id="auto-theme-set">Set</button><button id="auto-theme-clear">Clear</button></div>
-        <p class="fine" id="auto-note"></p></div>
+        <p class="fine" id="auto-note"></p>
+        <h3>Steer note</h3>
+        <div class="row"><input id="auto-steer" placeholder="A loose hint Auto keeps in mind, e.g. more cozy interiors tonight" maxlength="300" /><button id="auto-steer-set">Save</button><button id="auto-steer-clear">Clear</button></div>
+        <p class="fine">Auto treats this as a nudge, not an order. It applies within ~30 s, no redeploy.</p></div>
+      <div class="card-a"><h2>What Auto decided</h2><p class="fine">Each time Auto picks a direction: a detour, a drift, or a journey it invented.</p><table id="decisions"></table></div>
       <div class="card-a"><h2>Mood rotation</h2><div id="moods" class="moods"></div><div class="row"><button id="moods-save" class="pri">Save weights</button><button id="moods-reset">Reset</button></div></div>
     </section>
   </main>

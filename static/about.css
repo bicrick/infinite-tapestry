@@ -1,18 +1,12 @@
 :root { --bg:#0b0b0c; --fg:#f2f1ee; --muted:#8f8c87; --faint:rgba(255,255,255,.08); --card:#141415; --line:rgba(255,255,255,.09);
   --glass:rgba(18,18,20,.55); --ease:cubic-bezier(.2,.7,.2,1); color-scheme: dark; }
-@media (prefers-color-scheme: light) { :root { --bg:#fbfaf8; --fg:#141414; --muted:#6d6a66; --faint:rgba(0,0,0,.08); --card:#fff; --line:rgba(0,0,0,.09); } .nav .mark, .foot .mark { filter: invert(1); } }
+@media (prefers-color-scheme: light) { :root { --bg:#fbfaf8; --fg:#141414; --muted:#6d6a66; --faint:rgba(0,0,0,.08); --card:#fff; --line:rgba(0,0,0,.09); } }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body { margin:0; background:var(--bg); color:var(--fg); font-family:"Inter var",Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   font-feature-settings:"cv11","ss01"; -webkit-font-smoothing:antialiased; font-size:16px; line-height:1.55; letter-spacing:-.011em; }
 a { color:inherit; }
 .wrap { width:min(1120px, calc(100vw - 48px)); margin:0 auto; }
-.nav { position:fixed; top:0; left:0; right:0; z-index:10; display:flex; justify-content:space-between; align-items:center; padding:20px 28px;
-  background:linear-gradient(var(--bg) 40%, transparent); }
-.nav a { text-decoration:none; font-size:14px; font-weight:500; display:flex; gap:9px; align-items:center; }
-.nav .mark { width:22px; height:13px; }
-.nav .links { display:flex; gap:22px; color:var(--muted); font-weight:400; }
-.nav .links a { font-weight:400; color:var(--muted); } .nav .links a:hover { color:var(--fg); }
 .eyebrow { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:0 0 18px; }
 h1 { font-weight:500; font-size:clamp(44px, 7.4vw, 92px); line-height:1; letter-spacing:-.045em; margin:0; }
 h2 { font-weight:500; font-size:clamp(28px, 3.6vw, 44px); line-height:1.08; letter-spacing:-.035em; margin:0 0 14px; }
@@ -63,18 +57,16 @@ section { padding:120px 0; }
 .stat { background:var(--bg); padding:18px; } .stat b { display:block; font-size:26px; font-weight:500; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
 .stat span { font-size:12.5px; color:var(--muted); }
 .small { font-size:12.5px; color:var(--muted); }
-.foot { padding:60px 0 50px; border-top:1px solid var(--line); display:flex; justify-content:space-between; gap:20px; color:var(--muted); font-size:13px; flex-wrap:wrap; }
-.foot a { text-decoration:none; color:var(--muted); margin-left:18px; } .foot a:hover { color:var(--fg); }
 .reveal { opacity:0; transform:translateY(14px); transition:opacity 1.1s var(--ease), transform 1.1s var(--ease); }
 .reveal.in { opacity:1; transform:none; }
 @media (max-width: 860px) {
   .wrap { width:calc(100vw - 40px); }
-  .nav { padding:16px 20px; } .nav .links a.hide-m { display:none; }
+
   section { padding:84px 0; } .hero { padding:118px 0 0; }
   .steps, .alive,   .feats { grid-template-columns:1fr; gap:40px; } .feat, .feat.wide { grid-column:auto; }
   .hero .wrap { padding-bottom:52px; } .band .cap { display:none; } .band .live { left:20px; }
   .stats { grid-template-columns:1fr 1fr 1fr; } .stat { padding:14px 12px; } .stat b { font-size:20px; }
-  .foot a { margin:0 18px 0 0; }
+
 }
 
 .ui-over.top { inset:14px 14px auto 14px; }
@@ -93,17 +85,7 @@ section { padding:120px 0; }
 .cal .g i.on { background:#fff; color:#000; border-radius:50%; opacity:1; }
 .share { display:grid; grid-template-columns:1.2fr 1fr; gap:56px; align-items:center; } .share .shot { aspect-ratio:16/10; }
 @media (max-width: 860px) { .share { grid-template-columns:1fr; gap:28px; } .drawer { width:56%; } }
-.theme-toggle { display:inline-flex; gap:2px; padding:2px; border-radius:999px; box-shadow:inset 0 0 0 1px var(--line); }
-.theme-toggle button { all:unset; cursor:pointer; padding:4px 10px; border-radius:999px; font-size:12px; color:var(--muted); }
-.theme-toggle button[aria-pressed="true"] { background:var(--faint); color:var(--fg); }
 
-/* Account in the nav (same session as the live site) */
-.nav .acct { display:contents; } .nav .acct [hidden] { display:none !important; }
-html.signed #acct-in { display:none; }
-.nav .acct button { all:unset; cursor:pointer; color:var(--muted); font-size:14px; } .nav .acct button:hover { color:var(--fg); }
-.nav .acct .me { color:var(--fg) !important; }
-.nav .live-l { color:var(--fg) !important; }
-@media (max-width: 860px) { .nav .links { gap:16px; } #acct-out { display:none !important; } }
 
 /* Tapestry lights: soft colour glow spilling above the band, a few twinkling motes, a slow sheen. Opacity/transform only. */
 .band { overflow:hidden; overflow:clip visible; }

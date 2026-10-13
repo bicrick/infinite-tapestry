@@ -1,5 +1,7 @@
 // Theme override: localStorage "it:theme" = "light" | "dark" | unset (follow OS). Switches live, no reload.
 (() => {
+  // Signed-in hint before paint (shared header shows the account slot without a flash).
+  try { const k = Object.keys(localStorage).find((x) => /^sb-.*-auth-token$/.test(x)), j = k && JSON.parse(localStorage.getItem(k)); if (j && j.access_token && j.expires_at * 1000 > Date.now()) document.documentElement.classList.add("signed"); } catch (_) {}
   const Q = /prefers-color-scheme:\s*light/, Qd = /prefers-color-scheme:\s*dark/;
   const mm = window.matchMedia.bind(window), os = mm("(prefers-color-scheme: light)");
   let pref = localStorage.getItem("it:theme"); if (pref !== "light" && pref !== "dark") pref = "";

@@ -8,15 +8,19 @@
   <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
   <link rel="stylesheet" href="/style.css" />
+  <!--chrome:head-->
   <style>
-    #gate { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
-    #gate img { width: 50px; } #gate button { font: inherit; font-size: 14px; padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line); background: rgba(var(--ink),.06); color: var(--fg); cursor: pointer; }
+    #gate { min-height: calc(100vh - 260px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+    #gate img { width: 44px; opacity:.9 } #gate h1 { margin:0; font-size:24px; font-weight:500; letter-spacing:-.02em } #gate p { margin:-8px 0 0 } #gate button { font: inherit; font-size: 14px; padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line); background: rgba(var(--ink),.06); color: var(--fg); cursor: pointer; }
   </style>
   <script src="/theme.js"></script>
 </head>
-<body class="page">
-  <main id="gate" hidden><img src="/brand/mark.svg" alt="" /><button id="g" type="button">Sign in with Google</button></main>
+<body class="page gate-page">
+  <!--chrome:header-->
+  <main id="gate" hidden><img src="/brand/mark-plain.svg" alt="" /><h1>Admin</h1><p class="fine">Sign in with the owner account to continue.</p><button id="g" type="button">Sign in with Google</button></main>
+  <!--chrome:footer-->
   <script src="/config.js"></script>
   <script type="module" src="/gate.js"></script>
+<!--chrome:scripts-->
 </body>
 </html>

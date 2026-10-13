@@ -3,37 +3,47 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Time machine · Infinite Tapestry</title>
-  <meta name="description" content="Everything the tapestry has ever painted, day by day." />
+  <title>Time Machine · Infinite Tapestry</title>
+  <meta name="description" content="Everything the Infinite Tapestry has ever painted, day by day. Pick a day and replay any hour." />
+  <link rel="canonical" href="https://infinitetapestry.app/time-machine" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Infinite Tapestry" />
+  <meta property="og:site_name" content="Infinite Tapestry" />
+  <meta property="og:url" content="https://infinitetapestry.app/time-machine" />
+  <meta property="og:title" content="Time Machine · Infinite Tapestry" />
   <meta property="og:description" content="Everything it has ever painted, day by day." />
   <meta property="og:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/about.css" />
   <link rel="stylesheet" href="/time-machine.css" />
+  <!--chrome:head-->
   <script src="/theme.js"></script>
+  <script src="/config.js"></script>
 </head>
 <body class="tm">
-  <nav class="nav">
-    <a href="/about" aria-label="About Infinite Tapestry"><img class="mark" src="/brand/mark-plain.svg" alt="" />Time machine</a>
-    <div class="links"><a href="/">Live →</a></div>
-  </nav>
+  <!--chrome:header-->
   <main class="tm-main">
-    <section class="cal" aria-label="Calendar">
-      <div class="cal-h"><button id="m-prev" class="cal-nav" type="button" aria-label="Previous month">‹</button><h2 id="m-title">—</h2><button id="m-next" class="cal-nav" type="button" aria-label="Next month">›</button></div>
-      <div class="cal-dow" id="dow"></div>
-      <div class="cal-grid" id="grid"><p class="small">Loading history…</p></div>
-    </section>
-    <section class="day" id="day" aria-live="polite">
-      <div class="day-h"><h3 id="d-title"></h3><span class="small" id="d-meta"></span></div>
-      <div class="chips" id="d-chips"></div>
-      <ol class="hours" id="d-hours"></ol>
-    </section>
+    <header class="tm-head">
+      <p class="eyebrow">Time Machine</p>
+      <h1>Everything it has painted, day by day.</h1>
+      <p class="tm-lede">Pick a day, then any hour to replay it in the live viewer.</p>
+    </header>
+    <div class="tm-grid">
+      <section class="cal" aria-label="Calendar">
+        <div class="cal-h"><button id="m-prev" class="cal-nav" type="button" aria-label="Previous month">‹</button><h2 id="m-title">&nbsp;</h2><button id="m-next" class="cal-nav" type="button" aria-label="Next month">›</button></div>
+        <div class="cal-dow" id="dow"></div>
+        <div class="cal-grid" id="grid"></div>
+        <p class="cal-key"><span><i class="k-on"></i>Painted</span><span><i class="k-today"></i>Today</span></p>
+      </section>
+      <section class="day" id="day" aria-live="polite">
+        <div class="day-h"><h3 id="d-title">&nbsp;</h3><span class="small" id="d-meta"></span></div>
+        <ol class="hours" id="d-hours"></ol>
+      </section>
+    </div>
   </main>
-  <footer class="wrap foot"><span class="theme-toggle" data-theme-toggle></span><span><a href="/about">About</a><a href="/">Live</a></span></footer>
+  <!--chrome:footer-->
   <script src="/time-machine.js" defer></script>
+  <!--chrome:scripts-->
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>

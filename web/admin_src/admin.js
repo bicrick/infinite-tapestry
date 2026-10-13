@@ -49,6 +49,8 @@ async function overview() {
   renderGpu(g);
   const A = d.auto || {}, live = A.theme && A.theme_until && new Date(A.theme_until) > new Date();
   $("auto-paused").checked = !!A.paused;
+  if (document.activeElement !== $("auto-steer")) $("auto-steer").value = A.steer || "";
+  $("decisions").innerHTML = (d.decisions || []).map((x) => `<tr><td class="m">${new Date(x.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</td><td class="m">${esc(x.move)}${x.total ? ` ${x.step || "?"}/${x.total}` : ""}</td><td><b>${esc(x.journey || "")}</b> ${esc(x.reason || "")}<br><span class="fine">${esc((x.titles || []).join(" · "))}</span></td></tr>`).join("") || '<tr><td class="fine">No decisions logged yet.</td></tr>';
   $("auto-note").textContent = live ? `Theme "${A.theme}" until ${new Date(A.theme_until).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "No temporary theme.";
   const W = A.mood_weights || {};
   $("moods").innerHTML = (d.moods || []).map((m) => `<label>${esc(m.key)} <input type="number" min="0" max="50" data-mood="${esc(m.key)}" value="${W[m.key] ?? m.weight}" /></label>`).join("");
@@ -95,6 +97,8 @@ document.addEventListener("click", async (e) => {
       if (typed !== sha.slice(0, 7)) return;
       await call("rollback", { sha, confirm: sha }); overview();
     } else if (t.id === "auto-theme-set") { await call("auto_set", { theme: $("auto-theme").value, minutes: +$("auto-mins").value }); $("auto-theme").value = ""; overview(); }
+    else if (t.id === "auto-steer-set") { await call("auto_set", { steer: $("auto-steer").value }); overview(); }
+    else if (t.id === "auto-steer-clear") { $("auto-steer").value = ""; await call("auto_set", { steer: "" }); overview(); }
     else if (t.id === "auto-theme-clear") { await call("auto_set", { theme: "" }); overview(); }
     else if (t.id === "moods-save") { const w = {}; document.querySelectorAll("[data-mood]").forEach((i) => (w[i.dataset.mood] = Number(i.value))); await call("auto_set", { mood_weights: w }); overview(); }
     else if (t.id === "moods-reset") { await call("auto_set", { mood_weights: {} }); overview(); }
@@ -143,7 +147,7 @@ function storyCard(st, { saved = false } = {}) {
 async function stories() {
   LIB = await call("stories");
   const now = LIB.playlist.find((p) => p.status === "playing");
-  $("story-now").textContent = now ? `Playing: ${storyName(now.story_id)} (scene ${now.scene_index + 1})` : LIB.playlist.length ? "Next story starts within ~30 s." : "Playlist empty: Auto uses the mood rotation.";
+  $("story-now").textContent = now ? `Playing: ${storyName(now.story_id)} (scene ${now.scene_index + 1})` : LIB.playlist.length ? "Next story starts within ~30 s." : "Nothing queued: Auto is steering on its own.";
   $("playlist").innerHTML = LIB.playlist.map((p, i) => `<tr><td class="m">${i + 1}</td><td>${esc(storyName(p.story_id))}</td><td class="m">${p.status}</td>
     <td><button data-pm="${p.id}" data-dir="up">↑</button><button data-pm="${p.id}" data-dir="down">↓</button><button class="danger" data-pr="${p.id}">remove</button></td></tr>`).join("") || '<tr><td class="m">Nothing queued.</td></tr>';
   $("library").innerHTML = LIB.stories.map((s) => `<div class="lib"><b>${esc(s.title)}</b><span>${esc(s.theme)} · ${s.scenes.length} scenes</span>

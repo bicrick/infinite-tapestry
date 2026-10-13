@@ -477,8 +477,8 @@ button.google { display: flex; align-items: center; justify-content: center; gap
 button.link { background: none; border: 0; padding: 8px 0; color: var(--muted); cursor: pointer; font-size: 13px; }
 button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { opacity: .5; cursor: default; }
 .auth-msg { min-height: 1em; margin: 10px 0 0; color: rgba(255,200,170,.9); }
-.confirm-page { display: grid; place-items: center; min-height: 100vh; }
-.confirm { width: min(360px, 90vw); text-align: center; padding: 40px 0; }
+.confirm-page { display: block; min-height: 100vh; }
+.confirm { width: min(360px, 90vw); text-align: center; padding: 40px 0; margin: 0 auto; min-height: calc(100vh - 300px); display: flex; flex-direction: column; justify-content: center; }
 .confirm-mark { width: 40px; opacity: .9; margin-bottom: 18px; }
 .confirm h1 { font-size: 24px; font-weight: 500; letter-spacing: -.02em; margin: 0 0 10px; }
 .confirm .vibe { width: 100%; margin: 14px 0 10px; }

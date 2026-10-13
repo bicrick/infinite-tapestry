@@ -20,15 +20,12 @@
   <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
   <link rel="stylesheet" href="/about.css" />
+  <!--chrome:head-->
   <script src="/theme.js"></script>
   <script src="/config.js"></script>
-  <script>try{var k=Object.keys(localStorage).find(function(x){return /^sb-.*-auth-token$/.test(x)}),j=k&&JSON.parse(localStorage.getItem(k));if(j&&j.access_token&&j.expires_at*1000>Date.now())document.documentElement.classList.add("signed")}catch(e){}</script>
 </head>
 <body>
-  <nav class="nav">
-    <a href="/" aria-label="Infinite Tapestry, live"><img class="mark" src="/brand/mark-plain.svg" alt="" />Infinite Tapestry</a>
-    <div class="links"><a class="hide-m" href="#how">How it works</a><a class="hide-m" href="/time-machine">Time Machine</a><span class="acct" id="acct"><a id="acct-in" href="/?signin=1">Sign in</a><a id="acct-me" class="me" href="/" hidden></a><button id="acct-out" type="button" hidden>Sign out</button></span><a class="live-l" href="/">Live →</a></div>
-  </nav>
+  <!--chrome:header overlay-->
 
   <header class="hero">
     <div class="wrap">
@@ -83,8 +80,8 @@
         <div class="feats">
           <div class="feat reveal">
             <div class="shot"><img src="/about-img/dolomites.webp" alt="Alpenglow on mountain spires" loading="lazy" decoding="async" />
-              <div class="ui-over"><div class="glass story"><span class="small-l">Story · Ancient Egypt</span><div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div></div></div></div>
-            <h3>Story mode</h3><p>When the queue is quiet, Auto paints journeys of about seven scenes, from the outside in.</p>
+              <div class="ui-over"><div class="glass story"><span class="small-l">Journey · Giza to the tomb</span><div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div></div></div></div>
+            <h3>Auto steers</h3><p>Between ideas, Auto steers on its own: wandering, detouring, sometimes setting off on a journey from the outside in.</p>
           </div>
           <div class="feat reveal">
             <div class="shot"><img src="/about-img/bookshop.webp" alt="A lamplit bookshop" loading="lazy" decoding="async" />
@@ -142,13 +139,9 @@
     </section>
   </main>
 
-  <footer class="wrap foot">
-    <span>Infinite Tapestry</span>
-    <span class="theme-toggle" data-theme-toggle></span>
-    <span><a href="/time-machine">Time Machine</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/">Live</a></span>
-  </footer>
+  <!--chrome:footer-->
   <script src="/about.js" defer></script>
-  <script type="module" src="/about-auth.js"></script>
+  <!--chrome:scripts-->
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>

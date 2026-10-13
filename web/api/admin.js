@@ -104,18 +104,19 @@ module.exports = async (req, res) => {
       return res.status(200).json({ ideas, shadow, sessions, bans, limits: limits[0] });
     }
     if (a === "overview") {
-      const [g, cfg, usage, fuel, v, rel, files, deploys, reports, ideas, sanctions] = await Promise.all([
+      const [g, cfg, usage, fuel, v, rel, files, deploys, reports, ideas, sanctions, decisions] = await Promise.all([
         gpu(), rest("GET", "auto_config?id=eq.1"), rest("POST", "rpc/admin_usage", {}), rest("GET", "fuel_status?select=balance_cents"),
         viewers(), latestRelease(), storageList("worker/"),
         rest("GET", "deploy_log?order=created_at.desc&limit=20"),
         rest("GET", "reports?order=created_at.desc&limit=50&status=eq.open&select=id,idea_id,strip_a,strip_b,reason,created_at,ideas(body,handle,status,user_id,guest_id)"),
         rest("GET", "ideas?status=in.(pending,playing)&order=created_at.desc&limit=100&select=id,handle,body,status,votes,created_at,user_id,guest_id"),
         rest("GET", "sanctions?or=(until.is.null,until.gt.now())&order=created_at.desc&limit=50&select=id,user_id,kind,until,reason,created_at"),
+        rest("GET", "auto_decisions?order=at.desc&limit=25").catch(() => []),
       ]);
       const releases = (files || []).filter((f) => /^[0-9a-f]{40}\.tgz$/.test(f.name)).map((f) => ({ sha: f.name.slice(0, 40), at: f.created_at, size: f.metadata && f.metadata.size }));
       const { MOODS } = require("../lib/moods.json");
       return res.status(200).json({ gpu: g, auto: cfg[0], moods: MOODS, usage, fuel_cents: fuel[0] ? Number(fuel[0].balance_cents) : null, viewers: v,
-        release: rel, releases, deploys, reports, ideas, sanctions, vercel_url: "https://vercel.com/bicricks-projects/infinite-tapestry-app/deployments" });
+        release: rel, releases, deploys, reports, ideas, sanctions, decisions, vercel_url: "https://vercel.com/bicricks-projects/infinite-tapestry-app/deployments" });
     }
     if (a === "gpu_set") {   // {desired: on|off|auto, dry?}: writes the desired state; the 5-minute controller acts on it
       if (!DESIRED.has(body.desired)) return res.status(400).json({ error: "bad" });
@@ -132,6 +133,7 @@ module.exports = async (req, res) => {
         patch.theme = t || null;
         patch.theme_until = t ? new Date(Date.now() + Math.max(5, Math.min(1440, Number(body.minutes) || 60)) * 60000).toISOString() : null;
       }
+      if ("steer" in body) patch.steer = String(body.steer || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 300);
       if (body.mood_weights && typeof body.mood_weights === "object") {
         const w = {}; for (const [k, v] of Object.entries(body.mood_weights)) if (k.length <= 40) w[k] = Math.max(0, Math.min(50, Number(v) || 0));
         patch.mood_weights = w;
