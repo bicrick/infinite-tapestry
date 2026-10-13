@@ -492,8 +492,10 @@ button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { op
     display: flex; flex-direction: column; align-items: center; gap: 9px; }
   .amb-mark { width: 26px; opacity: .55; }
   #amb-status { font-size: 11px; letter-spacing: .06em; color: rgba(var(--ink),.36); transition: opacity .35s; }
+  /* pointer-events:auto so hover/click work; parent .amb stays none so the rest of the layer is hit-through */
   .amb-title { position: absolute; left: 24px; right: 24px; top: calc(var(--band-top, 30vh) - 34px); text-align: center;
-    font-size: 13px; letter-spacing: -.005em; color: rgba(var(--ink),.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .35s; }
+    font-size: 13px; letter-spacing: -.005em; color: rgba(var(--ink),.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    transition: opacity .35s; pointer-events: auto; cursor: default; }
   /* the ambient layer replaces the header mark/status and the dock caption */
   /* corners: mark top-left; "live · N", fuel, Sign in top-right. Mark + status stay visible when idle. */
   .top { justify-content: space-between; padding-top: calc(env(safe-area-inset-top) + 8px); }
@@ -1150,6 +1152,12 @@ body.idle .top-fs, body.ambient .top-fs { opacity: 0 !important; pointer-events:
 .q-more:hover { color: var(--fg); }
 #idea-list .item .n, #queue-more .item .n { cursor: default; }
 [data-tip] { position: relative; }
+/* overflow:hidden on .amb-title / queue .t clips ::after tips — open the box while the tip is shown */
+.amb-title[data-tip]:hover, .amb-title[data-tip].tip-on,
+#queue-list .item .t[data-tip]:hover, #queue-more .item .t[data-tip]:hover, #idea-list .item .t[data-tip]:hover,
+#queue-list .item .t[data-tip].tip-on, #queue-more .item .t[data-tip].tip-on, #idea-list .item .t[data-tip].tip-on {
+  overflow: visible;
+}
 @media (hover: hover) {
   [data-tip]:hover::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 6px); white-space: nowrap; pointer-events: none;
     background: var(--glass-strong, rgba(20,20,20,.85)); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px;
@@ -1159,5 +1167,10 @@ body.idle .top-fs, body.ambient .top-fs { opacity: 0 !important; pointer-events:
   background: var(--glass-strong, rgba(20,20,20,.85)); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-size: 11px; z-index: 5; }
 #now-title[data-href], #amb-title[data-href] { cursor: pointer; }
 #amb-title[data-tip]:hover::after, #amb-title[data-tip].tip-on::after {
-  left: 50%; transform: translateX(-50%); bottom: calc(100% + 8px);
+  left: 50%; transform: translateX(-50%); bottom: calc(100% + 8px); z-index: 6;
+}
+/* Queue tips sit below the row so a scrollable .list does not clip them upward */
+#queue-list .item .t[data-tip]:hover::after, #queue-more .item .t[data-tip]:hover::after, #idea-list .item .t[data-tip]:hover::after,
+#queue-list .item .t[data-tip].tip-on::after, #queue-more .item .t[data-tip].tip-on::after, #idea-list .item .t[data-tip].tip-on::after {
+  bottom: auto; top: calc(100% + 4px); left: 0; transform: none; z-index: 6;
 }
