@@ -909,7 +909,7 @@ body.composing:not(.away) .dock .cmd-terms { max-height: none !important; line-h
 body.idle .top.ui, body.ambient .top.ui { opacity: 1 !important; pointer-events: none; }
 body.idle .top .brand-link, body.idle .top .snd-btn.on { pointer-events: auto; }
 body.idle .top .top-right, body.idle #account-btn, body.idle .top .fuel-chip, body.idle .top .fs-btn,
-body.idle .hwheel, body.idle .dock, body.idle #live-btn, body.idle .amb-title, body.idle .amb-time, body.idle .nudge-line,
+body.idle .hwheel, body.idle .dock, body.idle #live-btn, body.idle .amb-time, body.idle .nudge-line,
 body.idle .snd-btn:not(.on) { opacity: 0 !important; pointer-events: none !important; translate: 0 4px; }
 body.idle .dock { translate: 0 calc(4px - var(--centre, 0px)); }
 .top .top-right, #account-btn, .hwheel, .amb-title, .amb-time, .snd-btn, .nudge-line { transition: opacity .5s var(--ease), translate .5s var(--ease); }
@@ -919,3 +919,4 @@ body:not(.idle) .dock { transition-delay: .18s; } body:not(.idle) .hwheel { tran
 .snd-btn.on { color: var(--muted); opacity: .55; }
 .snd-btn.on:hover { opacity: .85; }
 @media (max-width: 700px) { .nudge-line { top: calc(54px + env(safe-area-inset-top)); } }
+body.idle .amb-title, body.ambient .amb-title { opacity: 1 !important; translate: none; }
