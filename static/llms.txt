@@ -1,0 +1,16 @@
+# Infinite Tapestry
+
+> Infinite Tapestry is a live AI art stream: one endless AI painting that scrolls past 24/7 and never repeats. Anyone watching can type an idea and steer what gets painted next. It doubles as a free AI screensaver and ambient art display.
+
+Free to watch in any modern browser, no account needed. Guests can suggest ideas; signing in (Google or email) adds a profile. When nobody is steering, an AI director called "Auto" picks where the painting drifts.
+
+## Pages
+- [Live stream](https://infinitetapestry.app/): the painting, live. Type an idea to steer it. Go fullscreen for screensaver mode.
+- [About / how it works](https://infinitetapestry.app/about): what it is, how ideas become paint, and FAQs.
+- [Time Machine](https://infinitetapestry.app/time-machine): every day the tapestry has painted, replayable by hour.
+- [Scenes](https://infinitetapestry.app/sitemap.xml): each painted idea has a permanent page at /s/<id> with its images and date.
+
+## Policies
+- [Privacy](https://infinitetapestry.app/privacy)
+- [Terms](https://infinitetapestry.app/terms)
+- Contact: support@infinitetapestry.app

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <style id="first-paint">html,body{background:#000}@media (prefers-color-scheme: light){html,body{background:#fff}}</style>
+  <style id="first-paint">html,body{background:#000}@media (prefers-color-scheme: light){html,body{background:#fff}}.seo-intro{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.noscript-msg{position:fixed;left:0;right:0;bottom:24px;text-align:center;color:#ccc;font:14px system-ui}.noscript-msg a{color:#fff}</style>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content" />
   <title>Infinite Tapestry · live AI art stream, an endless AI painting</title>
@@ -18,7 +18,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Tapestry" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Infinite Tapestry · an endless painting, live" />
+  <meta property="og:title" content="Infinite Tapestry · live AI art stream, an endless AI painting" />
   <meta property="og:description" content="An endless painting, steered by everyone watching. Suggest what comes next and watch it paint itself in, live." />
   <meta property="og:site_name" content="Infinite Tapestry" />
   <meta property="og:image" content="https://infinite-tapestry.vercel.app/api/og?card=home" />
@@ -26,7 +26,10 @@
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Infinite Tapestry" />
+  <meta name="twitter:title" content="Infinite Tapestry · live AI art stream, an endless AI painting" />
+  <meta name="twitter:image:alt" content="A stretch of the Infinite Tapestry, an endless AI painting" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://infinite-tapestry.vercel.app/#website","name":"Infinite Tapestry","alternateName":["Infinite Tapestry live AI art stream","Infinite Tapestry AI screensaver"],"url":"https://infinite-tapestry.vercel.app/","description":"An endless AI painting, streamed live 24/7 and steered by everyone watching.","publisher":{"@id":"https://infinite-tapestry.vercel.app/#org"},"inLanguage":"en"},{"@type":"Organization","@id":"https://infinite-tapestry.vercel.app/#org","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/","logo":"https://infinite-tapestry.vercel.app/brand/icon-512.png","email":"support@infinitetapestry.app"}]}</script>
   <meta name="twitter:description" content="An endless painting, steered by everyone watching. Suggest what comes next and watch it paint itself in, live." />
   <meta name="twitter:image" content="https://infinite-tapestry.vercel.app/api/og?card=home" />
   <link rel="preconnect" href="https://rsms.me/" />
@@ -36,11 +39,17 @@
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
 </head>
 <body class="intro">
+  <section class="seo-intro" aria-labelledby="seo-h1">
+    <h1 id="seo-h1">Infinite Tapestry: a live AI art stream and endless AI painting</h1>
+    <p>Infinite Tapestry is an endless AI painting that scrolls past live, 24 hours a day. It never repeats and never ends: each new stretch of the scroll is painted in real time, and anyone watching can type an idea to steer where it goes next. It is infinite AI art you can steer, together with everyone else watching.</p>
+    <p>Leave it running fullscreen as a free AI screensaver or ambient art for a TV or second monitor, replay any moment in the <a href="/time-machine">Time Machine</a>, or read <a href="/about">how Infinite Tapestry works</a>.</p>
+  </section>
+  <noscript><p class="noscript-msg">Infinite Tapestry needs JavaScript to stream the live painting. <a href="/about">Learn how it works</a>.</p></noscript>
   <canvas id="view"></canvas>
   <div class="veil"></div>
 
   <header class="top ui">
-    <div class="brand"><a class="brand-link" href="/about" aria-label="About Infinite Tapestry"><img class="brand-mark" src="brand/mark-plain.svg" alt="" /></a>Infinite Tapestry<span id="top-clock" class="top-clock" aria-label="Local time"></span><button id="snd-btn" class="snd-btn" type="button" aria-label="Ambient sound" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6v4h2.5l3.5 3V3L5 6z"/><path class="w1" d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8"/><path class="w2" d="M12.6 3.8a6 6 0 0 1 0 8.4"/><path class="x" d="M11 6l3.5 4M14.5 6L11 10"/></svg></button></div>
+    <div class="brand"><a class="brand-link" href="/about" aria-label="About Infinite Tapestry"><img class="brand-mark" src="brand/mark-plain.svg" alt="" width="22" height="13" /></a>Infinite Tapestry<span id="top-clock" class="top-clock" aria-label="Local time"></span><button id="snd-btn" class="snd-btn" type="button" aria-label="Ambient sound" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6v4h2.5l3.5 3V3L5 6z"/><path class="w1" d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8"/><path class="w2" d="M12.6 3.8a6 6 0 0 1 0 8.4"/><path class="x" d="M11 6l3.5 4M14.5 6L11 10"/></svg></button></div>
     <div class="top-right">
       <button id="fs-btn" class="fs-btn top-fs" type="button" aria-label="Full screen" title="Full screen (Esc exits)"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
       <div id="status" class="status"><span class="dot"></span><span id="status-text">connecting</span><span id="status-mini" class="status-mini"></span></div>

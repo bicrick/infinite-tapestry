@@ -3,7 +3,7 @@
 (() => {
   const V = () => window.TapestryView || {};
   const wrap = document.createElement("div");
-  wrap.id = "hwheel"; wrap.className = "hwheel"; wrap.setAttribute("role", "slider"); wrap.setAttribute("aria-label", "Travel through time");
+  wrap.id = "hwheel"; wrap.className = "hwheel"; wrap.setAttribute("role", "slider"); wrap.setAttribute("aria-label", "Travel through time"); wrap.setAttribute("aria-valuemin", "0"); wrap.setAttribute("aria-valuemax", "100"); wrap.setAttribute("aria-valuenow", "100");
   const cv = document.createElement("canvas"); wrap.appendChild(cv);
   document.body.appendChild(wrap);
   const ctx = cv.getContext("2d");

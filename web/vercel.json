@@ -94,6 +94,46 @@
      "value": "public, max-age=31536000, immutable"
     }
    ]
+  },
+  {
+   "source": "/admin(.*)",
+   "headers": [
+    {
+     "key": "X-Robots-Tag",
+     "value": "noindex, nofollow"
+    }
+   ]
+  },
+  {
+   "source": "/auth/(.*)",
+   "headers": [
+    {
+     "key": "X-Robots-Tag",
+     "value": "noindex"
+    }
+   ]
+  },
+  {
+   "source": "/confirm.html",
+   "headers": [
+    {
+     "key": "X-Robots-Tag",
+     "value": "noindex"
+    }
+   ]
+  },
+  {
+   "source": "/llms.txt",
+   "headers": [
+    {
+     "key": "Content-Type",
+     "value": "text/plain; charset=utf-8"
+    },
+    {
+     "key": "Cache-Control",
+     "value": "public, max-age=3600"
+    }
+   ]
   }
  ],
  "rewrites": [
@@ -147,6 +187,14 @@
   {
    "source": "/sitemap.xml",
    "destination": "/api/sitemap"
+  },
+  {
+   "source": "/sitemap-pages.xml",
+   "destination": "/api/sitemap?kind=pages"
+  },
+  {
+   "source": "/sitemap-scenes-:n.xml",
+   "destination": "/api/sitemap?kind=scenes&n=:n"
   },
   {
    "source": "/robots.txt",
