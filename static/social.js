@@ -104,7 +104,6 @@ async function boot() {
   // Wire the drawer tabs before any auth await: a stalled session restore must never leave the UI dead.
   document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => { try { openTab(b.dataset.tab); } catch (e) { console.warn("tab", e); } }));
   $("fuel-chip").classList.remove("hidden");
-  $("chat").classList.remove("hidden");
   $("cmd-input").placeholder = innerWidth < 480 ? "Where next?" : "Suggest where the tapestry goes next…";
   let google = !!CFG.google;
   A.googleEnabled().then((on) => { google = on; $("auth-google").classList.toggle("hidden", !!S.session); });
@@ -126,7 +125,7 @@ async function boot() {
     document.body.classList.toggle("is-admin", S.isAdmin());
     document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !S.isAdmin()));
     $("account-btn").textContent = S.profile ? (S.profile.handle ? "@" + S.profile.handle : "Pick a handle") : "Sign in";
-    $("chat-input").placeholder = "Say something…";
+    if (S.chatAuth) S.chatAuth();
     if (S.token()) W().send({ type: "auth", token: S.token() });
     loadVotes();
   }
@@ -495,51 +494,133 @@ async function boot() {
   setInterval(refreshIdeas, 60000);
 
   // ---------- chat ----------
-  const chatList = $("chat-list");
+  // Home-page live chat: just people talking. Realtime rides the existing Supabase channel (no polling).
+  // Collapsed: the newest few lines float over the art and fade after ~20 s. Open: scrollable, with the input.
+  // Signed-in users post through /api/chat (moderation, 200 chars, no links, slow mode); guests read.
+  const chatEl = $("chat"), chatList = $("chat-list"), chatInput = $("chat-input"), chatNote = $("chat-note"), chatTgl = $("chat-toggle");
   const seen = new Set();
   const hideHandle = (h) => { const x = String(h || "").replace(/^@/, "").toLowerCase(); return !x || x === "bicrick" || x === "claude"; };
-  function addChat(m) {
+  const FADE_MS = 20000, KEEP = 60;
+  let chatOn = (() => { try { return localStorage.getItem("it:chat") !== "off"; } catch (_) { return true; } })();
+  let chatSettings = { enabled: true, slow: 5 }, slowUntil = 0, slowTimer = 0;
+  const applyChatOn = () => {
+    document.body.classList.toggle("chat-off", !chatOn);
+    chatTgl.setAttribute("aria-pressed", chatOn ? "true" : "false");
+    chatTgl.title = chatOn ? "Hide chat (C)" : "Show chat (C)";
+    if (!chatOn) setChatOpen(false);
+  };
+  function setChatOpen(on) {
+    if (on && (!chatOn || !chatSettings.enabled)) return;
+    document.body.classList.toggle("chat-open", !!on);
+    if (on) { chatList.scrollTop = chatList.scrollHeight; if (canChat() && matchMedia("(hover: hover)").matches) setTimeout(() => chatInput.focus({ preventScroll: true }), 60); }
+    else if (document.activeElement === chatInput) chatInput.blur();
+  }
+  window.__chatOpen = () => setChatOpen(true); window.__chatClose = () => setChatOpen(false);
+  const canChat = () => !!(S.session && S.profile && S.profile.handle);
+  S.chatAuth = () => {
+    const ok = canChat();
+    $("chat-form").classList.toggle("hidden", !ok);
+    $("chat-signin").classList.toggle("hidden", ok);
+    $("chat-signin").textContent = S.session ? "Pick a name to chat" : "Sign in to chat";
+  };
+  S.chatAuth();
+  $("chat-signin").addEventListener("click", (e) => { e.stopPropagation(); openAuth(); });
+  chatTgl.classList.remove("hidden");
+  chatTgl.addEventListener("click", () => { chatOn = !chatOn; try { localStorage.setItem("it:chat", chatOn ? "on" : "off"); } catch (_) {} applyChatOn(); });
+  window.addEventListener("keydown", (e) => {
+    if (/INPUT|TEXTAREA/.test(document.activeElement.tagName) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "c" || e.key === "C") chatTgl.click();
+    if (e.key === "Escape" && document.body.classList.contains("chat-open")) setChatOpen(false);
+  });
+  // Collapsed overlay: click (or tap the mobile strip) opens; outside click closes.
+  chatEl.addEventListener("click", (e) => { if (!document.body.classList.contains("chat-open") && !e.target.closest(".mod")) setChatOpen(true); });
+  $("chat-close").addEventListener("click", (e) => { e.stopPropagation(); setChatOpen(false); });
+  document.addEventListener("pointerdown", (e) => {
+    if (document.body.classList.contains("chat-open") && !chatEl.contains(e.target) && !e.target.closest("#chat-toggle, #auth-pop, .sheet")) setChatOpen(false);
+  }, true);
+  // Mobile strip sits just above the dock: track its top edge (layout only on resize, never per frame).
+  const dock = document.querySelector(".dock");
+  let dockTop = -1;
+  const placeStrip = () => {
+    const c = document.body.classList;   // measure only at rest (not mid intro / idle / compose motion)
+    if (!dock || document.hidden || c.contains("composing") || c.contains("idle") || c.contains("intro") || !c.contains("settled")) return;
+    const v = Math.round(innerHeight - dock.getBoundingClientRect().top);
+    if (v !== dockTop && v > 0) { dockTop = v; document.documentElement.style.setProperty("--dock-top", v + "px"); }
+  };
+  if (dock && window.ResizeObserver) new ResizeObserver(placeStrip).observe(dock);
+  if (dock) dock.addEventListener("transitionend", placeStrip);
+  addEventListener("resize", placeStrip); placeStrip(); setInterval(placeStrip, 1000);   // one cheap rect read a second; the dock re-centres without resizing
+
+  function fadeLater(li, t) {
+    const left = FADE_MS - (Date.now() - t);
+    if (left <= 0) li.classList.add("aged"); else setTimeout(() => li.classList.add("aged"), left);
+  }
+  function addChat(m, mine) {
     if (seen.has(m.id) || m.hidden) return;
     seen.add(m.id);
     const li = document.createElement("li");
     li.dataset.id = m.id;
-    const who = hideHandle(m.handle) ? "" : `<b>${esc(m.handle)}</b>`;
-    li.innerHTML = `${who}${esc(m.body)}<span class="mod" data-a="hide">hide</span><span class="mod" data-a="mute">mute</span><span class="mod" data-a="ban">ban</span>`;
-    li.querySelectorAll(".mod").forEach((x) => x.addEventListener("click", async () => {
+    const who = hideHandle(m.handle) ? "" : `<span class="who">${esc(m.handle)}</span>`;
+    const mod = S.isAdmin() && m.user_id ? `<span class="mod" data-a="hide">delete</span><span class="mod" data-a="mute">mute</span><span class="mod" data-a="ban">ban</span>` : "";
+    li.innerHTML = `${who}<span class="msg">${esc(m.body)}</span>${mod}`;
+    li.querySelectorAll(".mod").forEach((x) => x.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
       const a = x.dataset.a;
       const { error } = a === "hide" ? await sb.rpc("admin_hide_chat", { p_id: m.id })
         : await sb.rpc("admin_sanction", { p_user: m.user_id, p_kind: a, p_minutes: a === "mute" ? 60 : null, p_reason: "chat moderation" });
       if (error) return toast(friendly(error));
       if (a === "hide") li.remove();
-      toast(a === "hide" ? "Message hidden" : `${hideHandle(m.handle) ? "User" : "@" + esc(m.handle)} ${a === "mute" ? "muted for an hour" : "banned"}`);
+      toast(a === "hide" ? "Message deleted" : a === "mute" ? "Muted for an hour" : "Banned");
     }));
+    const t = m.created_at ? Date.parse(m.created_at) : Date.now();
+    const atBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 40;
     chatList.appendChild(li);
-    while (chatList.children.length > 30) chatList.firstChild.remove();
+    fadeLater(li, mine ? Date.now() : t);
+    while (chatList.children.length > KEEP) chatList.firstChild.remove();
+    if (atBottom || mine) chatList.scrollTop = chatList.scrollHeight;
   }
-  const { data: recent } = await sb.from("chat_messages").select("id,user_id,handle,body,hidden,created_at").order("created_at", { ascending: false }).limit(20);
-  (recent || []).reverse().forEach(addChat);
+  const note = (txt, ms) => { chatNote.textContent = txt || ""; chatNote.classList.toggle("on", !!txt); clearTimeout(note.t); if (txt && ms) note.t = setTimeout(() => note(""), ms); };
+  function slow(sec) {
+    slowUntil = Date.now() + sec * 1000;
+    $("chat-form").classList.add("slow");
+    clearInterval(slowTimer);
+    const tick = () => {
+      const left = Math.ceil((slowUntil - Date.now()) / 1000);
+      if (left <= 0) { clearInterval(slowTimer); $("chat-form").classList.remove("slow"); return note(""); }
+      note(`Slow mode. You can send again in ${left} s.`);
+    };
+    tick(); slowTimer = setInterval(tick, 500);
+  }
+  sb.rpc("chat_settings").then(({ data }) => {
+    if (data) chatSettings = { enabled: data.enabled !== false, slow: Number(data.slow) || 5 };
+    document.body.classList.toggle("chat-disabled", !chatSettings.enabled);
+    chatEl.classList.remove("hidden"); applyChatOn();
+  }, () => { chatEl.classList.remove("hidden"); applyChatOn(); });
+  const { data: recent } = await sb.from("chat_messages").select("id,user_id,handle,body,hidden,created_at").order("created_at", { ascending: false }).limit(40);
+  (recent || []).reverse().forEach((m) => addChat(m));
   sb.channel("chat").on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (p) => addChat(p.new))
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (p) => { if (p.new.hidden) { const el = chatList.querySelector(`li[data-id="${p.new.id}"]`); el && el.remove(); } })
     .subscribe();
 
+  const CHAT_ERR = { no_links: "Links aren't allowed in chat.", content_not_allowed: "That message isn't allowed here.", muted: "You're muted for a little while.",
+    chat_off: "Chat is paused for now.", bad_length: "Messages are up to 200 characters.", handle_required: "Pick a name first.", signin_required: "Sign in to chat." };
   $("chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const body = $("chat-input").value.trim();
+    const body = chatInput.value.replace(/\s+/g, " ").trim();
     if (!body) return;
-    if (S.session && S.profile && S.profile.handle) {
-      const { data, error } = await sb.rpc("send_chat", { p_body: body });
-      if (error) return toast(friendly(error));
-      $("chat-input").value = "";
-      return addChat({ id: data, user_id: S.session.user.id, handle: S.profile.handle, body });
-    }
-    if (S.session && !(S.profile && S.profile.handle)) return openAuth();
-    const r = await fetch("/api/chat", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: body, fp: await fingerprint() }) });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || d.error) return toast(d.error === "rate_limited" ? "Easy there. Give it a few seconds." : ERR[d.error] || "Something went wrong. Try again.");
-    $("chat-input").value = "";
-    if (d.handle) guest.handle = d.handle;
-    addChat({ id: d.id || "local-" + Date.now(), user_id: null, handle: d.handle || guest.handle, body });
+    if (!canChat()) return openAuth();
+    if (Date.now() < slowUntil) return;
+    if (/(https?:\/\/|www\.)/i.test(body)) return note(CHAT_ERR.no_links, 4000);
+    $("chat-form").classList.add("sending");
+    const r = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + S.token() },
+      body: JSON.stringify({ text: body }) }).catch(() => null);
+    $("chat-form").classList.remove("sending");
+    const d = r ? await r.json().catch(() => ({})) : {};
+    if (d.error === "slow_mode") return slow(Number(d.wait) || chatSettings.slow);
+    if (!r || !r.ok || d.error) return note(CHAT_ERR[d.error] || "That didn't send. Try again.", 4500);
+    chatInput.value = "";
+    addChat({ id: d.id, user_id: S.session.user.id, handle: d.handle || S.profile.handle, body, created_at: new Date().toISOString() }, true);
+    slow(chatSettings.slow);
   });
 
   // ---------- fuel & donations ----------

@@ -11,12 +11,8 @@ const coarse = matchMedia("(pointer: coarse)");
 const fun = { primed: false };
 
 // ---------- chat notices + up-next / on-now ----------
-function sysChat(html) {
-  const list = $("chat-list"); if (!list) return;
-  const li = document.createElement("li"); li.className = "sys"; li.innerHTML = html;
-  list.appendChild(li);
-  while (list.children.length > 30) list.firstChild.remove();
-}
+// Chat is just people talking: no automated lines go into it.
+function sysChat() {}
 const said = new Set();
 let pingOn = (() => { try { return localStorage.getItem("it:ping") === "1"; } catch (_) { return false; } })();
 const baseTitle = document.title;

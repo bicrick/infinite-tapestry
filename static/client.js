@@ -1621,14 +1621,6 @@
   function setMore(on) { const cap = document.querySelector(".dock .now"); if (cap) cap.style.visibility = on ? "hidden" : ""; body.classList.toggle("more-open", on); more.setAttribute("aria-expanded", on ? "true" : "false"); }
   more.addEventListener("click", (e) => { e.preventDefault(); setMore(!body.classList.contains("more-open")); });
   cmd.querySelectorAll(".sec").forEach((b) => b.addEventListener("click", () => phone.matches && b.id !== "speed-btn" && setTimeout(() => setMore(false), 150)));
-  // Chat lives in the sheet on phones.
-  const chat = $("chat"), chatHome = chat && chat.parentNode, chatPanel = $("panel-chat");
-  const placeChat = () => {
-    if (!chat || !chatPanel) return;
-    if (phone.matches && chat.parentNode !== chatPanel) chatPanel.appendChild(chat);
-    else if (!phone.matches && chat.parentNode !== chatHome) chatHome.appendChild(chat);
-  };
-  phone.addEventListener("change", placeChat); placeChat();
   // Bottom sheet: drag the handle (or the head) down to dismiss.
   const grab = $("drawer-grab"), head = drawer && drawer.querySelector(".drawer-head");
   let y0 = null, dy = 0;

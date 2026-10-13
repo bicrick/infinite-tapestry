@@ -51,6 +51,7 @@
   <header class="top ui">
     <div class="brand"><a class="brand-link" href="/about" aria-label="About Infinite Tapestry"><img class="brand-mark" src="brand/mark-plain.svg" alt="" width="22" height="13" /></a>Infinite Tapestry<span id="top-clock" class="top-clock" aria-label="Local time"></span><button id="snd-btn" class="snd-btn" type="button" aria-label="Ambient sound" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6v4h2.5l3.5 3V3L5 6z"/><path class="w1" d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8"/><path class="w2" d="M12.6 3.8a6 6 0 0 1 0 8.4"/><path class="x" d="M11 6l3.5 4M14.5 6L11 10"/></svg></button></div>
     <div class="top-right">
+      <button id="chat-toggle" class="chat-toggle social-only hidden" type="button" aria-label="Chat" aria-pressed="true" title="Chat (C)"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/><path class="off" d="M2.5 2.5l11 11"/></svg></button>
       <button id="fs-btn" class="fs-btn top-fs" type="button" aria-label="Full screen" title="Full screen (Esc exits)"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
       <div id="status" class="status"><span class="dot"></span><span id="status-text">connecting</span><span id="status-mini" class="status-mini"></span></div>
       <button id="queue-btn" type="button" class="panel-btn" title="Panel" aria-label="Open panel"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M10 3v10"/></svg><span id="queue-count" class="panel-n"></span></button>
@@ -71,9 +72,14 @@
   </div>
   <div id="toast" class="toast"></div>
 
-  <div id="chat" class="chat ui hidden">
-    <ol id="chat-list" class="chat-list"></ol>
-    <form id="chat-form" autocomplete="off"><input id="chat-input" maxlength="280" placeholder="Say something…" /></form>
+  <div id="chat" class="chat ui hidden" aria-label="Live chat">
+    <div class="chat-head"><span class="chat-title">Chat</span><button id="chat-close" class="chat-x" type="button" aria-label="Close chat"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+    <ol id="chat-list" class="chat-list" aria-live="polite"></ol>
+    <div class="chat-foot">
+      <form id="chat-form" class="chat-form hidden" autocomplete="off"><input id="chat-input" maxlength="200" placeholder="Say something" enterkeyhint="send" aria-label="Chat message" /><button id="chat-send" class="chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button></form>
+      <button id="chat-signin" class="chat-signin" type="button">Sign in to chat</button>
+      <div id="chat-note" class="chat-note" role="status"></div>
+    </div>
   </div>
 
   <div id="auth-pop" class="sheet hidden">
@@ -193,14 +199,12 @@
       <nav class="tabs" id="tabs">
         <button data-tab="next" class="on">Queue</button>
                 <button data-tab="fuel" class="social-only hidden">Fuel</button>
-        <button data-tab="chat" class="social-only phone-tab hidden">Chat</button>
         <button data-tab="audit" class="admin-only hidden">Audit</button>
         <button data-tab="you" id="you-tab" type="button">You</button>
       </nav>
       <button id="drawer-close" type="button" class="icon" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="build-id" id="build-id" aria-hidden="true"></div>
-    <section class="panel hidden" id="panel-chat"></section>
     <section class="panel hidden" id="panel-you">
       <div class="you-row"><span class="muted">Account</span><button id="account-btn" class="quiet hidden" type="button">Sign in</button></div>
       <p class="fine pad">Your handle opens your profile. Sign in with Google to get a handle, a profile and keep your ideas.</p>

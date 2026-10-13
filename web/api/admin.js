@@ -149,11 +149,32 @@ module.exports = async (req, res) => {
       await audit("admin_idea_" + body.op, { actor: me.id, target: String(id) });
       return res.status(200).json({ ok: true });
     }
+    if (a === "live_chat") {   // recent home-page chat + the sitewide switch
+      const [msgs, lim] = await Promise.all([
+        rest("GET", "chat_messages?order=created_at.desc&limit=60&select=id,user_id,guest_id,handle,body,hidden,created_at"),
+        rest("GET", "idea_limits?id=eq.1&select=chat_enabled,chat_slow_seconds"),
+      ]);
+      return res.status(200).json({ messages: msgs, enabled: lim[0] ? lim[0].chat_enabled !== false : true, slow: lim[0] ? lim[0].chat_slow_seconds : 5 });
+    }
+    if (a === "live_chat_switch") {
+      await rest("PATCH", "idea_limits?id=eq.1", { chat_enabled: !!body.enabled }, { prefer: "return=minimal" });
+      await audit("admin_chat_" + (body.enabled ? "on" : "off"), { actor: me.id });
+      return res.status(200).json({ ok: true });
+    }
+    if (a === "live_chat_hide") {   // {id} or {user_id} (hide everything they said)
+      const q = body.user_id && /^[0-9a-f-]{36}$/.test(String(body.user_id)) ? `user_id=eq.${body.user_id}` : `id=eq.${Number(body.id) || 0}`;
+      await rest("PATCH", `chat_messages?${q}`, { hidden: true }, { prefer: "return=minimal" });
+      await audit("admin_hide_chat", { actor: me.id, target: String(body.id || body.user_id) });
+      return res.status(200).json({ ok: true });
+    }
     if (a === "sanction") {  // {user_id, kind: mute|ban, minutes}
       if (!/^[0-9a-f-]{36}$/.test(String(body.user_id)) || !["mute", "ban"].includes(body.kind)) return res.status(400).json({ error: "bad" });
       const m = Number(body.minutes) || 0;
       await rest("POST", "sanctions", { user_id: body.user_id, kind: body.kind, until: m > 0 ? new Date(Date.now() + m * 60000).toISOString() : null, reason: "admin", by_user: me.id }, { prefer: "return=minimal" });
-      if (body.kind === "ban") await rest("PATCH", `ideas?user_id=eq.${body.user_id}&status=eq.pending`, { status: "rejected" }, { prefer: "return=minimal" });
+      if (body.kind === "ban") {
+        await rest("PATCH", `ideas?user_id=eq.${body.user_id}&status=eq.pending`, { status: "rejected" }, { prefer: "return=minimal" });
+        await rest("PATCH", `chat_messages?user_id=eq.${body.user_id}`, { hidden: true }, { prefer: "return=minimal" });
+      }
       await audit("admin_" + body.kind, { actor: me.id, target: body.user_id, detail: { minutes: m } });
       return res.status(200).json({ ok: true });
     }

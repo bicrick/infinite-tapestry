@@ -1,27 +1,22 @@
-// POST /api/chat { text, fp } — guest chat with the same moderation + guest limits as ideas.
-// Signed-in users keep the send_chat RPC (same hard blocks in SQL).
-const { guestSession } = require("../lib/guest");
+// POST /api/chat { text } with the user's bearer token. Signed-in only: guests read.
+// Same moderation as ideas (moderate()), then user_send_chat enforces 200 chars, no links,
+// mutes/bans, slow mode and the sitewide switch in SQL.
 const { moderate } = require("../lib/moderate");
-const { rest } = require("../lib/common");
+const { rest, userFromToken, ipHash } = require("../lib/common");
 
 module.exports = async (req, res) => {
   res.setHeader("cache-control", "private, no-store");
   if (req.method !== "POST") return res.status(405).json({ error: "method" });
   try {
+    const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    const me = tok && tok.length < 4096 ? await userFromToken(tok).catch(() => null) : null;
+    if (!me) return res.status(401).json({ error: "signin_required" });
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-    const text = String(body.text || "").replace(/\s+/g, " ").trim().slice(0, 280);
-    if (!text) return res.status(400).json({ error: "bad_length" });
-    const g = await guestSession(req, res, body.fp);
-    if (g.banned) return res.status(403).json({ error: "not_allowed" });
+    const text = String(body.text || "").replace(/\s+/g, " ").trim();
+    if (!text || text.length > 200) return res.status(400).json({ error: "bad_length" });
     const flagged = await moderate(text);
-    let out;
-    try {
-      out = await rest("POST", "rpc/guest_send_chat", { p_guest: g.id, p_ip: g.ip, p_fp: g.fp, p_body: text, p_flagged: flagged });
-    } catch (e) {
-      const m = String(e.message).match(/(signin_required|rate_limited|not_allowed|bad_length|no_session)/);
-      return res.status(m && m[1] === "signin_required" ? 401 : 429).json({ error: m ? m[1] : "server" });
-    }
-    if (out && out.error) return res.status(422).json({ error: out.error });
+    const out = await rest("POST", "rpc/user_send_chat", { p_user: me.id, p_ip: ipHash(req), p_body: text, p_flagged: flagged });
+    if (out && out.error) return res.status(out.error === "slow_mode" ? 429 : 422).json(out);
     res.status(200).json({ ok: true, id: out.id, handle: out.handle });
   } catch (e) { console.error("chat", e.message); res.status(500).json({ error: "server" }); }
 };

@@ -10,7 +10,22 @@ async function call(action, extra = {}) {
   return d;
 }
 const ban = (kind, value) => `<button class="danger" data-ban="${kind}" data-v="${esc(value)}">ban ${kind}</button>`;
+async function liveChat() {
+  const d = await call("live_chat");
+  $("chat-switch").textContent = d.enabled ? "Chat is on · turn it off sitewide" : "Chat is off · turn it back on";
+  $("chat-switch").onclick = async () => { await call("live_chat_switch", { enabled: !d.enabled }); liveChat(); };
+  $("chat-note").textContent = `Signed-in only · 200 characters · no links · slow mode ${d.slow} s`;
+  $("live-chat").innerHTML = d.messages.map((m) => `<tr class="${m.hidden ? "m" : ""}"><td class="m">${ago(m.created_at)}</td><td>${esc(m.handle || "")}</td><td>${esc(m.body)}${m.hidden ? " <span class=\"m\">(hidden)</span>" : ""}</td><td>${m.hidden ? "" : `<button data-chide="${m.id}">delete</button>`}${m.user_id ? ` <button data-cmute="${m.user_id}">mute 1 h</button> <button class="danger" data-cban="${m.user_id}">ban</button>` : ""}</td></tr>`).join("") || '<tr><td class="m">No messages yet.</td></tr>';
+  $("live-chat").onclick = async (e) => {
+    const t = e.target.closest("button"); if (!t) return;
+    if (t.dataset.chide) await call("live_chat_hide", { id: +t.dataset.chide });
+    else if (t.dataset.cmute) await call("sanction", { user_id: t.dataset.cmute, kind: "mute", minutes: 60 });
+    else if (t.dataset.cban) { if (!confirm("Ban this person and hide everything they said?")) return; await call("sanction", { user_id: t.dataset.cban, kind: "ban", minutes: 0 }); }
+    liveChat();
+  };
+}
 async function load() {
+  liveChat().catch(() => {});
   const d = await call("recent"), L = d.limits || {};
   $("kill").textContent = L.guests_enabled ? "Guests can submit · switch to sign-in only" : "Sign-in only · let guests submit again";
   $("kill").onclick = async () => { await call("limits", { limits: { guests_enabled: !L.guests_enabled } }); load(); };
