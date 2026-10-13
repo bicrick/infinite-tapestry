@@ -109,6 +109,9 @@ module.exports = async (req, res) => {
       return res.status(200).send(buf);
     }
   }
+  // Thumbs: a landed spot whose crop isn't ready yet (cold GPU crop) answers 503 uncached so the profile retries,
+  // instead of a cached dark brand image that reads as a blank thumbnail.
+  if (thumb && Number.isFinite(a) && a >= 0) { res.setHeader("cache-control", "no-store"); return res.status(503).end(); }
   const host = `https://${req.headers["x-forwarded-host"] || req.headers.host}`;
   res.setHeader("cache-control", "public, s-maxage=60");
   res.redirect(302, `${host}/brand/og/${STATIC[0]}.jpg`);

@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const handle = decodeURIComponent((location.pathname.match(/^\/u\/([^/?#]+)/) || [])[1] || new URLSearchParams(location.search).get("h") || "");
 
-const LABEL = { upnext: "Up next", woven: "Woven in", weaving: "Weaving now", pending: "Pending", rejected: "Not used", withdrawn: "Withdrawn" };
+const LABEL = { upnext: "Up next", woven: "", weaving: "Painting now", pending: "Pending", rejected: "Not used", withdrawn: "Withdrawn" };
 let toastT = 0;
 function toast(html, ms = 2200) {
   const t = $("toast"); t.innerHTML = html; t.classList.add("show");
@@ -49,9 +49,9 @@ function render() {
   const d = data;
   document.title = `@${d.handle} · Infinite Tapestry`;
   $("p-handle").textContent = "@" + d.handle;
-  const bits = [`${d.stats.total} suggestion${d.stats.total === 1 ? "" : "s"}`, `${d.stats.woven} woven in`];
+  const bits = [`${d.stats.total} suggestion${d.stats.total === 1 ? "" : "s"}`, `${d.stats.woven} painted`];
   if (d.stats.votes) bits.push(`${d.stats.votes} vote${d.stats.votes === 1 ? "" : "s"}`);
-  bits.push(`weaving since ${new Date(d.joined).toLocaleDateString([], { month: "short", year: "numeric" })}`);
+  bits.push(`joined ${new Date(d.joined).toLocaleDateString([], { month: "short", year: "numeric" })}`);
   $("p-meta").textContent = bits.join(" · ");
   $("p-filter").classList.toggle("hidden", d.ideas.length < 3);
   document.querySelectorAll(".own-only").forEach((el) => el.classList.toggle("hidden", !d.own));
@@ -101,13 +101,13 @@ function card(i) {
   const to = i.end_strip ?? (landed ? i.start_strip + 12 : null);
   const at = landed ? `/?at=${i.start_strip}&to=${to}` : null;
   const thumb = landed
-    ? `<a class="p-thumb" href="${at}" title="View where it landed"><img src="/api/og?id=${i.id}&size=thumb" alt="" loading="lazy" onload="this.classList.add('ok')" /></a>`
-    : `<div class="p-thumb empty">${i.image_path ? `<img class="ok ref" src="${esc(refUrl(i.image_path))}" alt="" loading="lazy" />` : ""}<span>${i.status === "pending" ? "In the queue" : i.status === "upnext" ? "Being woven in soon" : ""}</span></div>`;
-  const when = i.status === "woven" && i.played_at ? `woven ${ago(i.played_at)}` : ago(i.created_at);
+    ? `<a class="p-thumb" href="${at}" title="View where it landed"><img src="/api/og?id=${i.id}&size=thumb" alt="" loading="lazy" data-tries="0" /></a>`
+    : `<div class="p-thumb empty">${i.image_path ? `<img class="ok ref" src="${esc(refUrl(i.image_path))}" alt="" loading="lazy" />` : ""}<span>${i.status === "pending" ? "In the queue" : i.status === "upnext" ? "Up next" : ""}</span></div>`;
+  const when = i.status === "woven" && i.played_at ? `painted ${ago(i.played_at)}` : ago(i.created_at);
   return `<li class="p-card" data-id="${i.id}">
     ${thumb}
     <div class="p-body">
-      <div class="p-row"><span class="p-status s-${i.status}">${LABEL[i.status] || esc(i.status)}</span><time title="${esc(exact(i.created_at))}">${when}</time></div>
+      <div class="p-row">${LABEL[i.status] === "" ? "" : `<span class="p-status s-${i.status}">${LABEL[i.status] || esc(i.status)}</span>`}<time title="${esc(exact(i.created_at))}">${when}</time></div>
       <p class="p-text">${esc(i.body)}</p>${i.title && i.status !== "pending" ? `<div class="p-title">${esc(i.title)}</div>` : ""}
       <div class="p-actions">
         ${landed ? `<a href="${at}">View where it landed <span aria-hidden="true">→</span></a>` : ""}
@@ -136,5 +136,15 @@ document.addEventListener("click", async (e) => {
   }
 });
 
+
+// Thumbnails: a cold crop can take the GPU longer than one request allows, so retry a few times
+// (cache-busted, backing off) instead of leaving a blank or dark fallback box.
+document.addEventListener("load", (e) => { const t = e.target; if (t.matches && t.matches(".p-thumb img")) t.classList.add("ok"); }, true);
+document.addEventListener("error", (e) => {
+  const t = e.target; if (!(t.matches && t.matches(".p-thumb img"))) return;
+  const n = +(t.dataset.tries || 0) + 1; t.dataset.tries = n;
+  if (n > 4) { t.closest(".p-thumb").classList.add("empty"); return; }
+  setTimeout(() => { t.src = t.src.replace(/&r=\d+$/, "") + "&r=" + n; }, 1500 * n);
+}, true);
 
 (async () => { await auth(); await load().catch(() => notFound()); })();
