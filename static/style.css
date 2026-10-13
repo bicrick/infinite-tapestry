@@ -233,8 +233,7 @@ body.social:not(.is-admin) #queue-list .item { cursor: default; }
 
 /* ---------- load-in: inset card -> full bleed, points -> image, staggered UI ---------- */
 #intro { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 30; pointer-events: none;
-  border-radius: 0; transition: opacity 1s var(--ease), transform 1.1s var(--ease), border-radius 1.1s var(--ease); }
-body.intro #intro { transform: none; border-radius: 0; }
+  border-radius: 0; transform: none; transition: none; }   /* the loader never slides/scales; it only crossfades (in JS) */
 body.intro { background: var(--bg-intro); }
 
 #view { transition: transform 1.1s var(--ease), border-radius 1.1s var(--ease), filter 1.2s var(--ease); }
@@ -835,3 +834,5 @@ body.intro #amb-blobs { opacity: 0; }
 ::view-transition-group(dock) { animation-duration: .38s; animation-timing-function: cubic-bezier(.22, .8, .24, 1); }
 ::view-transition-old(dock), ::view-transition-new(dock) { height: 100%; width: 100%; object-fit: fill; animation-duration: .26s; }
 .hwheel, .timeline, .veil, #react-btn, .amb-title, .amb-time { transition: opacity .32s var(--ease); }
+
+.build-id { position: absolute; left: 18px; bottom: 14px; font-size: 10px; letter-spacing: .02em; color: var(--muted); opacity: .45; font-variant-numeric: tabular-nums; pointer-events: none; }

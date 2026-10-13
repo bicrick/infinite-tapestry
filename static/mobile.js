@@ -115,3 +115,16 @@
 
 // Desktop top-left clock (viewer local time).
 (() => { const el = document.getElementById("top-clock"); if (!el) return; const f = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }); const tick = () => { el.textContent = f.format(new Date()); setTimeout(tick, 60000 - (Date.now() % 60000) + 50); }; tick(); })();
+
+// Build check: show the running build in the drawer; reload when a newer build is deployed (stale tabs never linger).
+(() => {
+  const me = (window.TAPESTRY_CONFIG || {}).buildId; if (!me) return;
+  const el = document.getElementById("build-id"); if (el) el.textContent = "build " + me.split("-")[0];
+  const check = () => fetch("/build.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((j) => {
+    if (!j || !j.id || j.id === me) return;
+    const go = () => { if (!document.body.classList.contains("composing")) location.reload(); else setTimeout(go, 5000); };
+    go();
+  }).catch(() => {});
+  setTimeout(check, 4000); setInterval(check, 90000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+})();

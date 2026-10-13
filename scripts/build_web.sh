@@ -30,4 +30,9 @@ done
 if [ -f "$OUT/index.html" ] && ! grep -q 'property="og:url"' "$OUT/index.html"; then
   sed -i "s|<meta property=\"og:type\" content=\"website\" />|<meta property=\"og:type\" content=\"website\" />\n  <meta property=\"og:url\" content=\"${SITE}/\" />|" "$OUT/index.html"
 fi
+# Cache-bust local scripts/styles per build so no browser keeps an old loader/client.
+VER=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || date +%s)-$(date +%s)
+printf '{"id":"%s"}\n' "$VER" > "$OUT/build.json"
+sed -i "s|^window.TAPESTRY_CONFIG = {|window.TAPESTRY_CONFIG = {\n  buildId: \"${VER}\",|" "$OUT/config.js"
+for f in "$OUT"/*.html; do sed -i -E "s#(src|href)=\"(/?[a-z0-9_-]+\.(js|css))\"#\1=\"\2?v=${VER}\"#g" "$f"; done
 echo "built $OUT"

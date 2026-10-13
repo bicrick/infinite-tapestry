@@ -40,6 +40,57 @@
      "value": "public, max-age=604800, s-maxage=31536000"
     }
    ]
+  },
+  {
+   "source": "/",
+   "headers": [
+    {
+     "key": "Cache-Control",
+     "value": "no-cache, no-store, must-revalidate"
+    }
+   ]
+  },
+  {
+   "source": "/(.*)\\.html",
+   "headers": [
+    {
+     "key": "Cache-Control",
+     "value": "no-cache, no-store, must-revalidate"
+    }
+   ]
+  },
+  {
+   "source": "/build.json",
+   "headers": [
+    {
+     "key": "Cache-Control",
+     "value": "no-cache, no-store, must-revalidate"
+    }
+   ]
+  },
+  {
+   "source": "/config.js",
+   "headers": [
+    {
+     "key": "Cache-Control",
+     "value": "no-cache, no-store, must-revalidate"
+    }
+   ]
+  },
+  {
+   "source": "/(.*)\\.(js|css)",
+   "has": [
+    {
+     "type": "query",
+     "key": "v"
+    }
+   ],
+   "headers": [
+    {
+     "key": "Cache-Control",
+     "value": "public, max-age=31536000, immutable"
+    }
+   ]
   }
  ],
  "rewrites": [
