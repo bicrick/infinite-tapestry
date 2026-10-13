@@ -1179,40 +1179,42 @@ body.saver .toast.nudge, body.ambient .toast.nudge { display: none; }
 .chat-toggle.hidden, body.chat-disabled .chat-toggle { display: none !important; }
 body.idle .chat-toggle, body.ambient .chat-toggle { opacity: 0 !important; pointer-events: none !important; }
 
-.chat { --chat-w: 300px; position: fixed; z-index: 12; left: 20px; bottom: calc(100vh - var(--band-bot, 72vh) + 14px); width: var(--chat-w);
-  display: flex; flex-direction: column; cursor: pointer; font-feature-settings: "cv11", "ss01"; contain: layout style;
+/* Collapsed chat lives in the empty page area under the band, never on the art:
+   wide screens: a column left of the composer, from just below the band down to the composer's baseline;
+   narrow / portrait: a strip between the band and the dock. JS publishes --dock-top / --dock-bot and flags no-room. */
+.chat { --chat-w: min(340px, calc((100vw - min(680px, 100vw - 32px)) / 2 - 48px)); position: fixed; z-index: 12; left: 24px; width: var(--chat-w);
+  top: calc(var(--band-bot, 72vh) + 16px); bottom: var(--dock-bot, 28px);
+  display: flex; flex-direction: column; justify-content: flex-end; cursor: pointer; font-feature-settings: "cv11", "ss01"; contain: layout style;
   transition: opacity .5s var(--ease) !important; }
 .chat.hidden { display: none; }
-.chat::before { content: ""; position: absolute; z-index: -1; left: -20px; bottom: -14px; width: calc(var(--chat-w) + 140px); height: calc(100% + 70px); pointer-events: none;
-  background: radial-gradient(ellipse at 0% 100%, rgba(0,0,0,.5), rgba(0,0,0,.22) 45%, transparent 72%); opacity: 1; transition: opacity .6s var(--ease); }
-.chat:not(:has(li:not(.aged)))::before { opacity: 0; }
 .chat-head, .chat-foot { display: none; }
-.chat-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; max-height: 172px; overflow: hidden; }
-.chat-list li { font-size: 13px; line-height: 1.42; letter-spacing: -.003em; color: rgba(255,255,255,.92); text-shadow: 0 1px 10px rgba(0,0,0,.45);
+.chat-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 5px; max-height: 100%; min-height: 0; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to top, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to top, #000 calc(100% - 22px), transparent); }
+.chat-list li { font-size: 13px; line-height: 1.42; letter-spacing: -.003em; color: var(--fg);
   flex: none; overflow-wrap: anywhere; animation: chat-in .45s var(--ease) both; transition: opacity 1.4s var(--ease); }
-.chat-list li .who { font-weight: 550; color: rgba(255,255,255,.62); margin-right: 7px; }
+.chat-list li .who { font-weight: 550; color: var(--muted); margin-right: 7px; }
 .chat-list li.aged { opacity: 0; }
-.chat-list li .mod { display: none; margin-left: 8px; font-size: 11px; color: rgba(255,255,255,.45); cursor: pointer; }
-.chat-list li .mod:hover { color: #fff; }
+.chat-list li .mod { display: none; margin-left: 8px; font-size: 11px; color: var(--muted); cursor: pointer; }
+.chat-list li .mod:hover { color: var(--fg); }
+body.chat-oneline .chat-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.chat-noroom:not(.chat-open) .chat { opacity: 0 !important; pointer-events: none !important; visibility: hidden; }
 @keyframes chat-in { from { opacity: 0; transform: translateY(4px); } }
 /* hover peeks at everything that has faded */
 @media (hover: hover) {
   .chat:hover .chat-list li.aged { opacity: .78; transition-duration: .3s; }
-  .chat:hover::before { opacity: 1; }
 }
 
 /* open: glass card, scrollable, input at the bottom */
-body.chat-open .chat { z-index: 45; cursor: default; bottom: calc(24px + env(safe-area-inset-bottom)); height: min(520px, calc(100vh - 140px)); --chat-w: 340px;
+body.chat-open .chat { z-index: 45; cursor: default; top: auto; bottom: calc(24px + env(safe-area-inset-bottom)); height: min(520px, calc(100vh - 140px)); --chat-w: 340px;
   background: var(--glass-strong); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 20px 60px rgba(var(--shade),.32);
   backdrop-filter: blur(28px) saturate(1.2); -webkit-backdrop-filter: blur(28px) saturate(1.2); animation: chat-open .28s var(--ease); }
 @keyframes chat-open { from { opacity: 0; transform: translateY(8px); } }
-body.chat-open .chat::before { display: none; }
 body.chat-open .chat-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 6px 18px; }
 .chat-title { font-size: 13px; font-weight: 550; letter-spacing: -.005em; color: var(--fg); }
 .chat-x { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer; }
 .chat-x:hover { color: var(--fg); background: rgba(var(--ink),.07); }
 .chat-x svg, .chat-send svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-body.chat-open .chat-list { flex: 1; max-height: none; overflow-y: auto; overscroll-behavior: contain; justify-content: flex-start; padding: 4px 18px 10px; gap: 7px;
+body.chat-open .chat-list { -webkit-mask-image: none; mask-image: none; flex: 1; max-height: none; overflow-y: auto; overscroll-behavior: contain; justify-content: flex-start; padding: 4px 18px 10px; gap: 7px;
   scrollbar-width: thin; scrollbar-color: rgba(var(--ink),.18) transparent; }
 body.chat-open .chat-list > :first-child { margin-top: auto; }
 body.chat-open .chat-list li { opacity: 1 !important; color: var(--fg); text-shadow: none; font-size: 13.5px; animation-duration: .3s; }
@@ -1236,13 +1238,11 @@ body.chat-off .chat, body.chat-disabled .chat, body.composing .chat, body.ambien
 :root:fullscreen .chat, body.offline-on .chat, body:has(.drawer.open):not(.chat-open) .chat { opacity: 0 !important; pointer-events: none !important; visibility: hidden; transition: opacity .3s, visibility 0s .3s !important; }
 body.idle:not(.chat-open) .chat { opacity: .55 !important; }
 
-/* narrow / portrait: a slim strip of 2-3 lines just above the dock; tapping opens a full-height sheet */
-@media (max-width: 720px), (orientation: portrait) {
-  .chat { left: 16px; right: 16px; width: auto; bottom: calc(var(--dock-top, 120px) + 8px); }
-  .chat::before { left: -16px; right: -16px; width: auto; bottom: -10px; height: calc(100% + 48px);
-    background: linear-gradient(to top, rgba(0,0,0,.42), rgba(0,0,0,.16) 60%, transparent); }
-  .chat-list { max-height: 62px; gap: 3px;
-    -webkit-mask-image: linear-gradient(to top, #000 62%, transparent); mask-image: linear-gradient(to top, #000 62%, transparent); }
+/* narrow / portrait (or no room beside the composer): a strip between the band and the dock; tapping opens a full-height sheet */
+@media (max-width: 1199px), (orientation: portrait) {
+  .chat { left: max(16px, calc((100vw - min(680px, 100vw - 32px)) / 2)); right: max(16px, calc((100vw - min(680px, 100vw - 32px)) / 2)); width: auto;
+    top: calc(var(--band-bot, 60vh) + 10px); bottom: calc(var(--dock-top, 120px) + 8px); }
+  .chat-list { gap: 3px; }
   .chat-list li { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.chat-open .chat { left: 0; right: 0; top: calc(env(safe-area-inset-top) + 8px); bottom: 0; width: auto; height: auto; border-radius: 22px 22px 0 0; border-bottom: 0;
     padding-bottom: env(safe-area-inset-bottom); animation-name: chat-sheet; }
@@ -1257,14 +1257,6 @@ body.idle:not(.chat-open) .chat { opacity: .55 !important; }
 }
 
 @media (prefers-color-scheme: light) {
-  .chat::before { background: radial-gradient(ellipse at 0% 100%, rgba(20,16,12,.48), rgba(20,16,12,.2) 45%, transparent 72%); }
   body.chat-open .chat { box-shadow: 0 20px 60px rgba(60,45,30,.18); }
-}
-@media (prefers-color-scheme: light) {
-  @media (max-width: 720px), (orientation: portrait) {   /* nested: theme.js rewrites only top-level light queries */
-    .chat::before { display: none; }   /* the strip sits on the page, not the art: plain theme ink */
-    .chat-list li { color: var(--fg); text-shadow: none; }
-    .chat-list li .who { color: var(--muted); }
-  }
 }
 @media (prefers-reduced-motion: reduce) { .chat-list li, body.chat-open .chat { animation: none; } }

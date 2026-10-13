@@ -544,8 +544,13 @@ async function boot() {
   const placeStrip = () => {
     const c = document.body.classList;   // measure only at rest (not mid intro / idle / compose motion)
     if (!dock || document.hidden || c.contains("composing") || c.contains("idle") || c.contains("intro") || !c.contains("settled")) return;
-    const v = Math.round(innerHeight - dock.getBoundingClientRect().top);
-    if (v !== dockTop && v > 0) { dockTop = v; document.documentElement.style.setProperty("--dock-top", v + "px"); }
+    const r = dock.getBoundingClientRect(), v = Math.round(innerHeight - r.top), vb = Math.round(innerHeight - r.bottom);
+    if (v !== dockTop && v > 0) { dockTop = v; document.documentElement.style.setProperty("--dock-top", v + "px"); document.documentElement.style.setProperty("--dock-bot", Math.max(0, vb) + "px"); }
+    // Room under the band (never on the art): one line if tight, hidden if none.
+    const side = innerWidth >= 1200 && innerWidth > innerHeight;
+    const bandBot = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--band-bot")) || innerHeight * 0.7;
+    const room = side ? innerHeight - Math.max(0, vb) - bandBot - 16 : innerHeight - v - 8 - bandBot - 10;
+    c.toggle("chat-noroom", room < 18); c.toggle("chat-oneline", room < 44);
   };
   if (dock && window.ResizeObserver) new ResizeObserver(placeStrip).observe(dock);
   if (dock) dock.addEventListener("transitionend", placeStrip);
