@@ -1069,3 +1069,28 @@ body.idle .panel-btn, body.ambient .panel-btn, body.idle .top .status, body.ambi
 /* You tab */
 .you-row { display: flex; align-items: center; justify-content: space-between; padding: var(--s4); border-bottom: 1px solid var(--line); font-size: var(--t-md); }
 #panel-you #account-btn { font-size: var(--t-md) !important; color: var(--fg); padding: 0; opacity: 1 !important; pointer-events: auto !important; }
+
+/* ===== sheets v2: compact centred card; bottom sheet on narrow screens ===== */
+.sheet { padding: var(--s4); box-sizing: border-box; }
+.sheet-card, .sleep-card { width: min(360px, 100%) !important; max-width: 360px !important; box-sizing: border-box; padding: var(--s5) !important; border-radius: 20px !important;
+  background: var(--glass-strong) !important; border: 1px solid var(--line) !important; display: flex; flex-direction: column; gap: var(--s3); }
+.sheet-card > *, .sleep-card > * { margin: 0 !important; }
+.sheet-title, .sleep-title { font-size: 16px !important; font-weight: 500; letter-spacing: -.01em; color: var(--fg); margin: 0 !important; }
+.sheet-sub, .sheet-card .fine, .sleep-card p { font-size: var(--t-md) !important; line-height: 1.5; color: var(--muted) !important; margin: 0 !important; }
+.sheet-sub:empty, .auth-msg:empty { display: none; }
+.sheet-card form:not(.hidden) { display: flex; flex-direction: column; gap: var(--s2); margin: 0; }
+#handle-form:not(.hidden) { flex-direction: row; }
+#handle-form .vibe { flex: 1; min-width: 0; }
+.sheet-card .vibe { height: 40px; box-sizing: border-box; padding: 0 var(--s3); border-radius: 12px; font-size: var(--t-lg); margin: 0; }
+.sheet-card .primary, .sleep-card .primary { height: 40px; padding: 0 var(--s4); border-radius: 12px; font-size: var(--t-md); width: auto; }
+.sheet-card .google { height: 40px; border-radius: 12px; font-size: var(--t-md); }
+.sheet-card .ghost { margin: 0; height: 36px; border-radius: 12px; }
+@media (max-width: 560px) {
+  .sheet { place-items: end center !important; padding: 0 var(--s2) calc(var(--s2) + env(safe-area-inset-bottom)) !important; }
+  .sheet-card { width: 100% !important; max-width: none !important; border-radius: 20px !important; padding: var(--s5) var(--s4) var(--s4) !important; }
+}
+/* drawer panels: one inset */
+.drawer .pad, .drawer .fine.pad { padding: 0 var(--s4) !important; margin: var(--s3) 0 0 !important; font-size: var(--t-sm); }
+.drawer .pad-x { margin: var(--s3) var(--s4) 0 !important; width: auto !important; }
+.drawer .tiers { padding: 0 var(--s4); gap: var(--s2); margin-top: var(--s3); }
+.fuel-big { padding: var(--s4) var(--s4) 0 !important; }

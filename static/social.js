@@ -160,7 +160,8 @@ async function boot() {
     $("handle-form").classList.toggle("hidden", !needHandle);
     $("auth-signed").classList.toggle("hidden", !signed || needHandle);
     $("auth-handle").textContent = S.profile && S.profile.handle ? "@" + S.profile.handle : "";
-    document.querySelector("#auth-pop .sheet-title").textContent = needHandle ? "Almost there" : signed ? "Your account" : "Join the tapestry";
+    document.querySelector("#auth-pop .sheet-title").textContent = needHandle ? "Pick a handle" : signed ? "Your account" : "Join the tapestry";
+    { const sub = $("auth-sub"); if (sub) sub.textContent = needHandle ? "Pick a handle, which is how others see your ideas." : signed ? "" : "Watching is open to everyone. Sign in to add ideas, vote and chat."; }
     $("auth-pop").classList.remove("hidden");
     if (needHandle && !$("handle-input").value && guest.handle) $("handle-input").value = guest.handle.replace("-", "_");
     if (needHandle) setTimeout(() => $("handle-input").focus(), 50);
