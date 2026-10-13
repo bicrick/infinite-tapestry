@@ -950,3 +950,67 @@ body.idle .amb-title, body.ambient .amb-title { opacity: 1 !important; translate
 
 /* Google-only sign-in */
 #auth-form, #auth-or, #auth-code-form { display: none !important; }
+
+/* ================= UI audit v1 (mobile = desktop) =================
+   spacing scale 4 · 8 · 12 · 16 · 24 · 32   type scale 10 · 11 · 12 · 14 */
+:root { --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  --t-xs: 10px; --t-sm: 11px; --t-md: 12px; --t-lg: 14px;
+  --top-h: calc(env(safe-area-inset-top) + 48px); --edge: var(--s5); }
+@media (max-width: 760px) { :root { --edge: var(--s4); } }
+
+/* top bar: one row, one height, shared edge inset, no wrapping */
+.top, body.immersive .top { height: var(--top-h); box-sizing: border-box; padding: env(safe-area-inset-top) var(--edge) 0 !important; gap: var(--s3); align-items: center; }
+.top .brand { display: flex; align-items: center; white-space: nowrap; min-width: 0; }
+.top-clock { margin-left: var(--s3); padding-left: var(--s3); font-size: var(--t-md) !important; white-space: nowrap; line-height: 16px; }
+.snd-btn { margin-left: var(--s2); }
+.top-right { gap: var(--s3) !important; min-width: 0; }
+.top-right > button, .top-right > .status { min-height: 32px !important; padding: 0 !important; }
+.top-right, .top-right .status, .top-right .fuel-chip, #account-btn { font-size: var(--t-md) !important; line-height: 16px; }
+.top .status { gap: 6px; }
+/* dedupe "live · N": the compact status-mini is the only one shown */
+#status-text { display: none !important; }
+.status-mini { display: inline-flex !important; font-size: var(--t-md) !important; color: var(--muted) !important; letter-spacing: .01em !important; }
+@media (max-width: 420px) { .top-right .fuel-chip #fuel-text, .top-clock { font-size: var(--t-sm) !important; } .fuel-line { width: 28px; } .top-right { gap: var(--s2) !important; } }
+
+/* title: one size, one tone */
+.amb-title { font-size: 13px; color: rgba(var(--ink),.55); letter-spacing: 0; }
+
+/* ---- notifications: ONE home for every toast — centred in the gap between the top bar and the title ---- */
+.toast, body.page .toast, .share-toast, .nudge-line {
+  position: fixed !important; left: 50% !important; right: auto !important; bottom: auto !important; z-index: 70;
+  top: max(calc(var(--top-h) + var(--s1)), calc((var(--top-h) + var(--band-top, 30vh) - 34px) / 2 - 16px)) !important;
+  height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: var(--s2);
+  max-width: min(520px, calc(100vw - 2 * var(--edge))); padding: 0 var(--s3) !important; border-radius: 999px !important;
+  background: var(--glass-strong) !important; border: 1px solid var(--line) !important;
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+  font-size: var(--t-md) !important; line-height: 16px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transform: translate(-50%, -6px) !important; pointer-events: none;
+  transition: opacity .28s var(--ease), transform .28s var(--ease) !important; }
+.toast.show, .share-toast.show, .nudge-line.on { opacity: 1; transform: translate(-50%, 0) !important; }
+.share-toast.show, .nudge-line.on { pointer-events: auto; }
+.share-toast { padding-right: var(--s1) !important; }
+.share-toast .st-btn { height: 24px; padding: 0 var(--s3); font-size: var(--t-sm); min-width: 0; }
+.share-toast .st-x { padding: 0 var(--s1); }
+/* one at a time: share > toast > nudge */
+body:has(.share-toast.show) .toast, body:has(.share-toast.show) .nudge-line, body:has(.toast.show) .nudge-line { opacity: 0 !important; pointer-events: none !important; }
+/* short screens: the title steps aside while a notification is up, so nothing overlaps */
+@media (max-height: 760px) {
+  body:has(.toast.show) .amb-title, body:has(.share-toast.show) .amb-title, body:has(.nudge-line.on) .amb-title { opacity: 0 !important; }
+}
+
+/* ---- composer: even inset on every side ---- */
+.cmd { padding: var(--s1) var(--s1) var(--s1) var(--s4) !important; }
+body.composing:not(.away) .cmd { padding: var(--s3) !important; row-gap: var(--s3) !important; gap: var(--s2) !important; border-radius: 24px !important; }
+body.composing:not(.away) #cmd-input { padding: 0 var(--s3) !important; }
+body.composing:not(.away) .cmd .icon, body.composing:not(.away) .cmd .send { width: 40px !important; height: 40px !important; border-radius: 20px !important; }
+body.composing:not(.away) .cmd .seg button { min-height: 32px; }
+body.composing:not(.away) .ref-chip { margin-left: var(--s2); }
+body.composing:not(.away) .dock .cmd-terms { margin-top: var(--s2) !important; font-size: var(--t-xs) !important; }
+
+/* drawer: same rhythm */
+.drawer-head { padding: var(--s4) var(--s3) var(--s2) var(--s4) !important; }
+.drawer-foot { padding: var(--s3) var(--s4) var(--s4) !important; gap: var(--s3) !important; }
+.drawer-sub { padding: var(--s4) var(--s4) var(--s1) !important; }
+.card.current { margin: var(--s2) var(--s3) var(--s1) !important; }
+#queue-list { padding: var(--s1) var(--s3) !important; }
+.empty { padding: var(--s4) !important; }
