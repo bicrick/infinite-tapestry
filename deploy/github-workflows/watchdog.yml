@@ -1,0 +1,22 @@
+name: Watchdog
+# Every 10 minutes: if the pod should be painting but no strip has landed for 10+ minutes, fail loudly
+# (GitHub emails the repo owner on failed runs). The pod's own supervisor restarts stuck/crashed app processes.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  strips-fresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the newest strip age
+        run: |
+          set -euo pipefail
+          J=$(curl -sf --retry 3 "https://infinite-tapestry.vercel.app/api/live?n=1")
+          python3 - "$J" <<'PY'
+          import json, sys
+          j = json.loads(sys.argv[1]); age = j["now"] - (j["last_at"] or 0); pod = j.get("pod") or {}
+          print(f"newest strip {j['max']} is {age/60:.1f} min old; pod {pod}")
+          if pod.get("status") == "running" and pod.get("desired") != "off" and age > 600:
+              sys.exit(f"STALL: no new strip for {age/60:.0f} min while the pod is running")
+          PY
