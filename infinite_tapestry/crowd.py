@@ -22,11 +22,11 @@ from .prompts import make_scene
 
 
 def direct_plan(bodies: list[str]) -> dict:
-    """One scene per idea, the user's own words + light cinematic framing (klein follows natural language)."""
+    """One scene per idea, the user's own words verbatim (+ a neutral quality hint; no framing or subject imposed)."""
     scenes = []
     for b in bodies:
         b = " ".join(str(b).split())[:400]
-        scenes.append({"title": b[:40], "prompt": f"{b}, cinematic wide shot, rich detail, natural light",
+        scenes.append({"title": b[:40], "prompt": f"{b}, rich detail",
                        "negative": "", "transition": 1, "hold": 4})
     return {"scenes": scenes, "note": "straight to your idea", "source": "direct", "model": None}
 

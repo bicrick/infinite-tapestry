@@ -66,8 +66,7 @@ class PromptScheduler:
         )
 
 
-QUALITY_NEGATIVE = ("flat texture, repetitive pattern, wallpaper, tiled, seamless pattern, still life, product shot, "
-                    "empty composition, lifeless, cluttered duplicates")
+QUALITY_NEGATIVE = ("wallpaper, tiled, empty composition, lifeless, cluttered duplicates")
 MIN_TRANSITION = 1  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
 MAX_TRANSITION = 3
 MAX_HOLD_USER = 4  # klein is coherent: short scenes (~10-15 s)

@@ -80,7 +80,7 @@ class MoodRotator:
                    "angle or twist within it; it will switch to something different afterwards. ")
         return (journey + f"MOOD FOR THIS BATCH (overrides the default tone) -> {m[4]} "
                 "Do NOT default to quirky, gross or jokey unless this mood asks for it; when the mood is beautiful, "
-                "make it sincerely, stunningly beautiful. Specific beats generic. Keep the scene immersive and wide. "
+                "make it sincerely, stunningly beautiful. Specific beats generic. "
                 "Keep people out of focus: no faces or crowds; at most tiny, distant figures."
                 + extra + f" Variation seed {seed}: let it push you to an unexpected subject, place and palette.")
 

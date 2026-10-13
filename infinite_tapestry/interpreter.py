@@ -58,23 +58,19 @@ Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separa
 transition = strips to blend in (2-3), hold = strips to stay (2-4). Each scene lasts ~10-15 seconds.
 Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":2,"hold":3,"style":"photo","beats":["first beat prompt","second beat prompt"]}}],"note":"one short sentence"}}"""
 _IMMERSIVE_NOTE = (
-    "\nImmersion (most important): every prompt is ENVIRONMENT-FIRST and puts the camera INSIDE the place, never "
-    "looking at a tabletop or display. Start with the camera position and the space, then depth, a clear subject and "
-    "vivid action, e.g. 'wide-angle shot from inside a vast cavern carved from aged cheddar, looking down a glowing "
-    "tunnel of dripping cheese stalactites, rivers of molten fondue, deep perspective'. "
-    "Take the idea LITERALLY and fully: if the idea is a cave, we are deep inside the cave; if it is made of something, "
-    "everything around us is made of it. Use sideways-panorama phrasing (wide panoramic view, the space continuing "
-    "left and right). NEVER still life, product shots, close-ups of objects, miniatures, dioramas or items on a surface."
+    "\nSubject and framing are OPEN: any subject at any scale and any framing is welcome: vast places, interiors, "
+    "close-ups, macro details, single objects, materials and textures, patterns, abstract art. Take the idea LITERALLY: "
+    "if it asks for a close-up or a texture, fill the frame with exactly that; if it names a place, show that place. "
+    "Do not reinterpret a material, texture or object request as a landscape or environment."
 )
 _CINEMA_NOTE = (
     "\nCinematography (do this for EVERY scene before writing): pick the camera that best shows THIS subject, e.g. "
-    "aerial wide for a packed football stadium, eye level inside a crowd, low angle for monuments, drone over a city, "
-    "handheld in a market. Choose lens (14mm ultra-wide, 24mm, 35mm, 85mm), time of day, lighting and weather on purpose. "
+    "aerial wide for a stadium, extreme macro for a texture or material, close-up for an object, low angle for monuments, "
+    "handheld in a market. Choose lens (14mm ultra-wide, 35mm, 85mm, 100mm macro), time of day, lighting and weather on purpose. "
     "Write a rich prompt with ONE clear focal subject, crowds and people when the place would have them, visible motion "
     "(motion blur, flying sparks, waving flags, rain streaks), and depth layers (foreground / midground / background). "
-    "Mini narrative: give each scene \"beats\": 1-2 full prompts that play in order across its strips, e.g. wide -> "
-    "closer, same subject and place, different framing or moment (wide establishing -> closer in the crowd -> "
-    "the peak moment). \"prompt\" = the first beat. Avoid flat textures, wallpaper-like repetition and tabletop still life (unless the MOOD asks for an immersive still life)."
+    "Mini narrative: give each scene \"beats\": 1-2 full prompts that play in order across its strips, same subject, "
+    "a different framing or moment (keep the requested framing: a close-up idea stays close). \"prompt\" = the first beat."
 )
 _AUTO_RENDER_NOTE = (
     "\nRenderer strengths (Auto only): the image model is WEAKEST at hyperreal scenes built around people (faces, crowds, "
@@ -85,10 +81,10 @@ _AUTO_RENDER_NOTE = (
 )
 _AUTO_CINEMA_NOTE = (
     "\nCinematography (every scene): pick the camera that best shows THIS place (ultra-wide vista, drone over terrain, "
-    "low angle up a structure, macro at insect scale), plus lens, time of day, light and weather on purpose. ONE clear focal "
+    "low angle up a structure, close-up of an object, macro of a texture or material), plus lens, time of day, light and weather on purpose. ONE clear focal "
     "subject, visible motion (drifting particles, flowing water or fabric, swirling light), depth layers "
     "(foreground / midground / background). Give each scene \"beats\": 1-2 full prompts that play in order across its "
-    "strips (wide -> closer, same place). \"prompt\" = the first beat. Avoid flat wallpaper repetition and still life."
+    "strips (same subject, different framing or moment). \"prompt\" = the first beat."
 )
 SYSTEM += _STYLE_NOTE + _IMMERSIVE_NOTE + _CINEMA_NOTE
 AUTO_SYSTEM += _AUTO_RENDER_NOTE + _IMMERSIVE_NOTE + _AUTO_CINEMA_NOTE
