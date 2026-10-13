@@ -23,7 +23,7 @@ html, body { overscroll-behavior-x: none; margin: 0; height: 100%; background: v
   font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; font-size: 13px; letter-spacing: -.005em; }
 button, input { font: inherit; color: inherit; }
 #view { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; cursor: grab; touch-action: none; }
-#view:active { cursor: grabbing; }
+body.dragging #view { cursor: grabbing; }
 .veil { position: fixed; inset: 0; pointer-events: none;
   background: linear-gradient(to bottom, rgba(var(--shade),.35), transparent 18%, transparent 70%, rgba(var(--shade),.45)); transition: opacity .8s var(--ease); }
 .hidden { display: none !important; }
@@ -31,7 +31,7 @@ button, input { font: inherit; color: inherit; }
 .ui, .veil { transition: opacity .6s var(--ease), transform .6s var(--ease); }
 body.idle .ui, body.idle .veil { opacity: 0; pointer-events: none; }
 body.idle .dock { transform: translate(-50%, 8px); }
-body.idle #view { cursor: none; }
+body.idle:not(.dragging) #view { cursor: none; }
 
 .top { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 22px 28px; pointer-events: none; }
 .brand { font-weight: 500; font-size: 14px; letter-spacing: -.01em; }
@@ -493,7 +493,7 @@ button.link:hover:not(:disabled) { color: var(--fg); } button.link:disabled { op
   .amb-mark { width: 26px; opacity: .55; }
   #amb-status { font-size: 11px; letter-spacing: .06em; color: rgba(var(--ink),.36); transition: opacity .35s; }
   /* pointer-events:auto so hover/click work; parent .amb stays none so the rest of the layer is hit-through */
-  .amb-title { position: absolute; left: 24px; right: 24px; top: calc(var(--band-top, 30vh) - 34px); text-align: center;
+  .amb-title { position: absolute; left: 24px; right: 24px; margin: 0 auto; width: max-content; max-width: calc(100vw - 48px); top: calc(var(--band-top, 30vh) - 34px); text-align: center;
     font-size: 13px; letter-spacing: -.005em; color: rgba(var(--ink),.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     transition: opacity .35s; pointer-events: auto; cursor: default; }
   /* the ambient layer replaces the header mark/status and the dock caption */

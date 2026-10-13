@@ -914,6 +914,7 @@
     wheelGlide = false;
     activePointer = ev.pointerId;
     try { canvas.setPointerCapture(ev.pointerId); } catch (_) {}
+    if (ev.pointerType !== "touch") document.body.classList.add("dragging");
     lastPX = ev.clientX;
     const armed = panMode === "live";
     // Touch: the painting is never a scrubber. Taps toggle the UI; scrubbing is the timeline's job.
@@ -990,6 +991,7 @@
   };
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) => canvas.addEventListener(t, () => document.body.classList.remove("dragging")));
 
   // Wheel / trackpad = time. Scroll DOWN travels back into history, UP comes forward (reaching the
   // live edge re-joins live). Each event is an impulse; impulses stack and accelerate with speed, so
@@ -1059,7 +1061,7 @@
   let idleTimer = 0;
   const drawer = $("drawer");
   function poke(ms) {
-    document.body.classList.remove("idle");
+    if (document.body.classList.contains("idle")) document.body.classList.remove("idle");   // no attribute write (and style recalc) per mousemove
     clearTimeout(idleTimer);
     // Don't count down during the load-in: the chrome hasn't even appeared yet.
     if (document.body.classList.contains("intro")) { idleTimer = setTimeout(poke, 400); return; }
