@@ -550,26 +550,6 @@ async function boot() {
 
   const refreshDonors = () => {};   // donor wall lives only on /about
 
-  // Low-fuel line: one quiet, dismissible line, only when fuel is genuinely low, at most once per visitor per day.
-  let nudged = false;
-  function maybeNudge() {
-    if (nudged) return;
-    const force = /[?&]lowfuel\b/.test(location.search), day = new Date().toISOString().slice(0, 10);
-    let seen = false; try { seen = localStorage.getItem("it:nudged") === day; } catch (_) {}
-    if (!force && seen) return;
-    const low = Number(fuel.low_cents || 500), cents = Number(fuel.balance_cents);
-    if (!force && !(fuel.balance_cents != null && cents < low)) return;
-    nudged = true; if (!force) try { localStorage.setItem("it:nudged", day); } catch (_) {}
-    const hrs = Math.max(0, cents) / (hourCents || 17);
-    $("nudge-left").textContent = Number.isFinite(hrs) && hrs >= 1 ? `Fuel's low, about ${Math.round(hrs)} h of GPU covered` : "Fuel's low";
-    $("nudge").classList.remove("hidden"); requestAnimationFrame(() => $("nudge").classList.add("on"));
-    try { window.va && window.va("event", { name: "nudge_shown" }); } catch (_) {}
-  }
-  const closeNudge = () => { $("nudge").classList.remove("on"); setTimeout(() => $("nudge").classList.add("hidden"), 300); };
-  $("nudge-x").addEventListener("click", closeNudge);
-  $("nudge-go").addEventListener("click", (e) => { e.preventDefault(); closeNudge(); openTab("fuel"); });
-  window.addEventListener("tapestry:revealed", () => setTimeout(maybeNudge, 4000), { once: true });
-  setTimeout(maybeNudge, 9000);
 
   async function donate(cents, { ideaId } = {}) {
     try {

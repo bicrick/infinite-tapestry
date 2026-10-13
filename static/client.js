@@ -388,11 +388,18 @@
     return ans < 0 ? null : tlScenes[ans];
   }
   // Append live per-strip scene labels (server sends one after each strip).
+  // Strip refs arrive live (WS) and out of order from /api/live (bootstrap newest-first, history ranges), so
+  // insert in index order: replay and history get the same per-strip titles as live, with or without the pod.
   function addStripScene(i, sc) {
-    const last = tlScenes[tlScenes.length - 1];
-    if (last && i <= last[0]) return;  // older strip: /timeline backfill covers it
-    if (last && last[1] === sc[0] && last[2] === sc[1] && last[3] === sc[2] && last[4] === sc[3]) return;
-    tlScenes.push([i, sc[0], sc[1], sc[2], sc[3]]);
+    if (!sc || !sc[0]) return;
+    const same = (r) => r && r[1] === sc[0] && r[2] === sc[1] && r[3] === sc[2] && r[4] === sc[3];
+    let lo = 0, hi = tlScenes.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (tlScenes[m][0] < i) lo = m + 1; else hi = m; }
+    const prev = tlScenes[lo - 1], next = tlScenes[lo];
+    if (next && next[0] === i) return;            // already known
+    if (same(prev)) return;                       // inside a known run of this scene
+    if (same(next)) { next[0] = i; return; }      // the run starts earlier than we knew
+    tlScenes.splice(lo, 0, [i, sc[0], sc[1], sc[2], sc[3]]);
   }
   let liveCapKey = null;
   function wireTitleClick(el) {

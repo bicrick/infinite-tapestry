@@ -594,7 +594,7 @@ body.offline-on #intro, body.offline-on .ui, body.offline-on .amb { opacity: 0 !
 @keyframes drop-in { from { transform: translateY(4px); opacity: 0 } to { transform: none; opacity: 1 } }
 .ref-chip img { width: 30px; height: 30px; }
 
-/* ---------- donors: kept-alive ticker, nudge, shout-outs ---------- */
+/* ---------- donors: kept-alive ticker, shout-outs ---------- */
 .kept { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 30; font-size: 11.5px; letter-spacing: .02em;
   color: var(--muted); white-space: nowrap; pointer-events: auto; transition: opacity .6s ease; }
 .kept-l { opacity: .7; }
@@ -606,21 +606,6 @@ body.intro .kept, body.ambient .kept { opacity: 0; }
 body.idle .kept { opacity: .45; }
 @media all { .kept { top: calc(46px + env(safe-area-inset-top, 0px)); font-size: 11px; } }
 
-.nudge { position: fixed; inset: 0; z-index: 900; display: grid; place-items: center; pointer-events: none; }
-.nudge::before { content: ""; position: absolute; inset: 0; background: rgba(5,5,7,.28); opacity: 0; transition: opacity .35s ease; }
-.nudge.on::before { opacity: 1; }
-.nudge-card { position: relative; pointer-events: auto; width: min(360px, 88vw); padding: 26px 24px 18px; border-radius: 18px; text-align: center;
-  background: rgba(var(--shade),.84); color: rgb(var(--ink)); backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2);
-  border: 1px solid rgba(var(--ink),.12); box-shadow: 0 24px 80px rgba(0,0,0,.35);
-  opacity: 0; transform: translateY(10px) scale(.98); transition: opacity .35s ease, transform .45s cubic-bezier(.2,.9,.3,1.2); }
-.nudge.on .nudge-card { opacity: 1; transform: none; }
-.nudge-mark { width: 34px; filter: var(--mark-filter); opacity: .9; margin-bottom: 10px; }
-.nudge-t { font-size: 17px; font-weight: 500; letter-spacing: -.01em; }
-.nudge-s { font-size: 13.5px; line-height: 1.45; margin-top: 6px; opacity: .8; }
-.nudge-s .muted { display: block; margin-top: 4px; font-size: 12px; }
-.nudge-tiers { justify-content: center; padding: 16px 0 6px; }
-.nudge-x { background: none; border: 0; color: inherit; opacity: .55; font: inherit; font-size: 12.5px; cursor: pointer; padding: 8px 12px; }
-.nudge-x:hover { opacity: .9; }
 
 .donor-tabs { display: flex; gap: 14px; }
 .donor-tabs button { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); cursor: pointer; letter-spacing: inherit; text-transform: inherit; }
@@ -750,14 +735,6 @@ body.react-open .cmd-terms { display: none !important; }
   body:has(.wheel-label.on) .dock { opacity: 0; pointer-events: none; transition: opacity .2s var(--ease); }
 }
 
-/* low-fuel: one quiet line, not a modal */
-.nudge-line { position: fixed; left: 50%; top: 14px; transform: translate(-50%, -6px); z-index: 40; opacity: 0; transition: opacity .3s, transform .3s;
-  font-size: 12px; letter-spacing: .02em; color: rgba(var(--ink),.72); background: var(--glass); backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); padding: 6px 8px 6px 14px; border-radius: 999px; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
-.nudge-line.on { opacity: 1; transform: translate(-50%, 0); }
-.nudge-line a { color: rgb(var(--ink)); text-underline-offset: 3px; }
-.nudge-line button { background: none; border: 0; color: inherit; opacity: .55; cursor: pointer; font-size: 14px; padding: 0 4px; line-height: 1; }
-.nudge-line button:hover { opacity: 1; }
 
 
 /* wide screens: same phone UI, centred and sized sensibly */
@@ -900,22 +877,20 @@ body.composing:not(.away) .dock .cmd-terms { max-height: none !important; line-h
 .snd-btn.on { opacity: 1; color: var(--fg); }
 .snd-btn.on .w1, .snd-btn.on .w2 { opacity: 1; } .snd-btn.on .x { opacity: 0; }
 .snd-btn { position: relative; z-index: 40; }
-.nudge-line { pointer-events: none; } .nudge-line a, .nudge-line button { pointer-events: auto; }
 /* Idle v2 (mobile = desktop): only logo, clock and (if playing) the speaker remain */
 .top-clock { margin-left: 12px; padding-left: 12px; border-left: 1px solid var(--line); font-size: 12px !important; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .01em; font-weight: 400; }
 body.idle .top.ui, body.ambient .top.ui { opacity: 1 !important; pointer-events: none; }
 body.idle .top .brand-link, body.idle .top .snd-btn.on { pointer-events: auto; }
 body.idle .top .top-right, body.idle #account-btn, body.idle .top .fuel-chip, body.idle .top .fs-btn,
-body.idle .hwheel, body.idle .dock, body.idle #live-btn, body.idle .amb-time, body.idle .nudge-line,
+body.idle .hwheel, body.idle .dock, body.idle #live-btn, body.idle .amb-time,
 body.idle .snd-btn:not(.on) { opacity: 0 !important; pointer-events: none !important; translate: 0 4px; }
 body.idle .dock { translate: 0 calc(4px - var(--centre, 0px)); }
-.top .top-right, #account-btn, .hwheel, .amb-title, .amb-time, .snd-btn, .nudge-line { transition: opacity .5s var(--ease), translate .5s var(--ease); }
+.top .top-right, #account-btn, .hwheel, .amb-title, .amb-time, .snd-btn { transition: opacity .5s var(--ease), translate .5s var(--ease); }
 body:not(.idle) .top .top-right { transition-delay: .06s; } body:not(.idle) .amb-title, body:not(.idle) .amb-time { transition-delay: .12s; }
 body:not(.idle) .dock { transition-delay: .18s; } body:not(.idle) .hwheel { transition-delay: .24s; }
 /* speaker: quiet grey when on */
 .snd-btn.on { color: var(--muted); opacity: .55; }
 .snd-btn.on:hover { opacity: .85; }
-@media (max-width: 700px) { .nudge-line { top: calc(54px + env(safe-area-inset-top)); } }
 body.idle .amb-title, body.ambient .amb-title { opacity: 1 !important; translate: none; }
 
 /* ---------- drawer v2: quiet, minimal (same on desktop and mobile) ---------- */
@@ -973,7 +948,7 @@ body.idle .amb-title, body.ambient .amb-title { opacity: 1 !important; translate
 .amb-title { font-size: 13px; color: rgba(var(--ink),.55); letter-spacing: 0; }
 
 /* ---- notifications: ONE home for every toast — centred in the gap between the top bar and the title ---- */
-.toast, body.page .toast, .share-toast, .nudge-line {
+.toast, body.page .toast, .share-toast {
   position: fixed !important; left: 50% !important; right: auto !important; bottom: auto !important; z-index: 70;
   top: max(calc(var(--top-h) + var(--s1)), calc((var(--top-h) + var(--band-top, 30vh) - 34px) / 2 - 16px)) !important;
   height: 32px; box-sizing: border-box; display: flex; align-items: center; gap: var(--s2);
@@ -983,16 +958,16 @@ body.idle .amb-title, body.ambient .amb-title { opacity: 1 !important; translate
   font-size: var(--t-md) !important; line-height: 16px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   opacity: 0; transform: translate(-50%, -6px) !important; pointer-events: none;
   transition: opacity .28s var(--ease), transform .28s var(--ease) !important; }
-.toast.show, .share-toast.show, .nudge-line.on { opacity: 1; transform: translate(-50%, 0) !important; }
-.share-toast.show, .nudge-line.on { pointer-events: auto; }
+.toast.show, .share-toast.show { opacity: 1; transform: translate(-50%, 0) !important; }
+.share-toast.show { pointer-events: auto; }
 .share-toast { padding-right: var(--s1) !important; }
 .share-toast .st-btn { height: 24px; padding: 0 var(--s3); font-size: var(--t-sm); min-width: 0; }
 .share-toast .st-x { padding: 0 var(--s1); }
-/* one at a time: share > toast > nudge */
-body:has(.share-toast.show) .toast, body:has(.share-toast.show) .nudge-line, body:has(.toast.show) .nudge-line { opacity: 0 !important; pointer-events: none !important; }
+/* one at a time: share > toast */
+body:has(.share-toast.show) .toast { opacity: 0 !important; pointer-events: none !important; }
 /* short screens: the title steps aside while a notification is up, so nothing overlaps */
 @media (max-height: 760px) {
-  body:has(.toast.show) .amb-title, body:has(.share-toast.show) .amb-title, body:has(.nudge-line.on) .amb-title { opacity: 0 !important; }
+  body:has(.toast.show) .amb-title, body:has(.share-toast.show) .amb-title { opacity: 0 !important; }
 }
 
 /* ---- composer: even inset on every side ---- */
@@ -1094,7 +1069,7 @@ body.idle .panel-btn, body.ambient .panel-btn, body.idle .top .status, body.ambi
 
 /* ===== screensaver: body.saver (fullscreen) — only a soft clock + title, centred at the top, above the ribbon ===== */
 body.saver .top .brand-link, body.saver .snd-btn:not(.on), body.saver .hwheel, body.saver .top-right, body.saver .dock, body.saver .amb-time,
-body.saver .toast, body.saver .share-toast, body.saver .nudge-line, body.saver #live-btn { opacity: 0 !important; pointer-events: none !important; }
+body.saver .toast, body.saver .share-toast, body.saver #live-btn { opacity: 0 !important; pointer-events: none !important; }
 body.saver .snd-btn.on { opacity: .3 !important; }
 body.saver { cursor: none; }
 body.saver .top-clock { position: fixed; left: 0; right: 0; margin: 0 auto; padding: 0; border: 0; width: max-content; text-align: center;

@@ -104,3 +104,14 @@ def test_soft_title_word_boundary():
     assert soft_title("short") == "short"
     assert soft_title("Mayan temple with hidden technology inside") == "Mayan temple with hidden technology…"
     assert "…" in soft_title("abcdefghijklmnopqrstuvwxyz0123456789ABCDEF")
+
+
+def test_low_fuel_banner_removed():
+    for f in ("static/index.html", "static/social.js", "static/style.css"):
+        assert "nudge-line" not in (ROOT / f).read_text() and "maybeNudge" not in (ROOT / f).read_text()
+
+
+def test_strip_scenes_insert_in_order_for_replay():
+    js = (ROOT / "static/client.js").read_text()
+    assert "older strip: /timeline backfill covers it" not in js
+    assert "tlScenes.splice(lo, 0," in js
