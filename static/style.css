@@ -1182,3 +1182,4 @@ body.saver .toast.nudge, body.ambient .toast.nudge { display: none; }
 .fuel-legend .lg.cost { background: currentColor; opacity: .35; }
 .fuel-legend .lg.don { background: #e0a84a; }
 .fuel-line.big span { background: #e0a84a; }
+#panel-fuel a { color: rgb(var(--ink)); }
