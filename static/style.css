@@ -902,3 +902,5 @@ body.composing:not(.away) .dock .cmd-terms { max-height: none !important; line-h
 .snd-btn .x { opacity: 1; transition: opacity .4s var(--ease); }
 .snd-btn.on { opacity: 1; color: var(--fg); }
 .snd-btn.on .w1, .snd-btn.on .w2 { opacity: 1; } .snd-btn.on .x { opacity: 0; }
+.snd-btn { position: relative; z-index: 40; }
+.nudge-line { pointer-events: none; } .nudge-line a, .nudge-line button { pointer-events: auto; }
