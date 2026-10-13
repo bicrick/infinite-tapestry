@@ -31,8 +31,13 @@
     if (finished) return; finished = true;
     view.style.opacity = ""; view.style.filter = "";
     requestAnimationFrame(() => { view.style.transition = ""; });
-    try { const x = gl && gl.getExtension("WEBGL_lose_context"); if (x) x.loseContext(); } catch (_) {}   // tear the GL context down
-    c.remove();
+    // hide the (already fully transparent) GL canvas first; tear the context down only once it is off screen,
+    // so a lost/cleared drawing buffer can never be composited as a blank (white) frame
+    c.style.visibility = "hidden";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      c.remove();
+      setTimeout(() => { try { const x = gl && gl.getExtension("WEBGL_lose_context"); if (x) x.loseContext(); } catch (_) {} }, 0);
+    }));
   }
   if (!gl) { startReveal(); finish(); return; }
 
