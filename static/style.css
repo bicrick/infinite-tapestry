@@ -1104,3 +1104,5 @@ body.idle .panel-btn, body.ambient .panel-btn, body.idle .top .status, body.ambi
   font-size: 48px !important; font-weight: 200; letter-spacing: -.02em; line-height: 1; color: rgba(var(--ink),.42); }
 :root:fullscreen body.idle .amb-title { position: fixed; left: var(--s6); right: auto; top: auto; bottom: var(--s6); text-align: left; max-width: 50vw;
   font-size: var(--t-md); color: rgba(var(--ink),.32); opacity: 1 !important; }
+.drawer .build-id { bottom: calc(52px + env(safe-area-inset-bottom)) !important; left: var(--s4) !important; }
+.sheet { z-index: 90 !important; }
