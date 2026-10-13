@@ -1,6 +1,7 @@
 // Admin-only moderation for guest ideas: recent submissions, one-click bans, shadow-mute,
-// and the sign-in-only kill switch. Auth: Supabase bearer token of a profile with is_admin.
-const { env, rest, userFromToken, audit, runpod, MIN_BALANCE, POD } = require("../lib/common");
+// and the sign-in-only kill switch. Auth: the verified Supabase email must be in ADMIN_EMAILS (adminFromToken); anyone else gets an empty 403.
+const UI = require("./_admin_ui.json");
+const { env, rest, adminFromToken, audit, runpod, MIN_BALANCE, POD } = require("../lib/common");
 const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svc = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
 const DESIRED = new Set(["on", "off", "auto"]);
@@ -42,11 +43,12 @@ const LIMIT_KEYS = ["guests_enabled", "guest_per_10min", "guest_max_pending", "i
 module.exports = async (req, res) => {
   res.setHeader("cache-control", "private, no-store");
   const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  const me = tok ? await userFromToken(tok).catch(() => null) : null;
-  if (!me || !me.is_admin) return res.status(403).json({ error: "admin_only" });
+  const me = tok ? await adminFromToken(tok).catch(() => null) : null;
+  if (!me) return res.status(403).end();
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
   const a = body.action || "recent";
   try {
+    if (a === "ui") return res.status(200).json(UI);
     if (a === "recent") {
       const [ideas, shadow, sessions, bans, limits] = await Promise.all([
         rest("GET", "ideas?guest_id=not.is.null&order=created_at.desc&limit=60&select=id,handle,body,status,created_at,guest_id,ip_hash,fp_hash"),

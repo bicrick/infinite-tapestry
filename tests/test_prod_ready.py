@@ -18,7 +18,8 @@ def test_moods_json_in_sync():
 
 def test_admin_checks_admin_before_any_action():
     s = rd("web/api/admin.js")
-    gate = s.index('error: "admin_only"')
+    gate = s.index('if (!me) return res.status(403).end();')
+    assert "adminFromToken" in s and "is_admin" not in s.split("module.exports")[1]
     first = min(s.index(m.group(0)) for m in re.finditer(r'\ba === "', s))
     assert gate < first
     for a in ["overview", "gpu_set", "auto_set", "idea", "sanction", "unsanction", "report", "rollback"]:
@@ -75,3 +76,20 @@ def test_apply_config_pause_theme_weights():
     assert not ap.admin_paused and ap.admin_theme == "" and ap.vibe == ""
     asyncio.run(ap.tick())
     assert len(d.state()["items"]) == 2
+
+
+def test_admin_shell_ships_no_admin_ui():
+    h = rd("static/admin.html") + rd("static/gate.js")
+    for w in ["GPU", "Steer", "overview", "rollback", "Reports", "admin.js"]:
+        assert w not in h, w
+    assert not (ROOT / "static/admin.js").exists()
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("g", ROOT / "scripts/gen_admin_ui.py"); g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+    assert json.loads(rd("web/api/_admin_ui.json")) == g.pack()
+
+
+def test_admin_email_allowlist():
+    c = rd("web/lib/common.js")
+    assert 'env("ADMIN_EMAILS", "patrickbrownai@gmail.com")' in c and "email_confirmed_at" in c
+    m = rd("web/middleware.js")
+    assert "/lib/:path*" in m and "/api/_:path*" in m

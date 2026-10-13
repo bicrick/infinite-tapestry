@@ -1,0 +1,28 @@
+<main class="adm">
+    <h1>Admin</h1>
+    <p id="msg" class="fine"></p>
+    <section id="sec-gpu" class="card-a"><h2>GPU</h2>
+      <div class="kv" id="gpu"></div>
+      <div class="seg" id="gpu-seg" role="radiogroup" aria-label="Desired state"><button data-d="on">On</button><button data-d="auto">Auto</button><button data-d="off">Off</button></div>
+      <p class="fine">Writes the desired state. The controller acts within 5 minutes; it stops the pod at a $0.50 RunPod balance either way.</p></section>
+    <section class="card-a"><h2>Steer Auto</h2>
+      <div class="row"><label class="tog"><input type="checkbox" id="auto-paused" /> Pause Auto</label></div>
+      <div class="row"><input id="auto-theme" placeholder="Temporary theme or mood, e.g. autumn forests" maxlength="200" />
+        <select id="auto-mins"><option value="30">30 min</option><option value="60" selected>1 h</option><option value="180">3 h</option><option value="720">12 h</option></select>
+        <button id="auto-theme-set">Set</button><button id="auto-theme-clear">Clear</button></div>
+      <p class="fine" id="auto-note"></p>
+      <details><summary>Mood rotation</summary><div id="moods" class="moods"></div><button id="moods-save">Save weights</button> <button id="moods-reset">Reset</button></details></section>
+    <section class="card-a"><h2>Stats</h2><div class="kv" id="stats"></div><svg id="ideas-spark" class="spark" viewBox="0 0 240 40" preserveAspectRatio="none"></svg></section>
+    <section class="card-a"><h2>Reports</h2><table id="reports"></table></section>
+    <section class="card-a"><h2>Queue</h2><table id="queue"></table></section>
+    <section class="card-a"><h2>Mutes and bans</h2><table id="sanctions"></table></section>
+    <section class="card-a"><h2>Deploys</h2><p class="fine">Pod release in use on next restart: <code id="rel"></code> · <a id="vercel-link" target="_blank" rel="noopener">Vercel deployments (web rollback)</a></p>
+      <table id="releases"></table><table id="deploys"></table></section>
+    <h2>Guests</h2>
+    <div class="row"><button id="kill" class="kill"></button><span class="fine" id="kill-note"></span></div>
+    <h2>Limits</h2><div class="row" id="limits"></div>
+    <h2>Recent guest ideas</h2><table id="ideas"></table>
+    <h2>Shadow-muted (never painted)</h2><table id="shadow"></table>
+    <h2>Guest sessions</h2><table id="sessions"></table>
+    <h2>Bans</h2><table id="bans"></table>
+  </main>

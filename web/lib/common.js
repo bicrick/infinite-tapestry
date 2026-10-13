@@ -23,6 +23,19 @@ async function userFromToken(token) {
   return { id: u.id, email: u.email, handle: rows[0] && rows[0].handle, is_admin: !!(rows[0] && rows[0].is_admin) };
 }
 
+/** The admin is an email allowlist (ADMIN_EMAILS, comma-separated), checked against Supabase's verified
+ *  auth email for the bearer token. profiles.is_admin is deliberately ignored here. */
+const ADMIN_EMAILS = () => env("ADMIN_EMAILS", "patrickbrownai@gmail.com").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+async function adminFromToken(token) {
+  if (!token || token.length > 4096) return null;
+  const r = await fetch(`${SB_URL()}/auth/v1/user`, { headers: { apikey: env("SUPABASE_ANON_KEY") || env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + token } }).catch(() => null);
+  if (!r || !r.ok) return null;
+  const u = await r.json().catch(() => null);
+  const email = String((u && u.email) || "").toLowerCase();
+  if (!u || !u.id || !email || !u.email_confirmed_at || !ADMIN_EMAILS().includes(email)) return null;
+  return { id: u.id, email, is_admin: true };
+}
+
 /** Client IP from headers the edge sets; never trust a bare spoofable XFF alone. */
 function clientIp(req) {
   const h = req.headers || {};
@@ -141,4 +154,4 @@ function storagePrefixes() {
   return [...new Set([env("TAPESTRY_STORAGE_PREFIX", "live-sdxl"), "live-sdxl", "live"])];
 }
 
-module.exports = { SITE_URL, stripeLive, stripeWebhookSecret, runpod, runpodBalance, MIN_BALANCE, env, rest, userFromToken, clientIp, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };
+module.exports = { adminFromToken, ADMIN_EMAILS, SITE_URL, stripeLive, stripeWebhookSecret, runpod, runpodBalance, MIN_BALANCE, env, rest, userFromToken, clientIp, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };

@@ -4,68 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex" />
-  <title>Admin · Infinite Tapestry</title>
+  <title>Sign in · Infinite Tapestry</title>
   <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
   <link rel="stylesheet" href="/style.css" />
   <style>
-    .adm { max-width: 980px; margin: 32px auto 80px; padding: 0 24px; font-size: 13px; }
-    .adm h1 { font-weight: 500; font-size: 22px; } .adm h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 28px 0 8px; }
-    .adm table { width: 100%; border-collapse: collapse; } .adm td { padding: 7px 8px; border-top: 1px solid var(--line); vertical-align: top; }
-    .adm td.m { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .adm button { background: rgba(var(--ink),.08); border: 1px solid var(--line); color: var(--fg); border-radius: 7px; padding: 3px 8px; cursor: pointer; font-size: 12px; margin: 1px; }
-    .adm button.danger { color: #ff8a80; } .adm .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
-    .adm input[type=number] { width: 56px; background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 6px; padding: 3px 5px; }
-    .kill { font-size: 14px; padding: 8px 14px !important; }
-    .card-a { border: 1px solid var(--line); border-radius: 14px; padding: 4px 16px 14px; margin-top: 16px; }
-    .card-a h2 { margin-top: 14px; }
-    .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px 16px; margin-bottom: 12px; }
-    .kv div { display: flex; flex-direction: column; } .kv b { font-weight: 500; font-size: 15px; font-variant-numeric: tabular-nums; } .kv span { color: var(--muted); font-size: 11px; }
-    .adm .seg button { margin: 0; border: 0; background: none; padding: 6px 14px; } .adm .seg button.on { background: rgba(var(--ink),.14); }
-    .adm input:not([type]), .adm select { background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 7px; padding: 5px 8px; font: inherit; flex: 1; min-width: 160px; }
-    .adm select { flex: none; min-width: 0; }
-    .moods { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 14px; margin: 10px 0; }
-    .moods label { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-    .spark { width: 100%; height: 40px; color: var(--fg); }
-    .adm table { display: block; overflow-x: auto; } .adm td { word-break: break-word; }
-    .adm code { font-size: 11px; } .adm a { color: var(--fg); }
-    @media (max-width: 600px) { .adm { padding: 0 14px; margin-top: 20px; } .adm td { padding: 6px 4px; } }
+    #gate { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+    #gate img { width: 50px; } #gate button { font: inherit; font-size: 14px; padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line); background: rgba(var(--ink),.06); color: var(--fg); cursor: pointer; }
   </style>
-<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
 </head>
 <body class="page">
-  <main class="adm">
-    <h1>Admin</h1>
-    <p id="msg" class="fine"></p>
-    <section id="sec-gpu" class="card-a"><h2>GPU</h2>
-      <div class="kv" id="gpu"></div>
-      <div class="seg" id="gpu-seg" role="radiogroup" aria-label="Desired state"><button data-d="on">On</button><button data-d="auto">Auto</button><button data-d="off">Off</button></div>
-      <p class="fine">Writes the desired state. The controller acts within 5 minutes; it stops the pod at a $0.50 RunPod balance either way.</p></section>
-    <section class="card-a"><h2>Steer Auto</h2>
-      <div class="row"><label class="tog"><input type="checkbox" id="auto-paused" /> Pause Auto</label></div>
-      <div class="row"><input id="auto-theme" placeholder="Temporary theme or mood, e.g. autumn forests" maxlength="200" />
-        <select id="auto-mins"><option value="30">30 min</option><option value="60" selected>1 h</option><option value="180">3 h</option><option value="720">12 h</option></select>
-        <button id="auto-theme-set">Set</button><button id="auto-theme-clear">Clear</button></div>
-      <p class="fine" id="auto-note"></p>
-      <details><summary>Mood rotation</summary><div id="moods" class="moods"></div><button id="moods-save">Save weights</button> <button id="moods-reset">Reset</button></details></section>
-    <section class="card-a"><h2>Stats</h2><div class="kv" id="stats"></div><svg id="ideas-spark" class="spark" viewBox="0 0 240 40" preserveAspectRatio="none"></svg></section>
-    <section class="card-a"><h2>Reports</h2><table id="reports"></table></section>
-    <section class="card-a"><h2>Queue</h2><table id="queue"></table></section>
-    <section class="card-a"><h2>Mutes and bans</h2><table id="sanctions"></table></section>
-    <section class="card-a"><h2>Deploys</h2><p class="fine">Pod release in use on next restart: <code id="rel"></code> · <a id="vercel-link" target="_blank" rel="noopener">Vercel deployments (web rollback)</a></p>
-      <table id="releases"></table><table id="deploys"></table></section>
-    <h2>Guests</h2>
-    <div class="row"><button id="kill" class="kill"></button><span class="fine" id="kill-note"></span></div>
-    <h2>Limits</h2><div class="row" id="limits"></div>
-    <h2>Recent guest ideas</h2><table id="ideas"></table>
-    <h2>Shadow-muted (never painted)</h2><table id="shadow"></table>
-    <h2>Guest sessions</h2><table id="sessions"></table>
-    <h2>Bans</h2><table id="bans"></table>
-  </main>
+  <main id="gate" hidden><img src="/brand/mark.svg" alt="" /><button id="g" type="button">Sign in with Google</button></main>
   <script src="/config.js"></script>
-  <script type="module" src="/admin.js"></script>
-<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
-<script defer src="/_vercel/insights/script.js"></script>
-<script defer src="/_vercel/speed-insights/script.js"></script>
+  <script type="module" src="/gate.js"></script>
 </body>
 </html>
