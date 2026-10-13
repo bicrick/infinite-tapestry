@@ -1174,3 +1174,8 @@ body.idle .top-fs, body.ambient .top-fs { opacity: 0 !important; pointer-events:
 #queue-list .item .t[data-tip].tip-on::after, #queue-more .item .t[data-tip].tip-on::after, #idea-list .item .t[data-tip].tip-on::after {
   bottom: auto; top: calc(100% + 4px); left: 0; transform: none; z-index: 6;
 }
+/* Layering: the drawer is its own stacking layer above the ambient layer (.amb, z 1) and the wheel (22-23),
+   below share toasts (70) and sheets (90). Without it the drawer sat at z auto, under .amb's title. */
+.drawer { z-index: 50; }
+/* the on-stage title steps aside while the drawer is open (no hover/click through it either) */
+body:has(.drawer.open) .amb-title { opacity: 0 !important; pointer-events: none !important; }
