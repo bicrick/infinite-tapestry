@@ -917,7 +917,7 @@
     const isTap = g && g.moved < 8 && performance.now() - g.t0 < 350;
     if (isTap && ev.type === "pointerup") {
       // A tap toggles the chrome. (Pointerdown already revealed it if it was hidden.)
-      if (!g.wasIdle && COARSE) setTimeout(() => document.body.classList.add("idle"), 0);
+      if (!g.wasIdle && COARSE && document.body.dataset.trayWas !== "0") setTimeout(() => document.body.classList.add("idle"), 0);
     }
     if (g && g.touch) return;
     if (g && g.armed) {

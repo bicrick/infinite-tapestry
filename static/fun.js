@@ -29,7 +29,7 @@ readBand(); addEventListener("resize", readBand);
 const nearScene = (e) => { if (!bandB) readBand(); return e.clientY >= bandT - 48 && e.clientY <= bandB && !e.target.closest(".dock, .drawer, .top, .sheet"); };
 const wake = (e) => { if (bar.contains(e.target)) { armTray(); return; } if (nearScene(e)) { if (!document.body.classList.contains("react-open")) setTray(true); armTray(); } };
 document.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") wake(e); }, { passive: true });
-document.addEventListener("pointerdown", (e) => { if (bar.contains(e.target)) return; if (nearScene(e)) wake(e); else setTray(false); }, { passive: true });
+document.addEventListener("pointerdown", (e) => { document.body.dataset.trayWas = "1"; if (bar.contains(e.target)) return; if (nearScene(e)) { if (!document.body.classList.contains("react-open")) document.body.dataset.trayWas = "0"; wake(e); } else setTray(false); }, { passive: true });
 let live = 0;
 function floatUp(e, own) {
   if (live >= (own ? 30 : 22) || document.hidden) return;
