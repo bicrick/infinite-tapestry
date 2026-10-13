@@ -1184,16 +1184,15 @@
     const cur = d.current_scene || { title: d.current, prompt: d.current };
     const tgt = d.target_scene;
     $("current-card").innerHTML =
-      `<div class="k">${tgt ? "Transitioning" : "Now playing"} ${srcTag(tgt || cur)}</div>` +
+      `<div class="k">${tgt ? "Up now" : "Now"}<span class="src">${srcName(tgt || cur)}</span></div>` +
       `<div class="t">${esc(cur.title)}${tgt ? ' <span class="muted">→ ' + esc(tgt.title) + "</span>" : ""}</div>` +
       `<div class="p">${esc((tgt || cur).prompt)}</div>`;
-    if (editingId !== null && list.querySelector("textarea")) return; // don't clobber an edit
     // Keyed in-place diff: reuse unchanged rows so the sheet never flashes.
     const old = new Map([...list.children].map((li) => [li.dataset.id, li]));
     let prev = null;
     items.forEach((s, i) => {
       const key = String(s.id);
-      const sig = JSON.stringify([i, s.title, s.prompt, s.origin, s.by, s.kind, s.transition, s.hold, editingId === s.id]);
+      const sig = JSON.stringify([i, s.title, s.origin, s.by, s.kind]);
       let li = old.get(key);
       if (li && li.dataset.sig === sig) {
         old.delete(key);
@@ -1209,50 +1208,25 @@
       li.className = "item " + (s.origin === "auto" ? "auto" : "user") + (s.kind === "idea" ? " idea" : "");
       li.dataset.id = key;
       if (s.kind === "idea") {
-        li.innerHTML = `<span class="n">${i + 1}</span><div><div class="t">${esc(s.title)}</div>` +
-          `<div class="meta">${s.by ? esc(s.by) + " · " : ""}idea · weaving in soon</div></div>`;
+        li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t">${esc(s.title)}</div>` +
+          `<div class="meta">${s.by ? esc(s.by) + " · " : ""}weaving in soon</div></div>`;
         list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
         prev = li;
         return;
       }
-      li.draggable = true;
-      li.innerHTML =
-        `<span class="n">${i + 1}</span><div><div class="t">${esc(s.title)} ${s.origin === "auto" ? '<span class="tag auto">✦ Auto</span>' : s.by ? '<span class="tag">' + esc(s.by) + "</span>" : ""}</div>` +
-        (editingId === s.id
-          ? `<textarea>${esc(s.prompt)}</textarea>`
-          : `<div class="p" title="${esc(s.prompt)}">${esc(s.prompt)}</div>`) +
-        `<div class="meta">${s.transition ? s.transition : d.blend} strip blend · hold ${s.hold ?? d.hold}${s.source ? " · from “" + esc(s.source.slice(0, 40)) + "”" : ""}</div></div>` +
-        `<div class="acts">` +
-        `<button class="icon" data-a="play" title="Play now">${ICON.play}</button>` +
-        `<button class="icon" data-a="up" title="Move up">${ICON.up}</button>` +
-        `<button class="icon" data-a="down" title="Move down">${ICON.down}</button>` +
-        `<button class="icon" data-a="edit" title="Edit">${ICON.edit}</button>` +
-        `<button class="icon" data-a="del" title="Remove">${ICON.del}</button></div>`;
-      li.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
-        const a = b.dataset.a;
-        if (a === "play") send({ type: "play", id: s.id });
-        else if (a === "up") send({ type: "move", id: s.id, to: Math.max(0, i - 1) });
-        else if (a === "down") send({ type: "move", id: s.id, to: i + 1 });
-        else if (a === "del") send({ type: "remove", id: s.id });
-        else if (a === "edit") { editingId = s.id; renderQueue(d); const ta = li.ownerDocument.querySelector(`li[data-id="${s.id}"] textarea`); ta && ta.focus(); }
-      }));
-      const ta = li.querySelector("textarea");
-      if (ta) {
-        const commit = () => { const v = ta.value.trim(); editingId = null; if (v && v !== s.prompt) send({ type: "edit", id: s.id, prompt: v }); else renderQueue(director); };
-        ta.addEventListener("blur", commit);
-        ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ta.blur(); } if (e.key === "Escape") { editingId = null; renderQueue(director); } });
-      }
-      li.addEventListener("dragstart", () => { dragId = s.id; li.classList.add("dragging"); });
-      li.addEventListener("dragend", () => { dragId = null; li.classList.remove("dragging"); });
-      li.addEventListener("dragover", (e) => { e.preventDefault(); li.classList.add("over"); });
-      li.addEventListener("dragleave", () => li.classList.remove("over"));
-      li.addEventListener("drop", (e) => { e.preventDefault(); li.classList.remove("over"); if (dragId !== null && dragId !== s.id) send({ type: "move", id: dragId, to: i }); });
+      // View-only queue: no reorder, drag, edit or remove controls.
+      li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t">${esc(s.title)}</div>` +
+        `<div class="meta">${s.origin === "auto" ? "Auto" : s.by ? esc(s.by) : "Audience"}</div></div>`;
       list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
       prev = li;
     });
     old.forEach((li) => li.remove());
   }
 
+  function srcName(sc) {
+    const o = sc && sc.origin;
+    return o === "auto" ? "Auto" : o === "user" ? (sc.by ? esc(sc.by) : "You") : "";
+  }
   function srcTag(sc) {
     const o = sc && sc.origin;
     return o === "auto" ? '<span class="tag auto">✦ Auto</span>' : o === "user" ? `<span class="tag">${sc.by ? esc(sc.by) : "You"}</span>` : "";

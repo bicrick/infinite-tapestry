@@ -783,6 +783,10 @@ def create_app(
                         await ws.send_json({"type": "auth", "admin": bool(user and user.get("is_admin")),
                                             "handle": (user or {}).get("handle")})
                         continue
+                    if t == "move":
+                        # The queue is view-only: reordering is disabled for everyone (admins included).
+                        await notice("The queue can't be reordered.")
+                        continue
                     if t in CONTROL_TYPES and supa is not None and not (user and user.get("is_admin")):
                         # Production: the stage is steered by the crowd pool (Supabase) and admins.
                         await notice("Add your idea to the pool. The crowd and Auto decide what plays.")

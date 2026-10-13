@@ -920,3 +920,30 @@ body:not(.idle) .dock { transition-delay: .18s; } body:not(.idle) .hwheel { tran
 .snd-btn.on:hover { opacity: .85; }
 @media (max-width: 700px) { .nudge-line { top: calc(54px + env(safe-area-inset-top)); } }
 body.idle .amb-title, body.ambient .amb-title { opacity: 1 !important; translate: none; }
+
+/* ---------- drawer v2: quiet, minimal (same on desktop and mobile) ---------- */
+.drawer-head { padding: 16px 14px 8px 20px; }
+.tabs { gap: 2px; padding: 2px; border-radius: 999px; background: rgba(var(--ink),.05); }
+.tabs button { padding: 5px 11px; border: 0; border-radius: 999px; font-size: 12px; font-weight: 450; letter-spacing: .01em; color: rgba(var(--ink),.45); transition: color .2s, background-color .2s; }
+.tabs button:hover { color: rgba(var(--ink),.75); }
+.tabs button.on { color: var(--fg); background: rgba(var(--ink),.09); border: 0; }
+.card.current { margin: 8px 14px 4px; padding: 14px 16px; border-radius: 14px; background: rgba(var(--ink),.045); }
+.card .k { display: flex; gap: 8px; font-size: 10px; letter-spacing: .12em; color: rgba(var(--ink),.38); }
+.card .k .src { text-transform: none; letter-spacing: .01em; color: rgba(var(--ink),.38); }
+.card .k .src:not(:empty)::before { content: "·"; margin-right: 8px; }
+.card .t { font-size: 15px; font-weight: 450; letter-spacing: -.005em; margin: 6px 0 4px; }
+.card .p { font-size: 12px; line-height: 1.5; color: rgba(var(--ink),.5); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+#queue-list { padding: 4px 14px; }
+#queue-list .item { grid-template-columns: 22px 1fr; gap: 6px; padding: 11px 2px; border-radius: 0; cursor: default; opacity: 1; border-bottom: 1px solid rgba(var(--ink),.05); }
+#queue-list .item:last-child { border-bottom: 0; }
+#queue-list .item:hover { background: none; }
+#queue-list .item .n { cursor: default; font-size: 11px; color: rgba(var(--ink),.28); padding-top: 1px; }
+#queue-list .item .t { font-size: 13px; font-weight: 400; font-style: normal; letter-spacing: -.003em; color: rgba(var(--ink),.88); }
+#queue-list .item.auto .t::before, #queue-list .item.user .t::after { content: none; }
+#queue-list .item .meta { font-size: 11px; margin-top: 2px; color: rgba(var(--ink),.36); }
+#queue-list .item .acts, #queue-list .item .p { display: none; }
+
+/* live · N: identical line boxes so the odometer digit sits on the text baseline */
+.status-mini, #status-text { display: inline-flex; align-items: flex-start; line-height: 1.3em; }
+.status-mini > span, #status-text > span { line-height: 1.3em; white-space: pre; }
+.status-mini .odo, #status-text .odo { vertical-align: 0; }

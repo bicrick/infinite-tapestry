@@ -102,6 +102,8 @@ async function boot() {
   document.body.classList.add("social");
   document.querySelectorAll(".social-only").forEach((el) => el.classList.remove("hidden"));
   $("account-btn").classList.remove("hidden");
+  // Wire the drawer tabs before any auth await: a stalled session restore must never leave the UI dead.
+  document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => { try { openTab(b.dataset.tab); } catch (e) { console.warn("tab", e); } }));
   $("fuel-chip").classList.remove("hidden");
   $("chat").classList.remove("hidden");
   $("cmd-input").placeholder = innerWidth < 480 ? "Where next?" : "Suggest where the tapestry goes next…";
@@ -128,9 +130,14 @@ async function boot() {
     if (S.token()) W().send({ type: "auth", token: S.token() });
     loadVotes();
   }
-  const { data: { session } } = await sb.auth.getSession();
-  S.session = session;
-  await loadProfile();
+  // getSession can stall (auth lock / slow token refresh after sleep); never let it block the rest of boot.
+  const localSession = () => { try { const j = JSON.parse(localStorage.getItem(A.storageKey()) || "null"); return j && j.access_token && j.expires_at * 1000 > Date.now() ? j : null; } catch (_) { return null; } };
+  S.session = await Promise.race([
+    sb.auth.getSession().then((r) => r.data.session).catch(() => localSession()),
+    new Promise((ok) => setTimeout(() => ok(localSession()), 3500)),
+  ]);
+  try { await Promise.race([loadProfile(), new Promise((_, no) => setTimeout(() => no(new Error("profile timeout")), 5000))]); }
+  catch (e) { console.warn("profile", e); }
   if (S.session && S.profile && !S.profile.handle) openAuth();
   sb.auth.onAuthStateChange(async (ev, sess) => {
     const was = S.session && S.session.user.id;
@@ -567,7 +574,6 @@ async function boot() {
     if (name === "audit") refreshAudit();
   }
   S.openTab = openTab;
-  document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => openTab(b.dataset.tab)));
   {   // theme toggle (desktop drawer)
     const cur = localStorage.getItem("it:theme") || "";
     document.querySelectorAll(".drawer-theme button").forEach((b) => {

@@ -15,7 +15,10 @@ export function client() {
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
     const sb = createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit",
-              storageKey: storageKey(), storage: window.localStorage },
+              storageKey: storageKey(), storage: window.localStorage,
+              // No navigator.locks: its cross-tab lock could deadlock getSession after sleep/tab restore,
+              // which hung the social boot (dead tabs, sign-in and enqueue). Token reuse is tolerated server-side.
+              lock: async (_name, _timeout, fn) => await fn() },
     });
     const wake = () => { sb.auth.startAutoRefresh(); sb.auth.getSession().catch(() => {}); };
     document.addEventListener("visibilitychange", () => (document.visibilityState === "visible" ? wake() : sb.auth.stopAutoRefresh()));
