@@ -777,7 +777,7 @@ body.react-open .cmd-terms { display: none !important; }
   .fs-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   body.idle .top .fs-btn { opacity: 0; pointer-events: none; transition: opacity .6s var(--ease); }
 }
-:fullscreen .ui:not(.top), :fullscreen .amb { opacity: 0 !important; pointer-events: none !important; }
+/* browser fullscreen only: layout unchanged */
 
 /* drawer: bottom sheet on phones/touch, a clean right-side panel on wide screens */
 @media (max-width: 700px), (pointer: coarse) {
