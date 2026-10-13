@@ -277,16 +277,16 @@ def create_app(
     upcoming_box = {"seq": 0, "items": None}
 
     def build_upcoming(st: dict) -> list[dict]:
-        """Canonical Next list: queued user scenes, then waiting pool ideas, then Auto filler."""
+        """Public Next list: queued user scenes, then waiting pool ideas. Auto's filler is never listed, so viewers
+        don't feel they compete with it (user ideas always play ahead of Auto anyway; admins see Auto's plan in the dashboard)."""
         items = st.get("items") or []
         users = [dict(i, kind="scene") for i in items if i.get("origin") != "auto"]
-        autos = [dict(i, kind="scene") for i in items if i.get("origin") == "auto"]
         woven = {x for i in items for x in (i.get("idea_ids") or [])}
         pool = [{"id": f"idea-{p['id']}", "kind": "idea", "origin": "user", "title": p["body"][:80],
                  "prompt": p["body"], "by": "@" + p["handle"] if p.get("handle") else None, "image": p.get("image"),
                  "idea_id": p["id"], "votes": p.get("votes", 0), "place": p.get("place"), "eta": p.get("eta")}
                 for p in (crowd.pending if crowd else []) if p["id"] not in woven]
-        return users + pool + autos
+        return users + pool
 
     def director_state() -> dict[str, Any] | None:
         if not generator:
@@ -295,6 +295,7 @@ def create_app(
         st["autopilot"] = autopilot.state() if autopilot else None
         st["fuel"] = crowd.state() if crowd else None
         up = build_upcoming(st)
+        st["items"] = [i for i in (st.get("items") or []) if i.get("origin") != "auto"]  # public payload: hide Auto's queue
         if up != upcoming_box["items"]:
             upcoming_box["items"] = up
             upcoming_box["seq"] += 1

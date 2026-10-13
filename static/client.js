@@ -1238,7 +1238,7 @@
     window.dispatchEvent(new CustomEvent("tapestry:pool", { detail: items.filter((x) => x.kind === "idea").length }));
     $("queue-count").textContent = items.length || "";
     $("queue-empty").classList.toggle("hidden", items.length > 0);
-    $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>Auto is dreaming up what comes next.' : "Nothing queued. Type a destination below.";
+    $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>No ideas waiting. Auto is improvising.' : "Nothing queued. Type a destination below.";
     const cur = d.current_scene || { title: d.current, prompt: d.current };
     const tgt = d.target_scene;
     $("current-card").innerHTML =
