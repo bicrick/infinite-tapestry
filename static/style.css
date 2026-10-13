@@ -317,7 +317,7 @@ body.page .toast { position: fixed; }
 .page-top { pointer-events: auto; background: linear-gradient(to bottom, rgba(5,5,6,.85), rgba(5,5,6,0)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 body.page .toast { bottom: 32px; }
 a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
-.p-title { margin: -6px 0 12px; color: var(--muted); font-size: 12px; } .p-title::before { content: "✦ "; opacity: .6; }
+.p-title { margin: -6px 0 12px; color: var(--muted); font-size: 12px; }
 .s-upnext::before { background: #9ad0ff; }
 
 /* ---------- phones: one-line header, timeline below the dock, safe areas ---------- */
@@ -1292,3 +1292,40 @@ body.chat-open { overscroll-behavior: none; }
   body.away .dock .cmd, body.away .dock .cmd-terms { opacity: 1; transform: none; pointer-events: auto; }
   body.away:not(.chat-open) .chat { opacity: 0 !important; pointer-events: none !important; transition: opacity .3s var(--ease) !important; }
 }
+
+/* ---------- You: account hub ---------- */
+.you-hub { display: flex; flex-direction: column; padding: 4px var(--s4, 16px) calc(24px + env(safe-area-inset-bottom)); font-size: 13px; }
+.you-sec { padding: 16px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.you-sec:last-child { border-bottom: 0; }
+.you-namerow { display: flex; align-items: baseline; gap: 10px; }
+.you-name { margin: 0; font-size: 18px; font-weight: 550; letter-spacing: -.012em; color: var(--fg); overflow-wrap: anywhere; }
+.you-email { margin: 0; font-size: 11.5px; color: var(--muted); }
+.you-fine { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.you-link, .you-ideas a { color: var(--fg); text-decoration: none; font-size: 12.5px; border-bottom: 1px solid rgba(var(--ink),.18); width: max-content; padding-bottom: 1px; }
+.you-link:hover, .you-ideas a:hover { border-bottom-color: currentColor; }
+.you-h { margin: 0 0 2px; font-size: 10.5px; font-weight: 550; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.you-hub .linkish { background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.you-hub .linkish:hover { color: var(--fg); }
+.you-hub .linkish.danger, .you-out.danger { color: #d0574a; }
+.you-rename { display: flex; gap: 8px; align-items: center; }
+.you-rename input { flex: 1; min-width: 0; height: 38px; padding: 0 12px; border-radius: 11px; border: 1px solid var(--line); background: rgba(var(--ink),.05); color: var(--fg); font: inherit; font-size: 14px; outline: 0; }
+.you-rename input:focus { border-color: rgba(var(--ink),.25); }
+.you-rename .primary { height: 38px; padding: 0 14px; border-radius: 11px; }
+.you-ideas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.you-ideas li { display: flex; flex-direction: column; gap: 4px; }
+.you-it { margin: 0; color: var(--fg); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.you-it-title { font-size: 12px; color: var(--muted); }
+.you-it-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 12px; }
+.you-st { color: var(--muted); }
+.you-st.s-woven, .you-st.s-weaving { color: var(--fg); }
+.you-pref { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; }
+.you-pref > span { color: var(--fg); }
+.you-pref .seg { display: inline-flex; padding: 2px; border-radius: 10px; background: rgba(var(--ink),.06); gap: 0; }
+.you-pref .seg button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; padding: 5px 11px; border-radius: 8px; cursor: pointer; }
+.you-pref .seg button.on { background: rgba(var(--ink),.14); color: var(--fg); }
+.you-out { align-self: flex-start; height: 36px; padding: 0 16px; border-radius: 11px; border: 1px solid var(--line); background: rgba(var(--ink),.05); color: var(--fg); font: inherit; font-size: 13px; cursor: pointer; }
+.you-out:hover { background: rgba(var(--ink),.09); }
+.you-del { margin-top: 4px; display: flex; flex-direction: column; gap: 10px; }
+.you-del-row { display: flex; align-items: center; gap: 16px; }
+.you-hub .google.wide { margin-top: 6px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+@media (max-width: 700px), (pointer: coarse) { body:has(.drawer.open) .dock { opacity: 0; pointer-events: none; } }

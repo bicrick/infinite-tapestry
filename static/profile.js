@@ -79,7 +79,6 @@ function renderBanner(d) {
     (href ? `<a class="pb-link" href="${esc(href)}" target="_blank" rel="nofollow ugc noopener noreferrer">${esc(hostOf(href))} ↗</a>` : "");
   const ed = $("p-banner-edit");
   ed.classList.toggle("hidden", !(d.own && d.donor));
-  $("p-donate-hint").classList.toggle("hidden", !(d.own && !d.donor));
   if (d.own && d.donor && !ed.dataset.init) {
     ed.dataset.init = 1;
     $("pbe-tag").value = (b && b.tagline) || ""; $("pbe-url").value = (b && b.url) || "";
@@ -96,6 +95,9 @@ $("p-banner-edit").addEventListener("submit", async (e) => {
   data.banner = { tagline: out.tagline, url: out.url }; $("pbe-url").value = out.url || ""; renderBanner(data); toast("Saved");
 });
 
+const norm = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+// Auto's fallback title is just the prompt cut short ("Extreme close-ups of…"): don't repeat it.
+const dupTitle = (title, body) => { const t = norm(title), b = norm(body); return !t || b === t || b.startsWith(t); };
 function card(i) {
   const landed = i.start_strip != null;
   const to = i.end_strip ?? (landed ? i.start_strip + 12 : null);
@@ -108,7 +110,7 @@ function card(i) {
     ${thumb}
     <div class="p-body">
       <div class="p-row">${LABEL[i.status] === "" ? "" : `<span class="p-status s-${i.status}">${LABEL[i.status] || esc(i.status)}</span>`}<time title="${esc(exact(i.created_at))}">${when}</time></div>
-      <p class="p-text">${esc(i.body)}</p>${i.title && i.status !== "pending" ? `<div class="p-title">${esc(i.title)}</div>` : ""}
+      <p class="p-text">${esc(i.body)}</p>${i.title && i.status !== "pending" && !dupTitle(i.title, i.body) ? `<div class="p-title">${esc(i.title)}</div>` : ""}
       <div class="p-actions">
         ${landed ? `<a href="${at}">View where it landed <span aria-hidden="true">→</span></a>` : ""}
         ${i.status === "rejected" || i.status === "withdrawn" ? "" : `<button data-share="${i.id}" type="button">Share</button>`}

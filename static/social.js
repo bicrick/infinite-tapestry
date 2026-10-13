@@ -126,6 +126,7 @@ async function boot() {
     document.querySelectorAll(".admin-only").forEach((el) => el.classList.toggle("hidden", !S.isAdmin()));
     $("account-btn").textContent = S.profile ? (S.profile.handle ? "@" + S.profile.handle : "Pick a handle") : "Sign in";
     if (S.chatAuth) S.chatAuth();
+    if (S.renderYou) S.renderYou();
     if (S.token()) W().send({ type: "auth", token: S.token() });
     loadVotes();
   }
@@ -240,7 +241,7 @@ async function boot() {
     $("auth-pop").classList.add("hidden");
     toast(`Welcome, <b>@${esc(S.profile.handle)}</b>`);
   });
-  $("auth-out").addEventListener("click", async () => { await sb.auth.signOut(); $("auth-pop").classList.add("hidden"); });
+  $("auth-out").addEventListener("click", () => { $("auth-pop").classList.add("hidden"); signOutAll(); });
 
   function needLogin() {
     if (!S.session || !(S.profile && S.profile.handle)) { openAuth(); return true; }
@@ -734,9 +735,6 @@ async function boot() {
   // ---------- tabs ----------
   function openTab(name) {
     if (name === "ideas") name = "next";
-    if (name === "you") {   // your profile when signed in, otherwise sign in
-      if (!S.session) { $("drawer").classList.remove("open"); openAuth(); return; }
-    }
     $("drawer").classList.add("open");
     if (name === "next" && window.TapestryWS) window.TapestryWS.send({ type: "upcoming_request" });
     document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
@@ -744,8 +742,121 @@ async function boot() {
     if (name === "fuel") { fuelChart(); refreshDonors(); }
     if (name === "next") refreshIdeas();
     if (name === "audit") refreshAudit();
+    if (name === "you") { renderYou(); loadYou(); }
   }
   S.openTab = openTab;
+
+  // ---------- You: account hub (same on desktop and mobile) ----------
+  const hub = $("you-hub");
+  const youOpen = () => !$("panel-you").classList.contains("hidden") && $("drawer").classList.contains("open");
+  const STATUS_L = { pending: "Pending", upnext: "Up next", weaving: "Painting now", woven: "Painted", rejected: "Not used", withdrawn: "Cancelled" };
+  const usd2 = (c) => "$" + (c / 100).toFixed(c % 100 ? 2 : 0);
+  let youData = null, renaming = false;
+  const pref = (label, key, opts, cur) => `<div class="you-pref"><span>${label}</span><div class="seg small" role="radiogroup" aria-label="${label}">${opts.map(([v, t]) => `<button type="button" data-pref="${key}" data-v="${v}" class="${v === cur ? "on" : ""}" aria-pressed="${v === cur}">${t}</button>`).join("")}</div></div>`;
+  function prefsHtml() {
+    const th = (window.TapestryTheme && TapestryTheme.get()) || "";
+    const chatOnNow = $("chat-toggle") ? $("chat-toggle").getAttribute("aria-pressed") !== "false" : true;
+    const snd = localStorage.getItem("tapestry.sound") === "1";
+    return `<h3 class="you-h">Preferences</h3>
+      ${pref("Theme", "theme", [["", "Auto"], ["light", "Light"], ["dark", "Dark"]], th)}
+      ${document.body.classList.contains("chat-disabled") ? "" : pref("Chat", "chat", [["on", "On"], ["off", "Off"]], chatOnNow ? "on" : "off")}
+      ${pref("Sound", "sound", [["on", "On"], ["off", "Off"]], snd ? "on" : "off")}`;
+  }
+  async function renderYou() {
+    if (!hub) return;
+    if (!S.session) {
+      hub.innerHTML = `<div class="you-sec"><h2 class="you-name">Join the tapestry</h2>
+        <p class="you-fine">Signing in gives you higher idea limits, chat, and a profile that keeps every idea you suggest.</p>
+        <button type="button" class="google wide" data-you="google"><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Continue with Google</button></div>
+        <div class="you-sec">${prefsHtml()}</div>`;
+      return;
+    }
+    const h = S.profile && S.profile.handle, email = S.session.user && S.session.user.email;
+    const name = renaming || !h
+      ? `<div class="you-rename"><input id="you-handle" class="vibe" type="text" name="x-h2" maxlength="20" value="${esc(h || "")}" placeholder="Pick a name" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" data-form-type="other" data-1p-ignore data-lpignore="true" aria-label="Display name" /><button type="button" class="primary" data-you="save-name">Save</button>${h ? `<button type="button" class="linkish" data-you="cancel-name">Cancel</button>` : ""}</div><p class="you-fine">2 to 20 letters, numbers or underscores.</p>`
+      : `<div class="you-namerow"><h2 class="you-name">${esc(h)}</h2><button type="button" class="linkish" data-you="rename">Rename</button></div>`;
+    const d = youData;
+    const ideas = d ? d.ideas.slice(0, 6) : null;
+    const list = !ideas ? `<p class="you-fine">Loading…</p>` : !ideas.length ? `<p class="you-fine">No ideas yet. Type one into Where next.</p>`
+      : `<ol class="you-ideas">${ideas.map((i) => {
+          const landed = i.start_strip != null, to = i.end_strip ?? (landed ? i.start_strip + 12 : null);
+          const st = i.status === "pending" && i.place ? `Pending · #${i.place} in queue` : STATUS_L[i.status] || i.status;
+          const nrm = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(), tt = nrm(i.title), bb = nrm(i.body);
+          const title = tt && bb !== tt && !bb.startsWith(tt) ? `<span class="you-it-title">${esc(i.title)}</span>` : "";
+          return `<li><p class="you-it">${esc(i.body)}</p>${title}<div class="you-it-meta"><span class="you-st s-${i.status}">${st}</span>
+            ${i.status === "pending" ? `<button type="button" class="linkish" data-you="cancel" data-id="${i.id}">Cancel</button>` : ""}
+            ${landed ? `<a href="/?at=${i.start_strip}&to=${to}">View where it landed</a>` : ""}</div></li>`; }).join("")}</ol>`;
+    const thanks = d && d.donated_cents > 0 ? `<div class="you-sec"><h3 class="you-h">Fuel</h3><p class="you-fine">Thank you. You've given ${usd2(d.donated_cents)} toward keeping it painting.</p></div>` : "";
+    hub.innerHTML = `<div class="you-sec">${name}${email ? `<p class="you-email">${esc(email)} · only you see this</p>` : ""}
+        ${h ? `<a class="you-link" href="/u/${encodeURIComponent(h)}">View public profile</a>` : ""}</div>
+      <div class="you-sec"><h3 class="you-h">Your ideas</h3>${list}</div>
+      <div class="you-sec">${prefsHtml()}</div>
+      ${thanks}
+      <div class="you-sec"><h3 class="you-h">Account</h3>
+        <button type="button" class="you-out" data-you="signout">Sign out</button>
+        <div id="you-del" class="you-del"><button type="button" class="linkish danger" data-you="delete">Delete my account</button></div></div>`;
+  }
+  async function loadYou() {
+    if (!S.session || !S.profile || !S.profile.handle) { youData = { ideas: [] }; return renderYou(); }
+    try {
+      const r = await fetch(`/api/profile?handle=${encodeURIComponent(S.profile.handle)}`, { headers: { authorization: "Bearer " + S.token() } });
+      youData = r.ok ? await r.json() : { ideas: [] };
+      await Promise.all(youData.ideas.filter((i) => i.status === "pending").slice(0, 6).map(async (i) => { const pl = await S.place(i.id).catch(() => null); if (pl && pl.place) i.place = pl.place; }));
+    } catch (_) { youData = { ideas: [] }; }
+    renderYou();
+  }
+  S.renderYou = () => { if (youOpen()) { renderYou(); loadYou(); } };
+  if (hub) {
+    hub.addEventListener("click", async (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.pref) {
+        const v = b.dataset.v;
+        if (b.dataset.pref === "theme" && window.TapestryTheme) TapestryTheme.set(v);
+        if (b.dataset.pref === "chat" && $("chat-toggle") && ($("chat-toggle").getAttribute("aria-pressed") !== "false") !== (v === "on")) $("chat-toggle").click();
+        if (b.dataset.pref === "sound" && $("snd-btn") && (localStorage.getItem("tapestry.sound") === "1") !== (v === "on")) $("snd-btn").click();
+        return renderYou();
+      }
+      const a = b.dataset.you; if (!a) return;
+      if (a === "google") return sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + location.search } });
+      if (a === "rename") { renaming = true; renderYou(); const i = $("you-handle"); i && i.focus(); return; }
+      if (a === "cancel-name") { renaming = false; return renderYou(); }
+      if (a === "save-name") {
+        const { error } = await sb.rpc("set_handle", { p_handle: $("you-handle").value.trim() });
+        if (error) return toast(friendly(error));
+        renaming = false; await loadProfile(); toast("Name saved"); return loadYou();
+      }
+      if (a === "cancel") {
+        b.disabled = true;
+        const { error } = await sb.rpc("withdraw_idea", { p_id: Number(b.dataset.id) });
+        if (error) { b.disabled = false; return toast(friendly(error)); }
+        toast("Idea cancelled"); refreshIdeas(); return loadYou();
+      }
+      if (a === "signout") return signOutAll();
+      if (a === "delete") {
+        $("you-del").innerHTML = `<p class="you-fine">This permanently deletes your account and name, and hides your ideas and chat. Painted scenes stay on the tapestry without your name. This can't be undone.</p>
+          <div class="you-del-row"><button type="button" class="you-out danger" data-you="delete-yes">Delete permanently</button><button type="button" class="linkish" data-you="delete-no">Keep my account</button></div>`;
+        $("you-del").scrollIntoView({ block: "nearest", behavior: "smooth" });
+        return;
+      }
+      if (a === "delete-no") return renderYou();
+      if (a === "delete-yes") {
+        b.disabled = true; b.textContent = "Deleting…";
+        const r = await fetch("/api/account", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + S.token() }, body: JSON.stringify({ action: "delete", confirm: "DELETE" }) }).catch(() => null);
+        if (!r || !r.ok) { b.disabled = false; b.textContent = "Delete permanently"; return toast("That didn't work. Try again in a moment."); }
+        toast("Your account was deleted"); return signOutAll();
+      }
+    });
+    hub.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "you-handle") { e.preventDefault(); hub.querySelector('[data-you="save-name"]').click(); } });
+    window.addEventListener("tapestry:theme", () => { if (youOpen()) renderYou(); });
+  }
+  // Sign out: Supabase session gone, local session state cleared, back to the live view.
+  async function signOutAll() {
+    try { await Promise.race([sb.auth.signOut({ scope: "local" }), new Promise((ok) => setTimeout(ok, 2500))]); } catch (_) {}
+    try { localStorage.removeItem(A.storageKey()); localStorage.removeItem("it:my-idea-ids"); } catch (_) {}
+    document.documentElement.classList.remove("signed");
+    location.replace("/");
+  }
+  S.signOut = signOutAll;
   {   // theme toggle (desktop drawer)
     const cur = localStorage.getItem("it:theme") || "";
     document.querySelectorAll(".drawer-theme button").forEach((b) => {
