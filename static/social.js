@@ -501,7 +501,7 @@ async function boot() {
     $("fuel-text").textContent = label;
     $("fuel-hours").textContent = label;
     $("fuel-chip").classList.toggle("low", hours < 3);
-    setSleeping(cents <= 0 && !wsOpen);
+    // Fuel is display-only: it never puts the tapestry to sleep.
   }
   async function refreshFuel() {
     const { data } = await sb.from("fuel_status").select("*").maybeSingle();
@@ -557,7 +557,7 @@ async function boot() {
     if (!force && !(fuel.balance_cents != null && cents < low)) return;
     nudged = true; if (!force) try { localStorage.setItem("it:nudged", day); } catch (_) {}
     const hrs = Math.max(0, cents) / (hourCents || 17);
-    $("nudge-left").textContent = Number.isFinite(hrs) && hrs >= 1 ? `Fuel's low, about ${Math.round(hrs)} h of painting left` : "Fuel's low";
+    $("nudge-left").textContent = Number.isFinite(hrs) && hrs >= 1 ? `Fuel's low, about ${Math.round(hrs)} h of GPU covered` : "Fuel's low";
     $("nudge").classList.remove("hidden"); requestAnimationFrame(() => $("nudge").classList.add("on"));
     try { window.va && window.va("event", { name: "nudge_shown" }); } catch (_) {}
   }

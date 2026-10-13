@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const { env, reconcile } = require("../lib/common");
 
-// Called every 5 minutes by Supabase pg_cron (pg_net). Sleeps the pod at zero fuel; wakes it when fuel returns.
+// Called every 5 minutes by Supabase pg_cron (pg_net). Fuel never stops the pod; only the RunPod credit guard ($0.50) or desired=off does.
 module.exports = async (req, res) => {
   const given = String(req.headers["x-controller-secret"] || "");
   const want = env("CONTROLLER_SECRET", "");

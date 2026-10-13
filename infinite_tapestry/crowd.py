@@ -287,28 +287,9 @@ class Crowd:
         was = self.out_of_fuel
         self.out_of_fuel = self.fuel_cents <= 0
         self.broadcast({"type": "fuel", "fuel": self.state()})
+        # Fuel is display-only: the GPU runs 24/7. The only stop is the RunPod credit guard ($0.50).
         if self.out_of_fuel and not was and self.burn:
             await asyncio.to_thread(self.supa.audit, "out_of_fuel", os.environ.get("RUNPOD_POD_ID", ""), {"cents": self.fuel_cents})
-            await asyncio.to_thread(self._stop_self)
-
-    def _stop_self(self) -> None:
-        """Ask RunPod to stop this pod (state is already durable in Supabase)."""
-        pod, key = os.environ.get("RUNPOD_POD_ID"), os.environ.get("RUNPOD_API_KEY")
-        if not (pod and key) or self.mock:
-            return
-        try:
-            self.supa.rest("PATCH", "pod_state?id=eq.1", {"status": "sleeping", "note": "out of fuel"}, "return=minimal")
-            if self.generator is not None and getattr(self.generator, "store", None):
-                st = self.generator.store
-                st.save_state(self.generator.snapshot_state(), self.generator.canvas, force=True)
-                time.sleep(5)  # let the uploader flush
-            body = json.dumps({"query": f'mutation {{ podStop(input: {{podId: "{pod}"}}) {{ id desiredStatus }} }}'}).encode()
-            req = urllib.request.Request("https://api.runpod.io/graphql", data=body,
-                                         headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
-            urllib.request.urlopen(req, timeout=20).read()
-            self.supa.audit("pod_stop", pod, {"by": "server", "reason": "out of fuel"})
-        except Exception:
-            logger.exception("self-stop failed")
 
     def _load_ref(self, path: str) -> tuple[bytes, str] | None:
         """Fetch a reference image (<=2 MB), screen it with the NSFW classifier. None = blocked/unusable."""

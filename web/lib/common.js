@@ -95,22 +95,31 @@ async function fuelBalance() {
   return { balance: Number(rows[0] ? rows[0].balance_cents : 0), pod: rows[0] && rows[0].pod_status };
 }
 
-// Reconcile the GPU pod with the fuel tank. Starting is gated by CONTROLLER_ENABLE_START=1.
+// Reconcile the GPU pod. Fuel (donations) is display-only: the pod runs 24/7. The only automatic stop is the
+// RunPod credit guard (account balance <= RUNPOD_MIN_BALANCE, default $0.50), plus an explicit desired=off.
+// Starting is gated by CONTROLLER_ENABLE_START=1.
+const MIN_BALANCE = () => Number(env("RUNPOD_MIN_BALANCE", "0.5"));
+async function runpodBalance() {
+  try { const d = await runpod(`query { myself { clientBalance } }`); const b = Number(d.myself && d.myself.clientBalance); return Number.isFinite(b) ? b : null; }
+  catch (_) { return null; }   // unknown: never stop on a failed read
+}
 async function reconcile(reason) {
   const { balance } = await fuelBalance();
+  const credit = await runpodBalance();
   const st = await podStatus();
   const desiredRows = await rest("GET", "pod_state?id=eq.1&select=desired");
   const desired = desiredRows[0] ? desiredRows[0].desired : "auto";
+  const broke = credit != null && credit <= MIN_BALANCE();
   let action = "none";
-  if ((balance <= 0 || desired === "off") && st === "RUNNING") {
+  if ((broke || desired === "off") && st === "RUNNING") {
     await podStop(); action = "stop";
-  } else if (balance > 0 && desired !== "off" && st !== "RUNNING" && env("CONTROLLER_ENABLE_START") === "1") {
+  } else if (!broke && credit != null && desired !== "off" && st !== "RUNNING" && env("CONTROLLER_ENABLE_START") === "1") {
     await podStart(); action = "start";
   }
   const status = action === "start" ? "waking" : action === "stop" ? "sleeping" : st === "RUNNING" ? "running" : "sleeping";
-  await rest("PATCH", "pod_state?id=eq.1", { status, updated_at: new Date().toISOString(), note: `${reason}: pod ${st}, fuel ${balance.toFixed(1)}c, action ${action}` }, { prefer: "return=minimal" });
-  if (action !== "none") await audit(action === "start" ? "pod_start" : "pod_stop", { target: POD(), detail: { reason, balance_cents: balance, by: "controller" } });
-  return { balance_cents: balance, pod: st, action, desired, start_enabled: env("CONTROLLER_ENABLE_START") === "1" };
+  await rest("PATCH", "pod_state?id=eq.1", { status, updated_at: new Date().toISOString(), note: `${reason}: pod ${st}, runpod $${credit == null ? "?" : credit.toFixed(2)}, fuel ${balance.toFixed(1)}c, action ${action}` }, { prefer: "return=minimal" });
+  if (action !== "none") await audit(action === "start" ? "pod_start" : "pod_stop", { target: POD(), detail: { reason, balance_cents: balance, runpod_balance: credit, by: "controller" } });
+  return { balance_cents: balance, runpod_balance: credit, pod: st, action, desired, start_enabled: env("CONTROLLER_ENABLE_START") === "1" };
 }
 
 async function readRaw(req) {

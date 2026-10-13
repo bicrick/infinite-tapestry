@@ -94,7 +94,7 @@
   <div id="sleep" class="sleep hidden">
     <div class="sleep-card">
       <div class="sleep-title">The tapestry is asleep</div>
-      <p>It ran out of fuel. Add a little and it wakes up where it left off.</p>
+      <p>The painter is resting. It wakes up where it left off.</p>
       <div class="tiers" id="sleep-tiers">
         <button data-cents="300">$3</button><button data-cents="1000">$10</button><button data-cents="2500">$25</button>
       </div>
@@ -218,10 +218,10 @@
     </section>
     <section class="panel hidden" id="panel-fuel">
       <div class="fuel-big"><div class="fuel-line big"><span id="fuel-fill-big"></span></div>
-        <div class="fuel-caption"><span id="fuel-hours">…</span><span class="muted"> of painting left</span></div></div>
+        <div class="fuel-caption"><span id="fuel-hours">…</span><span class="muted"> of GPU time covered</span></div></div>
       <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="Fuel balance over time"></svg>
       <p id="fuel-chart-note" class="fine pad"></p>
-      <p class="fine pad">Fuel pays for the GPU (about $0.90 an hour) and the AI director. When it runs out, the tapestry sleeps until someone adds more.</p>
+      <p class="fine pad">Fuel helps cover the GPU (about $0.90 an hour) and the AI director. The tapestry keeps painting around the clock either way.</p>
       <div class="tiers" id="tiers">
         <button data-cents="300">$3<small>~17 h</small></button>
         <button data-cents="1000">$10<small>~2 days</small></button>
@@ -235,7 +235,7 @@
       <ol id="audit-list" class="list audit"></ol>
     </section>
     <div class="drawer-bar">
-      <button id="fuel-chip" class="fuel-chip hidden" type="button" title="Painting left (fuel)"><span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span></button>
+      <button id="fuel-chip" class="fuel-chip hidden" type="button" title="GPU time covered by fuel"><span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span></button>
       <button id="clip-btn" class="bar-btn" type="button" title="Share the last 10 seconds">Clip</button>
       <div class="drawer-theme" role="group" aria-label="Theme"><button data-theme="">Auto</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
     </div>

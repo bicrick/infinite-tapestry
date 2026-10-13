@@ -90,3 +90,10 @@ def test_share_page_has_analytics_and_meta():
     assert "/_vercel/insights/script.js" in js and "/_vercel/speed-insights/script.js" in js
     assert "og:image" in js and "twitter:card" in js
     assert "status=in.(pending,playing,played)" in js  # never rejected / expired
+
+
+def test_fuel_never_stops_the_pod():
+    src = (ROOT / "infinite_tapestry/crowd.py").read_text()
+    assert "_stop_self" not in src and "podStop" not in src
+    js = (ROOT / "web/lib/common.js").read_text()
+    assert "RUNPOD_MIN_BALANCE" in js and "balance <= 0" not in js
