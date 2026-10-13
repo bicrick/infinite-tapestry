@@ -122,7 +122,27 @@ class Crowd:
     def _pick(self, rows: list, n: int, busy: bool, ratio: int) -> list:
         """Busy: donor/boosted ideas jump ahead, interleaved `ratio` priority : 1 free so free ideas still play.
         Rows arrive in the mode's order (FIFO or votes); priority rows keep boost-then-that order."""
-        return rows[:n]   # everyone waits their turn; no paid or donor priority
+        # Everyone waits their turn; no paid or donor priority, no curation. Busy: take turns by
+        # submitter (round-robin, one idea per person per round, arrival/vote order within each).
+        # Quiet: plain order, so one person may queue as much as they like.
+        if not busy:
+            return rows[:n]
+        lanes: dict = {}
+        for r in rows:
+            if r.get("user_id"):
+                own = "u:" + str(r["user_id"])
+            elif r.get("guest_id"):
+                own = "g:" + str(r["guest_id"])
+            else:
+                own = "id:" + str(r.get("id"))
+            lanes.setdefault(own, []).append(r)
+        out, k = [], 0
+        while len(out) < n and any(len(v) > k for v in lanes.values()):
+            for v in lanes.values():
+                if len(v) > k and len(out) < n:
+                    out.append(v[k])
+            k += 1
+        return out
         prio = sorted([r for r in rows if r.get("_prio")], key=lambda r: -(r.get("boost_cents") or 0))
         free = [r for r in rows if not r.get("_prio")]
         out = []
@@ -188,7 +208,7 @@ class Crowd:
             rows = await asyncio.to_thread(
                 self.supa.rest, "GET",
                 f"ideas?status=eq.pending&order={order}&limit={40 if busy else want}"
-                "&select=id,handle,body,votes,boost_cents,image_path,user_id")
+                "&select=id,handle,body,votes,boost_cents,image_path,user_id,guest_id")
         if not rows:
             return
         rows = self._pick(rows, want, busy, knobs["ratio"])

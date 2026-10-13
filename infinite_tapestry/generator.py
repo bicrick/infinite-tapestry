@@ -401,6 +401,15 @@ class StripGenerator:
             try:
                 self.director.load_dict(state.get("director", {}))
                 idx = int(state.get("strip_index", 0))
+                # Viewers may have seen strips past the saved state (state is mirrored every ~30 s):
+                # continue after the newest published strip, never re-emit or overwrite one.
+                try:
+                    top = store.mirror.latest_idx() if getattr(store, "mirror", None) else None
+                    if top is not None and top + 1 > idx:
+                        logger.info("Published strips reach %d; resuming at %d (state said %d)", top, top + 1, idx)
+                        idx = top + 1
+                except Exception:
+                    logger.warning("latest strip lookup failed; using saved index")
                 warm = min(self.buffer.history_limit, 64)  # older strips load lazily on pan
                 keep = list(range(max(0, idx - warm), idx))
                 meta = store.load_meta()
@@ -410,6 +419,12 @@ class StripGenerator:
                     except Exception:
                         pass
                 strips = [st for st in (store.load_strip(i, meta.get(i)) for i in keep) if st]
+                # Outpaint from the right edge of what was actually published, never a stale or
+                # fresh canvas (that is a hard seam on every restart).
+                rebuilt = rebuild_canvas(strips[-8:], self.config.overlap) if strips else None
+                if rebuilt is not None and rebuilt.height == self.config.height and rebuilt.width >= self.config.context_width:
+                    canvas = rebuilt
+
                 with self._lock:
                     if canvas is not None:
                         self._canvas = canvas
@@ -484,6 +499,37 @@ class StripGenerator:
                     )
         finally:
             logger.info("Generator loop exiting")
+
+
+def rebuild_canvas(strips: list, overlap: int) -> Image.Image | None:
+    """Reassemble the rolling canvas from consecutive published strips (each emitted strip
+    repaints the previous canvas's last `overlap` px, then adds new pixels)."""
+    import io as _io
+
+    imgs = []
+    prev = None
+    for st in strips:
+        if prev is not None and st.index != prev + 1:
+            imgs = []  # gap: start again from here
+        prev = st.index
+        try:
+            imgs.append((Image.open(_io.BytesIO(st.jpeg)).convert("RGB"), st.overlap))
+        except Exception:
+            imgs = []
+    if not imgs:
+        return None
+    h = imgs[0][0].height
+    out = imgs[0][0]
+    for im, ov in imgs[1:]:
+        if im.height != h:
+            return None
+        ov = ov or 0
+        nw = out.width - ov + im.width
+        c = Image.new("RGB", (nw, h))
+        c.paste(out, (0, 0))
+        c.paste(im, (out.width - ov, 0))
+        out = c
+    return out
 
 
 def dup_score(generated: Image.Image, window: Image.Image, ctx_w: int, right: int) -> float:

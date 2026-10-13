@@ -52,6 +52,7 @@
   let lastTs = 0;
   let ws = null;
   let reconnectDelay = 1000;
+  let everOpened = false;   // initial connect shows nothing, never "reconnecting"
   let bufferDepth = 0;
   let bufferLow = false;
   let lastAckIndex = -1;
@@ -731,7 +732,7 @@
     statusEl.classList.toggle("warn", connected && live && aheadStrips < 1);
     statusEl.classList.toggle("replaying", !connected && (replay || podDown));
     if (!connected && (replay || podDown)) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "replay"; const mi = $("status-mini"); if (mi) mi.textContent = "replay"; return; }
-    if (!connected && !liveChecked) { statusText.textContent = ""; const mi = $("status-mini"); if (mi) mi.textContent = ""; return; }   // until /api/live answers
+    if (!connected && (!liveChecked || !everOpened)) { statusText.textContent = ""; const mi = $("status-mini"); if (mi) mi.textContent = ""; return; }   // until /api/live answers
     if (!connected) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "reconnecting"; const mi = $("status-mini"); if (mi) mi.textContent = "reconnecting"; return; }
     const parts = [];
     const S = window.TapestrySocial;
@@ -1375,7 +1376,7 @@
     ws = new WebSocket(url + (url.includes("?") ? "&" : "?") + "v=2");
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
-      connected = true;
+      connected = true; everOpened = true;
       reconnectDelay = 1000;
       send({ type: "upcoming_request" });
       requested.clear();

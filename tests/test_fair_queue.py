@@ -115,3 +115,13 @@ def test_strip_scenes_insert_in_order_for_replay():
     js = (ROOT / "static/client.js").read_text()
     assert "older strip: /timeline backfill covers it" not in js
     assert "tlScenes.splice(lo, 0," in js
+
+
+def test_busy_pick_round_robins_by_submitter():
+    c = _crowd(RpcSupa([], []), FakeDirector())
+    rows = [{"id": 1, "guest_id": "A"}, {"id": 2, "guest_id": "A"}, {"id": 3, "guest_id": "A"},
+            {"id": 4, "guest_id": "B"}, {"id": 5, "user_id": "u1"}, {"id": 6, "guest_id": "B"}]
+    assert [r["id"] for r in c._pick(rows, 3, True, 2)] == [1, 4, 5]
+    assert [r["id"] for r in c._pick(rows[:4], 3, True, 2)] == [1, 4, 2]
+    # quiet: users can do whatever they want (plain order)
+    assert [r["id"] for r in c._pick(rows, 3, False, 2)] == [1, 2, 3]

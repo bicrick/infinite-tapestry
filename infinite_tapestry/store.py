@@ -202,6 +202,11 @@ class SupabaseMirror:
             logger.exception("Loading state from Postgres failed")
             return None
 
+    def latest_idx(self) -> int | None:
+        """Highest strip index ever published (what viewers have seen)."""
+        rows = self._rest("GET", f"strips?session=eq.{self.prefix}&select=idx&order=idx.desc&limit=1")
+        return int(rows[0]["idx"]) if rows else None
+
     def load_strip_rows(self, lo: int, hi: int) -> dict[int, dict]:
         rows = self._rest("GET", f"strips?session=eq.{self.prefix}&idx=gte.{lo}&idx=lte.{hi}&select=idx,width,height,overlap,prompt")
         return {r["idx"]: {"index": r["idx"], **r} for r in rows or []}
@@ -368,6 +373,14 @@ class HistoryStore:
         Falls back to the cache when Supabase isn't configured (dev/tests)."""
         if self.mirror:
             state = self.mirror.load_state_row()
+            p = self.dir / "state.json"
+            try:
+                local = json.loads(p.read_text()) if p.exists() else None
+            except Exception:
+                local = None
+            if local and (self.dir / "canvas.png").exists() and int(local.get("strip_index", 0)) >= int((state or {}).get("strip_index", 0)):
+                logger.info("Restored state from local cache at strip %s (mirror at %s)", local.get("strip_index"), (state or {}).get("strip_index"))
+                return local, Image.open(self.dir / "canvas.png").convert("RGB")
             if state:
                 canvas = None
                 c = self.mirror.get("canvas.png")
