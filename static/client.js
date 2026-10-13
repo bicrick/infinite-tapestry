@@ -107,6 +107,7 @@
     const a = (Math.round(surroundA * 20) / 20).toFixed(2);
     if (a !== drawSurround.a) { drawSurround.a = a; document.documentElement.style.setProperty("--amb-a", a); }
   }
+  const pastVeil = document.createElement("div"); pastVeil.id = "past-veil"; pastVeil.setAttribute("aria-hidden", "true"); canvas.after(pastVeil);
   // Reflection: a few soft colour blobs above/below the band, sampled from the strips on screen every ~2.5 s
   // (one tiny 6x2 readback), colours eased by CSS, motion by compositor-only transform animations.
   const ambBlobs = (() => {
@@ -582,10 +583,18 @@
     const center = viewLeft() + viewWorld() / 2 - STAGE();   // render offset: the newest 2 strips + the inpaint band stay off-screen (staging zone)
     // Never show blank canvas past the painted edge when the ribbon widens the view.
     const fullRight = viewLeft() + viewWorld() - STAGE();
-    const left = Math.max(0, (center - (w / s) / 2) * (1 - ribbonAnchor) + (fullRight - w / s) * ribbonAnchor);
+    // Never let the drawn right edge pass the staged live line (centring a wide ribbon used to reveal the hold-back);
+    // only an explicit rubber-band overscroll may peek past it.
+    const left = Math.max(0, Math.min((center - (w / s) / 2) * (1 - ribbonAnchor) + (fullRight - w / s) * ribbonAnchor, fullRight - w / s));   // fullRight already carries any overscroll
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
     if (window.__probe) window.__probe.push(left);
     drawCenter = left + w / s / 2;
+    {   // Past the live line (only during a rubber-band overscroll): veil it — blurred, dimmed — via one small CSS overlay.
+      const ov = livePos !== null && panMode !== "live" ? Math.max(0, left + w / s - (livePos - STAGE())) : 0;
+      if (window.__ov) __ov.push(ov);
+      const px = Math.round(ov * s / (window.devicePixelRatio || 1));
+      if (px !== draw.ovPx) { draw.ovPx = px; pastVeil.style.width = px + "px"; pastVeil.style.opacity = px > 0 ? "1" : "0"; }
+    }
     if (livePos !== null) { drawExcess = Math.max(0, left + w / s - (livePos - STAGE())); window.__dx = drawExcess / SW(); }   // how far the drawn right edge reaches past the nominal staged edge (ribbon / zoom / portrait centring)
     const yOff = portrait() ? bandTopFor(h, config.height * s0) + (config.height * s0 - config.height * s) / 2 : ribbonTop(h, config.height * s);
     publishBand(yOff, config.height * s, h);
@@ -706,12 +715,13 @@
   const minPan = () => 0;
   const maxPan = () => Math.max(0, liveScroll);
 
+  const OVER_MAX = () => Math.min(viewWorld() * 0.08, SW() * 0.5);
   function rubber(x) {
     // iOS-style: resistance grows with overscroll distance.
     const lo = minPan(), hi = maxPan(), d = viewWorld() * 0.5;
     const f = (o) => (1 - 1 / (o / d * 0.55 + 1)) * d;
     if (x < lo) return lo - f(lo - x);
-    if (x > hi) return hi;   // hard clamp: nothing past live
+    if (x > hi) return hi + Math.min(OVER_MAX(), f(x - hi) * 0.35);   // small rubber-band past live (springs back; staged pixels stay hidden)
     return x;
   }
   function shownPan() { return rubber(panPos); }
@@ -756,7 +766,7 @@
     liveBtn.classList.add("hidden");
   }
   // Gentle spring: easeOutBack with a small overshoot.
-  const easeSpring = (t) => { const c = 0.9, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; };
+  const easeSpring = (t) => 1 - Math.pow(1 - t, 3);   // ease-out, no overshoot (overshoot carried the view past live)
 
   let driftVel = 0, driftAcc = 0, driftArm = 0, turbo = 0;
   function holdDrift() { driftVel = 0; driftAcc = 0; driftArm = 0; }
@@ -802,7 +812,7 @@
         }
         panPos += panVel * dt;
         if (Math.abs(panVel) < 4) { panVel = 0; wheelGlide = false; }
-        if (panPos >= hi - SW() * 0.25) { startReturn(); return; }   // reached the front: snap back into live
+        if (panPos >= hi - SW() * 0.25 || (Math.abs(panVel) < 60 && hi - panPos < viewWorld() * 0.5)) { startReturn(); return; }   // near the front: magnetic ease into live
         // Drift: once settled and the high-res strips are in, resume the slow forward drift with a
         // gelatinous spring ramp (0 → drift speed over ~1-1.5s, slight overshoot), never a jump.
         if (Math.abs(panVel) < 4 && !gesture && !tlScrub) {

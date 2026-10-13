@@ -118,10 +118,11 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
     const cw = Math.round(W * KR), ch = Math.round(H * KR);
     if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
     const v = V();
-    const s = v && v.drawScale ? (v.ready() ? v.drawScale() : (v.portrait() ? v.drawScale() : H * 0.6 / 512)) : H * 0.6 / 512;
+    // Same band geometry from the very first frame (no fallback guess that re-lays the dots out once data arrives).
+    const s = v && v.drawScale ? v.drawScale() : H * 0.6 / 512;
     const left = worldLeft(now);
     lastT = now;
-    const band = v && v.band && v.ready() ? v.band() : { top: (H * 0.94 - 512 * s) / 2, height: 512 * s };
+    const band = v && v.band ? v.band() : { top: (H * 0.94 - 512 * s) / 2, height: 512 * s };
     if (v && v.ready()) {
       if (readyAt == null) readyAt = now;
       const cov = v.coverage ? v.coverage() : 1;

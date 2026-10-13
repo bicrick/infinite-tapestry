@@ -836,3 +836,8 @@ body.intro #amb-blobs { opacity: 0; }
 .hwheel, .timeline, .veil, #react-btn, .amb-title, .amb-time { transition: opacity .32s var(--ease); }
 
 .build-id { position: absolute; left: 18px; bottom: 14px; font-size: 10px; letter-spacing: .02em; color: var(--muted); opacity: .45; font-variant-numeric: tabular-nums; pointer-events: none; }
+
+/* Past-live veil: only has width while the view is rubber-banded past live */
+#past-veil { position: fixed; right: 0; top: var(--band-top, 30vh); height: calc(var(--band-bot, 70vh) - var(--band-top, 30vh)); width: 0; opacity: 0; pointer-events: none;
+  -webkit-backdrop-filter: blur(6px) saturate(.7); backdrop-filter: blur(6px) saturate(.7); background: color-mix(in srgb, var(--bg) 45%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 24px); mask-image: linear-gradient(to right, transparent, #000 24px); transition: opacity .2s; }
