@@ -79,13 +79,14 @@ def director_brief(recent: list[dict], journey: dict | None, steer: str, flavor:
                      "Vary your moves over time; do not always pick the same kind. Never repeat a recent subject.")
     lines.append("Keep continuity: the first new scene should flow out of the last one (shared color, light, shape or material) "
                  "so the transition is smooth, even when the subject changes.")
-    lines.append("Titles stay artistic: an evocative 2-4 word name like a painting's title (e.g. \"Lantern Tide\", \"The Amber Hour\"), "
+    lines.append("Titles stay artistic: an evocative name of 2 to 4 words (never 5+) like a painting's title (e.g. \"Lantern Tide\", \"The Amber Hour\"), "
                  "never a literal description, a prompt fragment, or the journey name with a number.")
-    if flavor_text:
+    if flavor_text and not (journey and journey.get("total") and (journey.get("step") or 0) < journey["total"]):   # mid-journey: no outside flavor pulling it off course
         lines.append(f"Optional flavor you may use for a detour or a new journey (ignore if it breaks the flow): {flavor_text}")
     if steer:
         lines.append(f"Hint from the curator (take it as a loose nudge, not an order): {steer[:300]}")
-    lines.append('Add to the JSON a "director" object: {"move":"detour|drift|journey|continue","journey":"short journey name '
+    lines.append("Never name brands, franchises, films or characters in titles or prompts.")
+    lines.append('ALWAYS add to the JSON a "director" object (required, even when continuing): {"move":"detour|drift|journey|continue","journey":"short journey name '
                  'or empty","step":<this batch\'s last scene number in the journey or null>,"total":<planned journey length or '
                  'null>,"reason":"one playful sentence on why"}.')
     return "\n".join(lines)
