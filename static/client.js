@@ -267,6 +267,7 @@
   }
 
   function requestMissing(firstIdx, lastIdx) {
+    if (!connected) { apiMissing(firstIdx, lastIdx); return; }
     let start = -1;
     for (let i = Math.max(0, firstIdx); i <= Math.min(lastIdx, maxIndex); i++) {
       if (!strips.has(i) && !requested.has(i)) {
@@ -681,11 +682,12 @@
     const aheadStrips = Math.max(0, ahead / SW());
     statusEl.classList.toggle("off", !connected);
     statusEl.classList.toggle("warn", connected && live && aheadStrips < 1);
+    if (!connected && replay) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "replay"; const mi = $("status-mini"); if (mi) mi.textContent = "replay"; return; }
     if (!connected) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "reconnecting"; const mi = $("status-mini"); if (mi) mi.textContent = "reconnecting"; return; }
     const parts = [];
     const S = window.TapestrySocial;
     if (!DEBUG && !(S && S.isAdmin())) {
-      parts.push(live ? "live" : "rewound");
+      parts.push(replay ? "replay" : live ? "live" : "rewound");
       if (speedMult > 1) parts.push(speedMult + "×");
       setWatching(statusText, parts.join("  ·  ") + "  ·  ", " watching");
       setWatching($("status-mini"), parts.join("  ·  ") + "  ·  ", "");
@@ -825,7 +827,7 @@
         if (Math.abs(panVel) < 4 && !gesture && !tlScrub) {
           if (!driftArm && coverage >= 0.95) driftArm = performance.now();
           if (driftArm && performance.now() - driftArm > 300) {
-            const target = Math.max(0, srvSpeed || 0), k = 9, c = 2 * 0.72 * Math.sqrt(k);
+            const target = Math.max(0, srvSpeed || (replay ? config.scroll_speed || 60 : 0)), k = 9, c = 2 * 0.72 * Math.sqrt(k);
             driftAcc += (k * (target - driftVel) - c * driftAcc) * dt;
             driftVel += driftAcc * dt;
             panPos += Math.max(0, driftVel) * dt;
@@ -1270,10 +1272,11 @@
     }
     if (msg.gpu) gpu = msg.gpu;
     if (msg.type === "strip_scene" && Array.isArray(msg.s)) { addStripScene(msg.i, msg.s); return; }
-    if (msg.type === "strip") { onStripRef(msg, true); return; }
+    if (msg.type === "strip") { lastFreshAt = performance.now(); if (replay) endReplay(); onStripRef(msg, true); return; }
     if (msg.type === "strips") { (msg.items || []).forEach((r) => onStripRef(r, false)); return; }
     if (msg.director) showDirector(msg.director);
     if (msg.type === "config") {
+      wsConfigSeen = true;
       config = Object.assign(config, msg);
       {   // R2 serves CORS and holds every strip/tile; if the pod still advertises the Supabase bucket, read R2 instead (no 400s).
         const cdn = (window.TAPESTRY_CONFIG || {}).cdnBase, re = /^https:\/\/[^/]+supabase\.co\/storage\/v1\/object\/public\/[^/]+\//;
@@ -1413,6 +1416,66 @@
   });
   if (new URLSearchParams(location.search).has("ambient")) document.body.classList.add("ambient");
 
+  // ---------- resilience: pod-independent bootstrap + replay fallback ----------
+  // /api/live (Vercel + Supabase) serves the strip config and recent refs; strips themselves come from R2.
+  // If live goes quiet (no new strip for a minute, or the pod is unreachable), quietly replay recent history.
+  let wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;
+  const apiReq = new Set();
+  function apiMissing(a, b) {
+    a = Math.max(0, a); b = Math.min(b, maxIndex);
+    for (let c = Math.floor(a / 64) * 64; c <= b; c += 64) {
+      if (apiReq.has(c)) continue;
+      let need = false; for (let i = Math.max(a, c); i <= Math.min(b, c + 63); i++) if (!strips.has(i)) { need = true; break; }
+      if (!need) continue;
+      apiReq.add(c);
+      fetch("/api/live?start=" + c + "&end=" + (c + 63)).then((r) => r.json()).then((j) => (j.items || []).forEach((r) => onStripRef(r, false)))
+        .catch(() => {}).finally(() => setTimeout(() => apiReq.delete(c), 5000));
+    }
+  }
+  function bootFromApi() {
+    fetch("/api/live?n=240").then((r) => r.json()).then((j) => {
+      if (!j || !j.config) return;
+      if (!wsConfigSeen) {
+        config = Object.assign(config, j.config);
+        window.dispatchEvent(new CustomEvent("tapestry:config", { detail: j.config }));
+      }
+      (j.items || []).forEach((r) => onStripRef(r, false));
+      if (!connected && j.last_at && j.now - j.last_at > 60) lastFreshAt = performance.now() - 61000;
+    }).catch(() => {});
+  }
+  function fadeSwap(fn, done) {   // compositor-only fade around a jump (no pop-in, no seek blur)
+    replayBusy = true;
+    canvas.style.transition = "opacity .7s ease"; canvas.style.opacity = "0";
+    setTimeout(() => {
+      fn();
+      const t0 = performance.now();
+      const wait = () => (coverage >= 0.95 || performance.now() - t0 > 2500) ? (canvas.style.opacity = "", setTimeout(() => { canvas.style.transition = ""; replayBusy = false; done && done(); }, 750)) : setTimeout(wait, 80);
+      setTimeout(wait, 120);
+    }, 720);
+  }
+  function startReplay() {
+    if (replayBusy || maxIndex < 40) return;
+    const back = Math.min(maxIndex - 4, 90 + Math.floor(Math.random() * 120));   // ~5-10 min of recent history
+    fadeSwap(() => {
+      replay = true;
+      enterHistory(); setAway(false);
+      panPos = Math.max(0, (maxIndex - back) * SW() - viewWorld() / 2); panVel = 0; panMode = "glide";
+    });
+  }
+  function endReplay() {
+    if (!replay || replayBusy) return;
+    fadeSwap(() => { replay = false; panMode = "live"; live = true; setAway(false); });
+  }
+  ["pointerdown", "wheel", "keydown"].forEach((e) => canvas.addEventListener(e, () => { if (replay && !replayBusy) replay = false; }, { capture: true, passive: true }));
+  setInterval(() => {
+    if (document.hidden || document.body.classList.contains("intro") || maxIndex < 0) return;
+    if (connected) downSince = 0; else if (!downSince) downSince = performance.now();
+    const quiet = performance.now() - lastFreshAt > 60000 || (downSince && performance.now() - downSince > 15000);
+    if (!quiet) return;
+    if (panMode === "live" && !replay) startReplay();
+    else if (replay && panMode === "live") startReplay();   // reached the end of the replay: loop
+  }, 1000);
+  bootFromApi();
   connect();
   requestAnimationFrame(frame);
 })();
