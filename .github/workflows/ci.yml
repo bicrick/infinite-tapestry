@@ -96,7 +96,7 @@ jobs:
           # Only the newest main commit may take the domain (a manual deploy or a later push wins otherwise).
           HEAD=$(git -C "$GITHUB_WORKSPACE" ls-remote origin refs/heads/main | cut -f1)
           if [ "$HEAD" != "$GITHUB_SHA" ]; then echo "main moved on ($HEAD); leaving the domains alone"; exit 0; fi
-          for d in $(printf '%s\n' "$HOST" infinite-tapestry.vercel.app infinite-tapestry-preview.vercel.app | sort -u); do
+          for d in $(printf '%s\n' "$HOST" infinite-tapestry.vercel.app infinite-tapestry-preview.vercel.app infinitetapestry.app | sort -u); do
             npx -y vercel@latest alias set "$URL" "$d" --token "$VERCEL_TOKEN"
           done
           for n in 1 2 3 4 5 6; do sleep 4; curl -sf "$SITE/build.json?x=$GITHUB_RUN_ID-$n" | tee /dev/stderr | grep -q "${GITHUB_SHA:0:7}" && break; [ $n = 6 ] && exit 1; done
