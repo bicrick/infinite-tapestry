@@ -62,6 +62,7 @@ async function history(tz) {
       const end = i.end_strip || i.start_strip + 10;
       const r = d.scenes.filter(s => s.b >= i.start_strip && s.a <= end).reduce((n, s) => n + s.rx, 0);
       picks.push({ a: i.start_strip, b: end, text: i.body.slice(0, 120), handle: i.handle, image: !!i.image_path, rx: r, kind: "idea" });
+      (d.ideas = d.ideas || []).push({ a: i.start_strip, text: i.body.slice(0, 80), handle: i.handle });
     }
     const scenes = d.scenes.filter(s => s.title && s.b - s.a >= 6 && !(s.by && OWNER.has(String(s.by).replace("@", "").toLowerCase())));
     scenes.sort((x, y) => y.rx - x.rx || (y.b - y.a) - (x.b - x.a));

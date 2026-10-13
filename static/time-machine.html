@@ -17,25 +17,20 @@
 <body class="tm">
   <nav class="nav">
     <a href="/about" aria-label="About Infinite Tapestry"><img class="mark" src="/brand/mark-plain.svg" alt="" />Time machine</a>
-    <div class="readout" id="readout" aria-live="polite"><span id="r-date">—</span><span id="r-time"></span></div>
     <div class="links"><a href="/">Live →</a></div>
   </nav>
-  <header class="wrap tm-head">
-    <h2>Everything it has ever painted.</h2>
-    <p>One line per few minutes, oldest at the bottom of each day. Scroll fast to zip, drag the rail on the right, tap any line to look closer.</p>
-  </header>
-  <main id="days" class="wrap"><p class="small" id="loading">Loading history…</p></main>
-  <div class="rail" id="rail" aria-label="Drag to zip through history"><div class="rail-head" id="rail-head"></div></div>
-  <div class="zoom hidden" id="zoom" role="dialog" aria-modal="true" aria-labelledby="z-when">
-    <div class="zoom-card">
-      <div class="zoom-strip" id="z-strip"></div>
-      <div class="zoom-meta">
-        <div><b id="z-when"></b><span class="small" id="z-what"></span></div>
-        <div class="zoom-actions"><button class="cta ghost" id="z-close" type="button">Close</button><a class="cta" id="z-open" href="/">Open in live viewer <span>→</span></a></div>
-      </div>
-    </div>
-  </div>
-  <footer class="wrap foot"><span>Infinite Tapestry</span><span><a href="/about">About</a><a href="/terms">Terms</a><a href="/">Live</a></span></footer>
+  <main class="tm-main">
+    <section class="cal" aria-label="Calendar">
+      <div class="cal-h"><button id="m-prev" class="cal-nav" type="button" aria-label="Previous month">‹</button><h2 id="m-title">—</h2><button id="m-next" class="cal-nav" type="button" aria-label="Next month">›</button></div>
+      <div class="cal-dow" id="dow"></div>
+      <div class="cal-grid" id="grid"><p class="small">Loading history…</p></div>
+    </section>
+    <section class="day" id="day" aria-live="polite">
+      <div class="day-h"><h3 id="d-title"></h3><span class="small" id="d-meta"></span></div>
+      <div class="chips" id="d-chips"></div>
+      <ol class="hours" id="d-hours"></ol>
+    </section>
+  </main>
   <script src="/time-machine.js" defer></script>
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
 <script defer src="/_vercel/insights/script.js"></script>
