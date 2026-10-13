@@ -39,7 +39,23 @@
       setTimeout(() => { try { const x = gl && gl.getExtension("WEBGL_lose_context"); if (x) x.loseContext(); } catch (_) {} }, 0);
     }));
   }
-  if (!gl) { startReveal(); finish(); return; }
+  let waitEl = null;
+  function showWaiting() {
+    if (waitEl) return;
+    waitEl = document.createElement("div"); waitEl.id = "intro-wait"; waitEl.setAttribute("role", "status");
+    waitEl.textContent = "Connecting\u2026"; body.appendChild(waitEl);
+    requestAnimationFrame(() => waitEl.classList.add("on"));
+  }
+  function hideWaiting() { if (!waitEl) return; const w = waitEl; w.classList.remove("on"); setTimeout(() => w.remove(), 700); }
+  // Without WebGL: keep the plain card up until the visible strips are drawn, then crossfade.
+  function waitForPixels(done) {
+    const t1 = performance.now();
+    const tick = () => { const v = V(), cov = v && v.ready() ? v.coverage() : 0;
+      if (cov >= 0.999 || (cov >= 0.85 && performance.now() - t1 > 6000)) { hideWaiting(); done(); }
+      else { if (performance.now() - t1 > 12000) showWaiting(); setTimeout(tick, 120); } };
+    tick();
+  }
+  if (!gl) { c.remove(); waitForPixels(() => { startReveal(); finish(); }); return; }
 
   const LIGHT = !!(window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches);
   const LOW = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;
@@ -80,7 +96,7 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
   const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); return o; };
   const pr = gl.createProgram();
   gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(pr);
-  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { startReveal(); finish(); return; }
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { c.remove(); waitForPixels(() => { startReveal(); finish(); }); return; }
   gl.useProgram(pr);
   // Lattice targets (jittered grid over SPAN x band) + random start positions, built once in typed arrays.
   const cell = Math.sqrt(SPAN * BANDW / N), cols = Math.ceil(SPAN / cell), rows = Math.ceil(BANDW / cell);
@@ -105,7 +121,7 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
   const CARD = LIGHT ? [1, 1, 1] : [0, 0, 0];
 
   const t0 = performance.now();
-  let synth = 0, lastT = t0, offsetFix = null, resolveAt = 0, readyAt = null, revealed = false, fN = 0;
+  let synth = 0, lastT = t0, offsetFix = null, resolveAt = 0, readyAt = null, revealed = false, fN = 0, fullN = 0;
   const RESOLVE = 3200;
   function worldLeft(now) {
     const v = V(); const real = v && v.ready() ? v.left() : null;
@@ -131,12 +147,16 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
     if (v && v.ready()) {
       if (readyAt == null) readyAt = now;
       const cov = v.coverage ? v.coverage() : 1;
-      if (!resolveAt && now - t0 > 500 && (cov >= 0.75 || now - readyAt > 1200)) resolveAt = now;
+      // Resolve only once the strips in view are decoded AND drawn (coverage is counted inside draw()), held for a few
+      // frames. A partial band is accepted only late, when the LOD underlay fills the gaps. Never a time-only fallback.
+      if (cov >= 0.999) fullN++; else fullN = 0;
+      if (!resolveAt && now - t0 > 500 && (fullN >= 3 || (cov >= 0.85 && now - readyAt > 6000))) resolveAt = now;
       // band colour sample → texture, ~10 Hz while the dots are still visible
       if (resolveAt && (fN++ % 6 === 0)) { pg.drawImage(view, 0, Math.max(0, band.top), W, Math.max(1, band.height), 0, 0, 256, 64); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, probe); }
     }
     const p = resolveAt ? Math.min(1, (now - resolveAt) / RESOLVE) : 0;
     const hand = Math.max(0, (p - 0.8) / 0.2), he = hand * hand * (3 - 2 * hand);   // splats have covered the band: hand over
+    if (resolveAt && waitEl) hideWaiting();
     if (resolveAt && !revealed && p > 0.7) { revealed = true; startReveal(); }
     gl.viewport(0, 0, cw, ch);
     gl.clearColor(CARD[0] * (1 - he), CARD[1] * (1 - he), CARD[2] * (1 - he), 1 - he);
@@ -154,6 +174,7 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
     if (p >= 1) return finish();
     requestAnimationFrame(introFrame);
   }
-  setTimeout(() => { if (!resolveAt) { startReveal(); view.style.opacity = "1"; finish(); } }, 12000);   // never block the page
+  // Slow network / pod down: after 12 s the loader says so gently and keeps waiting for real pixels (never a blank band).
+  setTimeout(() => { if (!resolveAt && !finished) showWaiting(); }, 12000);
   requestAnimationFrame(introFrame);
 })();

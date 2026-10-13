@@ -227,7 +227,9 @@
     const e = strips.get(r.i);
     // Live refs are broadcast before the R2 upload finishes. Hold CDN fetches for ~3.5s so the
     // first request rarely 404s; history refs prefetch immediately.
-    if (!live) setTimeout(() => ensureDecoded(e), 0);
+    // History refs: prefetch only the newest few (the strips the first frame shows); the rest load as they come into
+    // view. Prefetching all ~240 bootstrap refs at once queued the visible strips behind them on slow networks.
+    if (!live && r.i >= Math.max(maxIndex, r.i) - 14) setTimeout(() => ensureDecoded(e), 0);
     if (r.i > maxIndex) {
       maxIndex = r.i;
       if (!liveInitialized) {
@@ -513,6 +515,8 @@
   async function refreshTimeline() {
     try { const r = await fetch(httpBase() + "/timeline?points=300"); const j = await r.json(); tlPoints = j.points || []; tlScenes = j.scenes || tlScenes; } catch (_) {}
     // the whole history at 1/16 is small: prefetch it so flights never hit an empty frame
+    // (after the load-in: on slow links it must not compete with the strips the loader is waiting for)
+    if (document.body.classList.contains("intro")) return void setTimeout(refreshTimeline, 2000);
     for (let c = 0; (c + 1) * LOD_N[2] <= maxIndex && c < 300; c++) lodTile(2, c);
   }
   setTimeout(refreshTimeline, 1500); setInterval(refreshTimeline, 60000);

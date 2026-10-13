@@ -1260,3 +1260,9 @@ body.idle:not(.chat-open) .chat { opacity: .55 !important; }
   body.chat-open .chat { box-shadow: 0 20px 60px rgba(60,45,30,.18); }
 }
 @media (prefers-reduced-motion: reduce) { .chat-list li, body.chat-open .chat { animation: none; } }
+
+/* load-in: gentle slow-network note (after 12 s without drawn strips) */
+#intro-wait { position: fixed; left: 0; right: 0; top: 50%; transform: translateY(-50%); z-index: 31; text-align: center;
+  font: 500 13px/1 system-ui, -apple-system, sans-serif; letter-spacing: .04em; color: var(--fg, #ccc); opacity: 0;
+  pointer-events: none; transition: opacity .7s ease; }
+#intro-wait.on { opacity: .55; }
