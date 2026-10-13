@@ -3,7 +3,7 @@
 <head>
   <style id="first-paint">html,body{background:#000}@media (prefers-color-scheme: light){html,body{background:#fff}}.seo-intro{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.noscript-msg{position:fixed;left:0;right:0;bottom:24px;text-align:center;color:#ccc;font:14px system-ui}.noscript-msg a{color:#fff}</style>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Infinite Tapestry · live AI art stream, an endless AI painting</title>
   <meta name="description" content="An endless AI painting, streamed live 24/7. Type an idea and watch it get painted in for everyone watching. Go fullscreen for a free AI screensaver." />
   <link rel="canonical" href="https://infinite-tapestry.vercel.app/" />
@@ -76,7 +76,7 @@
     <div class="chat-head"><span class="chat-title">Chat</span><button id="chat-close" class="chat-x" type="button" aria-label="Close chat"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
     <ol id="chat-list" class="chat-list" aria-live="polite"></ol>
     <div class="chat-foot">
-      <form id="chat-form" class="chat-form hidden" autocomplete="off"><input id="chat-input" maxlength="200" placeholder="Say something" enterkeyhint="send" aria-label="Chat message" /><button id="chat-send" class="chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button></form>
+      <form id="chat-form" class="chat-form hidden" autocomplete="off" role="presentation"><input id="chat-input" type="text" name="chat-message" maxlength="200" placeholder="Say something" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" inputmode="text" data-lpignore="true" data-1p-ignore aria-label="Chat message" /><button id="chat-send" class="chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button></form>
       <button id="chat-signin" class="chat-signin" type="button">Sign in to chat</button>
       <div id="chat-note" class="chat-note" role="status"></div>
     </div>
@@ -98,8 +98,8 @@
         <div class="auth-row"><button id="auth-change" type="button" class="link">Use a different email</button><button id="auth-resend" type="button" class="link">Resend email</button></div>
       </form>
       <p id="auth-msg" class="fine auth-msg" role="status"></p>
-      <form id="handle-form" class="hidden">
-        <input id="handle-input" class="vibe" maxlength="20" placeholder="handle" aria-label="Handle (letters, numbers, underscore)" />
+      <form id="handle-form" class="hidden" autocomplete="off">
+        <input id="handle-input" type="text" name="display-name" class="vibe" maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-1p-ignore placeholder="handle" aria-label="Handle (letters, numbers, underscore)" />
         <button class="primary" type="submit">Save</button>
       </form>
       <div id="auth-signed" class="hidden"><p class="fine">Signed in as <b id="auth-handle"></b></p><button id="auth-out" class="ghost wide" type="button">Sign out</button></div>
@@ -129,7 +129,7 @@
     <p class="cmd-terms">By submitting you agree to the <a href="/terms" target="_blank" rel="noopener">terms</a> and <a href="/privacy" target="_blank" rel="noopener">privacy</a>.<span class="anon-only"> No account needed; sign in for more.</span></p>
     <form id="cmd" class="cmd" autocomplete="off">
       <span id="ref-chip" class="ref-chip hidden"><img id="ref-thumb" alt="" /><button type="button" id="ref-clear" title="Remove image">×</button></span>
-      <textarea id="cmd-input" rows="1" placeholder="Where should the world go next?" spellcheck="false" enterkeyhint="send"></textarea>
+      <textarea id="cmd-input" name="idea" rows="1" placeholder="Where should the world go next?" spellcheck="false" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" data-lpignore="true" data-1p-ignore></textarea>
       <label id="ref-btn" class="icon social-only hidden" title="Add a reference image (optional)">
         <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9.5" cy="10" r="1.6"/><path d="M5 17l4.5-4.5 3 3L15 13l4 4"/></svg>
         <input id="ref-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />

@@ -1266,3 +1266,22 @@ body.idle:not(.chat-open) .chat { opacity: .55 !important; }
   font: 500 13px/1 system-ui, -apple-system, sans-serif; letter-spacing: .04em; color: var(--fg, #ccc); opacity: 0;
   pointer-events: none; transition: opacity .7s ease; }
 #intro-wait.on { opacity: .55; }
+/* ---------- on-screen keyboard (site-wide): --kb / --vvh from visualViewport (mobile.js) ---------- */
+@media (pointer: coarse), (max-width: 720px) {
+  input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select { font-size: 16px !important; }   /* no iOS focus zoom */
+}
+html.kb-open, html.kb-open body { overscroll-behavior: none; }
+/* auth / name sheets: the card sits right above the keyboard */
+.sheet { bottom: var(--kb, 0px) !important; transition: bottom .25s cubic-bezier(.2,.8,.2,1); }
+html.kb-open .sheet { padding-bottom: var(--s2, 8px) !important; }
+html.kb-open .sheet-card { max-height: calc(var(--vvh, 100vh) - 16px); overflow-y: auto; }
+/* chat sheet: input right above the keyboard, the list fills what's left */
+@media (max-width: 1199px), (orientation: portrait) {
+  body.chat-open .chat { bottom: var(--kb, 0px); transition: bottom .25s cubic-bezier(.2,.8,.2,1) !important; }
+  html.kb-open body.chat-open .chat { top: calc(8px + max(env(safe-area-inset-top), 0px)); padding-bottom: 0; border-radius: 22px 22px 0 0; }
+  html.kb-open body.chat-open .chat-foot { padding-bottom: 8px; }
+}
+body.chat-open { overscroll-behavior: none; }
+@media (max-width: 1199px), (orientation: portrait) {
+  body.chat-open .chat { background: color-mix(in srgb, var(--bg) 93%, transparent); }   /* readable even where backdrop blur is unavailable */
+}

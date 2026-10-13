@@ -29,23 +29,23 @@
   }, true);
   document.addEventListener("pointerup", () => { sy = null; }, true);
   // 3) Composer is just text (+ image); the director reads style from the words.
-  const cmd = $("cmd"), input = $("cmd-input");
-  if (cmd && input) {
-    // keep the sheet above the on-screen keyboard
-    if (window.visualViewport) {
-      const vv = window.visualViewport, de = document.documentElement;
-      let raf = 0, last = -1;
-      const fit = () => { raf = 0;
-        if (scrollX || scrollY) scrollTo(0, 0);             // cancel iOS focus scroll: layout never moves
-        const kb = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop));
-        if (kb !== last) { last = kb; de.style.setProperty("--kb", kb + "px"); de.classList.toggle("kb-open", kb > 80); }
-      };
-      const q = () => { if (!raf) raf = requestAnimationFrame(fit); };
-      vv.addEventListener("resize", q); vv.addEventListener("scroll", q); addEventListener("scroll", q, { passive: true }); fit();
-      // leave no zoom behind once the keyboard closes
-      input.addEventListener("blur", () => setTimeout(() => { scrollTo(0, 0); if (vv.scale && vv.scale !== 1) { const m = document.querySelector('meta[name=viewport]'); const c = m.content; m.content = c + ",initial-scale=1"; setTimeout(() => { m.content = c; }, 60); } q(); }, 60));
-      input.addEventListener("focus", () => { requestAnimationFrame(() => scrollTo(0, 0)); setTimeout(q, 300); });
-    }
+  // Keyboard, site-wide: every text field. --kb = keyboard height over the layout viewport, --vvh = visible height.
+  // Sheets / composer / chat lay out inside the visible area above it; the page itself never scrolls or zooms.
+  if (window.visualViewport) {
+    const vv = window.visualViewport, de = document.documentElement;
+    let raf = 0, last = -1, lastH = -1;
+    const isText = (el) => el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !/^(range|checkbox|radio|file|button|submit)$/i.test(el.type)));
+    const fit = () => { raf = 0;
+      if (scrollX || scrollY) scrollTo(0, 0);             // cancel iOS focus scroll: layout never moves
+      const kb = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)), h = Math.round(vv.height);
+      if (kb !== last) { last = kb; de.style.setProperty("--kb", kb + "px"); de.classList.toggle("kb-open", kb > 80); }
+      if (h !== lastH) { lastH = h; de.style.setProperty("--vvh", h + "px"); }
+    };
+    const q = () => { if (!raf) raf = requestAnimationFrame(fit); };
+    vv.addEventListener("resize", q); vv.addEventListener("scroll", q); addEventListener("scroll", q, { passive: true }); fit();
+    document.addEventListener("focusin", (e) => { if (!isText(e.target)) return; requestAnimationFrame(() => scrollTo(0, 0)); setTimeout(q, 120); setTimeout(q, 350); });
+    // leave no zoom behind once the keyboard closes
+    document.addEventListener("focusout", (e) => { if (!isText(e.target)) return; setTimeout(() => { scrollTo(0, 0); if (vv.scale && vv.scale !== 1) { const m = document.querySelector("meta[name=viewport]"); const c = m.content; m.content = c + ",initial-scale=1"; setTimeout(() => { m.content = c; }, 60); } q(); }, 60); });
   }
   // no pinch / double-tap zoom (the tapestry still scrolls natively on x)
   for (const ev of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(ev, e => e.preventDefault(), { passive: false });

@@ -524,7 +524,7 @@ async function boot() {
     $("chat-signin").textContent = S.session ? "Pick a name to chat" : "Sign in to chat";
   };
   S.chatAuth();
-  $("chat-signin").addEventListener("click", (e) => { e.stopPropagation(); openAuth(); });
+  $("chat-signin").addEventListener("click", (e) => { e.stopPropagation(); setChatOpen(false); openAuth(); });   // one sheet at a time
   chatTgl.classList.remove("hidden");
   chatTgl.addEventListener("click", () => { chatOn = !chatOn; try { localStorage.setItem("it:chat", chatOn ? "on" : "off"); } catch (_) {} applyChatOn(); });
   window.addEventListener("keydown", (e) => {
