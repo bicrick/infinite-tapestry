@@ -730,6 +730,7 @@
     statusEl.classList.toggle("warn", connected && live && aheadStrips < 1);
     statusEl.classList.toggle("replaying", !connected && (replay || podDown));
     if (!connected && (replay || podDown)) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "replay"; const mi = $("status-mini"); if (mi) mi.textContent = "replay"; return; }
+    if (!connected && !liveChecked) { statusText.textContent = ""; const mi = $("status-mini"); if (mi) mi.textContent = ""; return; }   // until /api/live answers
     if (!connected) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "reconnecting"; const mi = $("status-mini"); if (mi) mi.textContent = "reconnecting"; return; }
     const parts = [];
     const S = window.TapestrySocial;
@@ -1472,7 +1473,7 @@
   // ---------- resilience: pod-independent bootstrap + replay fallback ----------
   // /api/live (Vercel + Supabase) serves the strip config and recent refs; strips themselves come from R2.
   // If live goes quiet (no new strip for a minute, or the pod is unreachable), quietly replay recent history.
-  let podDown = false;   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
+  let podDown = false, liveChecked = false;   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
   let wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;
   const apiReq = new Set();
   function apiMissing(a, b) {
@@ -1494,22 +1495,23 @@
         window.dispatchEvent(new CustomEvent("tapestry:config", { detail: j.config }));
       }
       const it = j.items || [];
+      liveChecked = true;
       podDown = !!(j.pod && (j.pod.status !== "running" || j.pod.desired === "off")) || !!(j.last_at && j.now - j.last_at > 60);
       // Pod down at load: choose replay BEFORE the first strips land, so the camera starts at the replay position
       // and the load-in plays on the strips being replayed (no live-edge frame, then a backward jump).
       if (podDown && !connected && maxIndex < 0 && it.length >= 40 && panMode === "live" && !pendingSeek && !/[?&]at=/.test(location.search)) {
         const top = it[it.length - 1].i, first = it[0].i;
-        const back = Math.min(top - first - 4, 90 + Math.floor(Math.random() * 120));
-        replay = true; live = false; liveInitialized = true;
-        panPos = Math.max(0, (top - back) * SW() - viewWorld() / 2); panVel = 0; panMode = "glide";
+        const back = Math.min(top - first - 4, 90 + Math.floor(Math.random() * 120)), start = top - back;
+        replay = true; live = false;
+        onStripRef(it[it.length - 1], false);   // sets maxIndex so the pan range covers the start position
+        panPos = Math.max(0, start * SW() - viewWorld() / 2); panVel = 0; panMode = "glide";
         lastFreshAt = performance.now() - 61000;
-        const start = top - back, near = it.filter((r) => Math.abs(r.i - start) < 24);
-        near.forEach((r) => onStripRef(r, false));   // the strips on screen decode first
+        it.filter((r) => Math.abs(r.i - start) < 24).forEach((r) => onStripRef(r, false));   // on-screen strips decode first
       }
       if (it.length) onStripRef(it[it.length - 1], false);   // newest first: the live view initialises at the real edge
       it.forEach((r) => onStripRef(r, false));
       if (!connected && j.last_at && j.now - j.last_at > 60) lastFreshAt = performance.now() - 61000;
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => { liveChecked = true; });
   }
   function fadeSwap(fn, done) {   // compositor-only fade around a jump (no pop-in, no seek blur)
     replayBusy = true;
