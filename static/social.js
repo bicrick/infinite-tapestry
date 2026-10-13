@@ -10,7 +10,7 @@ const S = { enabled: false, session: null, profile: null, isAdmin: () => !!(S.pr
 window.TapestrySocial = S;
 
 const ERR = {
-  not_signed_in: "Sign in to vote and add more ideas.",
+  not_signed_in: "Sign in to add more ideas.",
   handle_required: "Pick a handle first.",
   one_active_idea: "You have a few ideas waiting already. Give them a moment to play.",
   too_many_pending: "You have a few ideas waiting already. Give them a moment to play.",
@@ -163,7 +163,7 @@ async function boot() {
     $("auth-signed").classList.toggle("hidden", !signed || needHandle);
     $("auth-handle").textContent = S.profile && S.profile.handle ? "@" + S.profile.handle : "";
     document.querySelector("#auth-pop .sheet-title").textContent = needHandle ? "Pick a handle" : signed ? "Your account" : "Join the tapestry";
-    { const sub = $("auth-sub"); if (sub) sub.textContent = needHandle ? "This is how others see your ideas." : signed ? "" : "Watching is open to everyone. Sign in to add ideas, vote and chat."; }
+    { const sub = $("auth-sub"); if (sub) sub.textContent = needHandle ? "This is how others see your ideas." : signed ? "" : "Watching, ideas and hearts are open to everyone. Sign in to get a handle, a profile and keep your ideas."; }
     $("auth-pop").classList.remove("hidden");
     if (needHandle && !$("handle-input").value && guest.handle) $("handle-input").value = guest.handle.replace("-", "_");
     if (needHandle) setTimeout(() => $("handle-input").focus(), 50);
@@ -218,7 +218,7 @@ async function boot() {
     const b = document.body;
     if (document.fullscreenElement || b.classList.contains("saver") || b.classList.contains("ambient") || document.hidden) return false;
     sessionStorage.setItem(NUDGE_KEY, "1");
-    toast(`<span>Sign in with Google to add more ideas and vote</span><button type="button" id="nudge-go">Sign in</button><button type="button" id="nudge-x" aria-label="Dismiss">×</button>`, 20000);
+    toast(`<span>Sign in with Google to add more ideas</span><button type="button" id="nudge-go">Sign in</button><button type="button" id="nudge-x" aria-label="Dismiss">×</button>`, 20000);
     const t = $("toast"), box = $("cmd-input"), c = (box.closest("form") || box).getBoundingClientRect();
     t.classList.add("nudge");
     if (c.height) t.style.setProperty("--nudge-top", Math.max(8, c.top - t.offsetHeight - 10) + "px");
@@ -347,6 +347,11 @@ async function boot() {
     if (S.session) {
       const { data } = await sb.from("votes").select("idea_id").eq("user_id", S.session.user.id);
       (data || []).forEach((r) => myVotes.add(r.idea_id));
+    } else {
+      try {
+        const r = await fetch("/api/vote?fp=" + encodeURIComponent(await fingerprint()), { credentials: "same-origin" });
+        if (r.ok) ((await r.json()).ids || []).forEach((id) => myVotes.add(id));
+      } catch (_) {}
     }
     renderIdeas();
     window.dispatchEvent(new Event("tapestry:social"));  // refresh Up-next hearts / voted state
@@ -431,11 +436,23 @@ async function boot() {
     const b = e.target.closest("[data-vote]");
     if (!b) return;
     e.preventDefault(); e.stopPropagation();
-    if (needLogin()) return;
     const id = +b.dataset.vote;
-    const { data, error } = await sb.rpc("toggle_vote", { p_idea: id });
-    if (error) return toast(friendly(error));
-    myVotes.has(id) ? myVotes.delete(id) : myVotes.add(id);
+    let data;
+    if (S.session && S.profile && S.profile.handle) {
+      const r = await sb.rpc("toggle_vote", { p_idea: id });
+      if (r.error) return toast(friendly(r.error));
+      data = r.data;
+      myVotes.has(id) ? myVotes.delete(id) : myVotes.add(id);
+    } else if (S.session) { return openAuth(); }  // signed in but no handle yet
+    else {
+      // Guests heart through the server (one per guest session per idea).
+      const r = await fetch("/api/vote", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id, fp: await fingerprint() }) }).catch(() => null);
+      const d = r ? await r.json().catch(() => ({})) : {};
+      if (!r || !r.ok) return toast(d.error === "rate_limited" ? "Easy there — try again in a minute." : d.error === "not_votable" ? "That idea is already painting." : d.error === "signin_required" ? "Sign in to vote right now." : "Couldn't save that heart.");
+      data = d.votes;
+      d.on ? myVotes.add(id) : myVotes.delete(id);
+    }
     document.querySelectorAll(`[data-vote="${id}"]`).forEach((x) => { x.classList.toggle("on", myVotes.has(id)); x.querySelector("span").textContent = data ?? 0; });
     const r = listRows.find((x) => x.id === id); if (r) r.votes = data ?? r.votes;
   }, true);
