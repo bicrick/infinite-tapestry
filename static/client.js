@@ -1588,6 +1588,7 @@
   cmd.addEventListener("focusout", () => setTimeout(() => { if (!cmd.contains(document.activeElement) && !input.value) setCompose(false); }, 120));
   cmd.addEventListener("submit", () => { input.blur(); setCompose(false); setMore(false); setTimeout(() => { input.blur(); setCompose(false); }, 60); });   // collapse to the pill + dismiss keyboard right away
   document.addEventListener("pointerdown", (e) => {
+    if (e.target.closest && e.target.closest(".cmd-terms")) return;
     if (body.classList.contains("composing") && !cmd.contains(e.target) && !input.value) { input.blur(); setCompose(false); }
     if (body.classList.contains("more-open") && !cmd.contains(e.target)) setMore(false);
   }, true);
