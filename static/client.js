@@ -203,12 +203,12 @@
     const ext = config.strip_ext || "jpg";
     if (r.o > maxOv) maxOv = r.o;
     strips.set(r.i, { index: r.i, overlap: r.o || 0, prompt: r.p || "",
-      url: base + String(r.i).padStart(8, "0") + "." + ext, blob: null, bitmap: null, decoding: false, tries: 0, fresh: !!live });
+      url: base + String(r.i).padStart(8, "0") + "." + ext, blob: null, bitmap: null, decoding: false, tries: 0,
+      fresh: !!live, readyAt: live ? performance.now() + 3500 : 0 });
     requested.delete(r.i);
-    // Live strips arrive ahead of the view: prefetch once the CDN upload has landed.
     const e = strips.get(r.i);
-    // Live refs are broadcast before the R2 upload finishes. Don't hit the CDN until the
-    // strip is near the view (draw loop / pre-decode); only history refs prefetch immediately.
+    // Live refs are broadcast before the R2 upload finishes. Hold CDN fetches for ~3.5s so the
+    // first request rarely 404s; history refs prefetch immediately.
     if (!live) setTimeout(() => ensureDecoded(e), 0);
     if (r.i > maxIndex) {
       maxIndex = r.i;
@@ -223,6 +223,7 @@
     if (e.bitmap || e.decoding) return;
     if (!e.blob) {
       if (!e.url || e.retryAt > performance.now()) return;
+      if (e.readyAt && performance.now() < e.readyAt) { e.retryAt = e.readyAt; return; }
       e.decoding = true;
       fetch(e.url, { mode: "cors" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
         .then((b) => { e.blob = b; e.decoding = false; ensureDecoded(e); })
