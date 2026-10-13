@@ -6,7 +6,7 @@ const seo = require("../lib/seo");
 const PER = 1000;
 const x = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[c]));
 const iso = (d) => { const t = new Date(d); return isNaN(t) ? null : t.toISOString(); };
-const STATIC = [["/", "always", "1.0"], ["/about", "weekly", "0.9"], ["/time-machine", "daily", "0.7"], ["/privacy", "yearly", "0.2"], ["/terms", "yearly", "0.2"]];
+const STATIC = [["/", "always", "1.0"], ["/about", "weekly", "0.9"], ["/time-machine", "daily", "0.7"], ["/fuel", "daily", "0.6"], ["/privacy", "yearly", "0.2"], ["/terms", "yearly", "0.2"]];
 const BUILT = process.env.VERCEL_GIT_COMMIT_SHA ? new Date().toISOString() : null;
 
 async function scenes() {

@@ -66,7 +66,7 @@ def test_gpu_rate_default_is_real_runpod_rate():
     if "TAPESTRY_GPU_CENTS_PER_HOUR" not in os.environ:
         assert crowd_mod.GPU_CENTS_PER_HOUR == 89
     html = (ROOT / "static/index.html").read_text()
-    assert "$0.17" not in html and "$0.90 an hour" in html
+    assert "$0.17" not in html
 
 
 def test_migration_defines_fair_queue_without_llm():

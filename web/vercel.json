@@ -181,6 +181,10 @@
    "destination": "/about.html"
   },
   {
+   "source": "/fuel",
+   "destination": "/fuel.html"
+  },
+  {
    "source": "/time-machine",
    "destination": "/time-machine.html"
   },

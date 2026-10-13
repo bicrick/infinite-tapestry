@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" class="page">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Fuel · Infinite Tapestry</title>
+  <meta name="description" content="Infinite Tapestry paints around the clock on a rented GPU. See what painting costs, how much has been donated, and add fuel if you like." />
+  <link rel="canonical" href="https://infinite-tapestry.vercel.app/fuel" />
+  <meta property="og:type" content="website" /><meta property="og:site_name" content="Infinite Tapestry" />
+  <meta property="og:title" content="Fuel · Infinite Tapestry" /><meta property="og:description" content="Infinite Tapestry paints around the clock on a rented GPU. See what painting costs, how much has been donated, and add fuel if you like." />
+  <meta property="og:url" content="https://infinite-tapestry.vercel.app/fuel" /><meta property="og:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
+  <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="/style.css" />
+  <!--chrome:head-->
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+  <script src="/theme.js"></script>
+  <script src="/config.js"></script>
+  <link rel="stylesheet" href="/fuel.css" />
+</head>
+<body class="page doc-page">
+  <!--chrome:header-->
+  <main class="doc fuel-page">
+    <h1>Fuel</h1>
+    <p class="lede">The tapestry paints nonstop on a rented GPU, with Auto directing between ideas. Here's what that costs and how much the crowd has chipped in.</p>
+    <div class="fp-card">
+      <div class="fuel-line big"><span id="fuel-fill-big"></span></div>
+      <div class="fuel-caption" id="fuel-caption">…</div>
+      <p class="fine" id="fuel-sub"></p>
+      <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" role="img" aria-label="Daily painting cost versus donations"></svg>
+      <p id="fuel-chart-note" class="fine fuel-legend"></p>
+    </div>
+    <h2>Add fuel</h2>
+    <div class="tiers" id="tiers">
+      <button data-cents="300">$3<small>&nbsp;</small></button>
+      <button data-cents="1000">$10<small>&nbsp;</small></button>
+      <button data-cents="2500">$25<small>&nbsp;</small></button>
+    </div>
+    <input id="donor-note" class="vibe" maxlength="140" placeholder="A note for the wall (optional)" />
+    <p class="fine" id="fuel-rate-note"></p>
+    <p class="fine">Totally optional. Payments are handled by Stripe; card fees come out before fuel is counted. Donors are thanked on the <a href="/about">about page</a>.</p>
+    <p class="fine" id="fuel-msg" role="status"></p>
+  </main>
+  <!--chrome:footer-->
+<script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+<script src="/fuel.js"></script>
+<!--chrome:scripts-->
+</body>
+</html>

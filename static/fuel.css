@@ -1,0 +1,5 @@
+.fuel-page .fp-card { padding: 20px 0 4px; }
+.fuel-page .fuel-chart { width: 100%; margin: 18px 0 0; color: var(--fg); }
+.fuel-page .tiers { margin: 12px 0 14px; }
+.fuel-page #donor-note { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+.fuel-page #fuel-msg:empty { display: none; }
