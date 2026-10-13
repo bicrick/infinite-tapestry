@@ -163,6 +163,12 @@ def _title_from_prompt(p: str) -> str:
     return " ".join(w.capitalize() if len(w) > 3 else w for w in words)
 
 
+def _reap(t) -> None:
+    """Retrieve a finished per-viewer task's exception (disconnects) so asyncio doesn't log it as an error."""
+    if not t.cancelled():
+        t.exception()
+
+
 def create_app(
     config: "Config",
     buffer: "StripBuffer",
@@ -872,6 +878,7 @@ def create_app(
                                 await ws.send_json(_sm)
                     elif t == "intent" and generator:
                         task = asyncio.create_task(handle_intent(data))
+                        task.add_done_callback(_reap)   # a viewer leaving mid-send is normal, not an error
                         intent_tasks.add(task)
                         task.add_done_callback(intent_tasks.discard)
                     elif t == "autopilot" and autopilot:
@@ -922,6 +929,7 @@ def create_app(
                         broadcast_director(True)
 
             push_task = asyncio.create_task(push())
+            push_task.add_done_callback(_reap)
             viewer.task = push_task
             tasks = {push_task, asyncio.create_task(recv())}
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
