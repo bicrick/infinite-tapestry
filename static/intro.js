@@ -105,7 +105,9 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
   function worldLeft(now) {
     const v = V(); const real = v && v.ready() ? v.left() : null;
     if (real == null) return synth;
-    if (offsetFix == null) offsetFix = synth - real;
+    // Snap, don't glide: the synthetic scroll starts at 0 while the real one is millions of px in, and gliding that gap
+    // away made the whole dot layer streak sideways through the reveal. Only a sub-screen gap is eased.
+    if (offsetFix == null) { offsetFix = synth - real; if (Math.abs(offsetFix) > (view.width || innerWidth)) offsetFix = 0; }
     offsetFix *= Math.exp(-(now - lastT) / 350);
     return real + offsetFix;
   }
