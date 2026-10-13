@@ -146,7 +146,8 @@
   }, 2500);
 
   const viewWorld = () => canvas.width / scale();
-  const ribbonTop = (h, bh) => (h * (1 - 0.06 * (1 - ribbon) / (1 - RIBBON)) - bh) / 2;
+  // Windowed: nudge up 3% to clear the dock. Fullscreen: true vertical centre (the lift left a big gap under the band).
+  const ribbonTop = (h, bh) => (h * (1 - (document.fullscreenElement ? 0 : 0.06) * (1 - ribbon) / (1 - RIBBON)) - bh) / 2;
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
   window.TapestryView = { portrait: () => portrait(), band: () => { const s0 = scale(); if (portrait()) { const bh = config.height * s0; return { top: bandTopFor(canvas.height, bh), height: bh }; } const bh = config.height * s0 * ribbon; return { top: ribbonTop(canvas.height, bh), height: bh }; }, drawScale: () => scale() * (portrait() ? 1 : ribbon), setSurround: (a) => { surroundA = a; }, left: () => viewLeft(), scale: () => scale(), ready: () => maxIndex >= 0, coverage: () => coverage, zoom: () => zoom, canvas, center: () => centerIdx(), max: () => maxIndex, live: () => panMode === "live" };
   // Live may run right up to the newest strip (the server keeps a buffer ahead). Gating livePos on decode/hold-back
@@ -1443,6 +1444,7 @@
   });
   document.addEventListener("fullscreenchange", () => {
     if (!document.fullscreenElement) document.body.classList.remove("ambient");
+    resize();
   });
   // Fullscreen toggle (button or Shift+F) and "reveal": hide every piece of UI
   // while the pointer is held still on the canvas, or toggled with H.
