@@ -26,5 +26,12 @@
   const notify = () => { flip(); subs.forEach(([o, f]) => { try { f.call(o, o); } catch (_) {} }); window.dispatchEvent(new Event("resize")); window.dispatchEvent(new CustomEvent("tapestry:theme")); };
   os.addEventListener && os.addEventListener("change", () => { if (!pref) notify(); });
   window.TapestryTheme = { get: () => pref, set(p) { pref = p === "light" || p === "dark" ? p : ""; if (pref) localStorage.setItem("it:theme", pref); else localStorage.removeItem("it:theme"); notify(); } };
-  flip(); document.addEventListener("DOMContentLoaded", flip); window.addEventListener("load", flip);
+  // Shared footer toggle: any <span class="theme-toggle" data-theme-toggle> gets Auto/Light/Dark buttons.
+  const toggles = () => document.querySelectorAll("[data-theme-toggle]").forEach((el) => {
+    if (!el.childElementCount) el.innerHTML = '<button type="button" data-t="">Auto</button><button type="button" data-t="light">Light</button><button type="button" data-t="dark">Dark</button>';
+    el.setAttribute("role", "group"); el.setAttribute("aria-label", "Theme");
+    el.querySelectorAll("button").forEach((b) => { b.setAttribute("aria-pressed", String(b.dataset.t === pref)); b.onclick = () => window.TapestryTheme.set(b.dataset.t); });
+  });
+  window.addEventListener("tapestry:theme", toggles);
+  flip(); document.addEventListener("DOMContentLoaded", () => { flip(); toggles(); }); window.addEventListener("load", flip);
 })();

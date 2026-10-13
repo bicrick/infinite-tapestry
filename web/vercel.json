@@ -143,6 +143,14 @@
   {
    "source": "/time-machine",
    "destination": "/time-machine.html"
+  },
+  {
+   "source": "/sitemap.xml",
+   "destination": "/api/sitemap"
+  },
+  {
+   "source": "/robots.txt",
+   "destination": "/api/sitemap?kind=robots"
   }
  ]
 }

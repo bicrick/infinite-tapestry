@@ -3,40 +3,42 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Infinite Tapestry</title>
-  <meta name="description" content="An endless painting. You choose where it goes." />
-  <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)" />
+  <title>Infinite Tapestry · a live AI art stream that never ends</title>
+  <meta name="description" content="An endless AI painting, streamed live around the clock. Type an idea and watch it get painted into the scroll for everyone watching. Use it as a free AI screensaver." />
+  <link rel="canonical" href="https://infinite-tapestry.vercel.app/about" />
+  <meta name="theme-color" content="#0b0b0c" />
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Infinite Tapestry" />
   <meta property="og:url" content="https://infinite-tapestry.vercel.app/about" />
-  <meta property="og:title" content="Infinite Tapestry" />
-  <meta property="og:description" content="An endless painting. You choose where it goes." />
+  <meta property="og:title" content="Infinite Tapestry · a live AI art stream that never ends" />
+  <meta property="og:description" content="An endless AI painting, streamed live. Type an idea and watch it get painted in." />
   <meta property="og:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
   <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Infinite Tapestry" />
+  <meta name="twitter:title" content="Infinite Tapestry · a live AI art stream" />
   <meta name="twitter:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
   <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
   <link rel="stylesheet" href="/about.css" />
+  <script src="/theme.js"></script>
 </head>
 <body>
   <nav class="nav">
     <a href="/" aria-label="Infinite Tapestry, live"><img class="mark" src="/brand/mark-plain.svg" alt="" />Infinite Tapestry</a>
-    <div class="links"><a class="hide-m" href="#how">How it works</a><a class="hide-m" href="/time-machine">Time machine</a><a href="/">Live →</a></div>
+    <div class="links"><a class="hide-m" href="#how">How it works</a><a class="hide-m" href="/time-machine">Time Machine</a><a href="/">Live →</a></div>
   </nav>
 
   <header class="hero">
     <div class="wrap">
-      <p class="eyebrow reveal">A live, shared painting</p>
+      <p class="eyebrow reveal">A live AI art stream</p>
       <h1 class="reveal">Infinite Tapestry</h1>
-      <p class="lede reveal">An endless painting. You choose where it goes.</p>
+      <p class="lede reveal">An endless painting, live around the clock. You choose where it goes.</p>
       <a class="cta reveal" href="/">Enter the tapestry <span>→</span></a>
     </div>
-    <div class="band" aria-label="A stretch of the real tapestry, drifting">
-      <div class="reel"><img src="/about-img/band.jpg" alt="Lighthouses in tall grass give way to a glowing reef and drifting jellyfish" /><img src="/about-img/band.jpg" alt="" aria-hidden="true" /></div>
-      <div class="live"><span class="dot"></span>painted live, one strip every ~3 seconds</div>
-      <div class="cap">Strips 4610–4740, unedited</div>
+    <div class="band" aria-label="The Egypt sequence from the real tapestry, drifting">
+      <div class="reel"><img src="/about-img/egypt.webp" width="5212" height="600" alt="The Great Pyramids at night become an Egyptian tomb, a sarcophagus and a mummy's face" fetchpriority="high" /><img src="/about-img/egypt.webp" width="5212" height="600" alt="" aria-hidden="true" /></div>
+      <div class="live"><span class="dot"></span>painted live, one strip every few seconds</div>
+      <div class="cap">Giza → the tomb → the mummy · Oct 13, unedited</div>
     </div>
   </header>
 
@@ -45,25 +47,26 @@
       <div class="wrap">
         <p class="eyebrow reveal">How it works</p>
         <h2 class="reveal">Type a place. Watch the world walk into it.</h2>
-        <p class="reveal" style="max-width:52ch">The tapestry never stops scrolling. Anyone watching can say where it should go next, and the painting turns toward it, seamlessly, a few seconds later.</p>
+        <p class="reveal" style="max-width:52ch">The tapestry never stops scrolling. Anyone watching can say where it goes next, and a few seconds later the painting turns toward it, seamlessly.</p>
         <div class="steps">
           <div class="step reveal">
-            <div class="shot"><img src="/about-img/canal.jpg" alt="" loading="lazy" />
-              <div class="ui-over"><div class="glass composer"><span class="ph">caves made of cheese<span class="caret"></span></span><span class="send">↑</span></div></div></div>
-            <h3><span class="n">01</span>&nbsp; Type an idea</h3><p>Anything. A place, a mood, something ridiculous. No account needed.</p>
+            <div class="shot"><img src="/about-img/giza.webp" alt="The Great Pyramids of Giza under a starry sky" loading="lazy" decoding="async" />
+              <div class="ui-over"><div class="glass composer"><span class="ph">great pyramids of giza<span class="caret"></span></span><span class="send">↑</span></div></div></div>
+            <h3><span class="n">01</span>&nbsp; Type an idea</h3><p>A place, a mood, something ridiculous. No account needed.</p>
           </div>
           <div class="step reveal">
-            <div class="shot"><img src="/about-img/reef.jpg" alt="" loading="lazy" />
-              <div class="ui-over"><div class="glass queue"><div class="row"><span style="opacity:.7">Next</span></div>
-                <div class="row"><b>caves made of cheese</b><i>@drifter-0938</i></div>
-                <div class="row"><span>a lighthouse made of sea glass</span><i>@tide-0342</i></div>
-                <div class="row"><span>Moonlit reef, drifting</span><i>Auto</i></div></div></div></div>
-            <h3><span class="n">02</span>&nbsp; Auto weaves it in</h3><p>Auto, the tapestry's director, plans the camera and the light, and bridges from what's on screen now.</p>
+            <div class="shot"><img src="/about-img/tomb.webp" alt="A hieroglyph-covered tomb with a sarcophagus" loading="lazy" decoding="async" />
+              <div class="ui-over"><div class="glass queue">
+                <div class="tabs"><b>Queue</b><span>Fuel</span><span>Chat</span><span>You</span></div>
+                <div class="sort"><b>Up next</b><span>New</span><span>Most liked</span></div>
+                <div class="row"><b>interior of an egyptian tomb</b><i>♥ 4</i></div>
+                <div class="row"><span>close-up of a mummy</span><i>♥ 2</i></div></div></div></div>
+            <h3><span class="n">02</span>&nbsp; It joins the queue</h3><p>Sort by Up next, New or Most liked, and heart the ones you want to see. When it's busy, everyone takes turns.</p>
           </div>
           <div class="step reveal">
-            <div class="shot"><img src="/about-img/cheese.jpg" alt="Inside a cave of cheese" loading="lazy" />
-              <div class="caption">Caves Made of Cheese<small>by @drifter-0938</small></div></div>
-            <h3><span class="n">03</span>&nbsp; Watch it land</h3><p>Your idea scrolls in about a minute later, with your name on it, for everyone watching.</p>
+            <div class="shot"><img src="/about-img/mummy.webp" alt="Close-up of a mummy's face" loading="lazy" decoding="async" />
+              <div class="caption">Close-up of a mummy face<small>suggested by a guest</small></div></div>
+            <h3><span class="n">03</span>&nbsp; Watch it land</h3><p>Your idea scrolls in for everyone watching, titled, with its own page you can share.</p>
           </div>
         </div>
       </div>
@@ -71,66 +74,69 @@
 
     <section style="padding-top:0">
       <div class="wrap">
-        <p class="eyebrow reveal">What you can do</p>
-        <h2 class="reveal">Small tools for a shared canvas.</h2>
+        <p class="eyebrow reveal">The interface</p>
+        <h2 class="reveal">Almost nothing on screen. The painting is the point.</h2>
         <div class="feats">
           <div class="feat wide reveal">
-            <div class="shot"><img src="/about-img/boat.jpg" alt="Paper lanterns over a dark lake" loading="lazy" />
-              <div class="caption">A Paper Boat in a Sky of Lanterns<small>by @dreamer-7228</small></div></div>
-            <h3>Anyone can steer</h3><p>Open the link and type. Guests get a name like @dreamer-7228; an account just lets you steer a little more.</p>
+            <div class="shot"><img src="/about-img/hagia.webp" alt="Light falling through a great dome" loading="lazy" decoding="async" />
+              <div class="ui-over top"><div class="glass bar"><span><i class="dot"></i>live · 214</span><span class="icons"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/></svg><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" fill="none" stroke="currentColor"/></svg></span></div></div>
+              <div class="caption bottom">Hagia Sophia Dome Light<small>Auto</small></div></div>
+            <h3>A quiet top bar</h3><p>How many people are watching, a panel button for the drawer, and fullscreen. That's it.</p>
           </div>
           <div class="feat wide reveal">
-            <div class="shot"><img src="/about-img/lighthouse.jpg" alt="Sea-glass lanterns at dusk" loading="lazy" />
-              <div class="ui-over"><div class="glass toast"><span>Your idea is on now. Share it?</span><span class="copy">Copy ✓</span></div></div></div>
-            <h3>Share where your idea landed</h3><p>Every idea gets a link to the exact spot it was painted, with its own preview card.</p>
+            <div class="shot"><img src="/about-img/interior.webp" alt="Inside the Great Pyramid" loading="lazy" decoding="async" />
+              <div class="drawer glass"><div class="tabs"><span>Queue</span><span>Fuel</span><b>Chat</b><span>You</span></div>
+                <p><i>@tide</i> do the inside next</p><p><i>@moth</i> the tomb!!</p><p><i>a guest</i> this is unreal</p></div></div>
+            <h3>The drawer</h3><p>Queue, Fuel, Chat and You live in one panel that slides in and out of the way.</p>
           </div>
           <div class="feat reveal">
-            <div class="shot"><img src="/about-img/market.jpg" alt="A night market in the rain" loading="lazy" />
-              <div class="floaters" aria-hidden="true"><span>😂</span><span>🔥</span><span>🤯</span><span>😂</span></div>
-              <div class="ui-over"><div class="glass reacts"><span>😂</span><span>🔥</span><span>🤯</span><span>❤️</span><span>💀</span></div></div></div>
-            <h3>React together</h3><p>A handful of emoji drift up over the scene for everyone at once.</p>
+            <div class="shot"><img src="/about-img/dolomites.webp" alt="Alpenglow on mountain spires" loading="lazy" decoding="async" />
+              <div class="ui-over"><div class="glass story"><span class="small-l">Story · Ancient Egypt</span><div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div></div></div></div>
+            <h3>Story mode</h3><p>Between ideas, Auto paints journeys of about seven scenes, from the outside in.</p>
           </div>
           <div class="feat reveal">
-            <div class="shot"><img src="/about-img/harbor.jpg" alt="A harbour at night" loading="lazy" />
-              <div class="ui-over"><div class="glass scrub"><div class="line"><span class="head"></span></div><div class="lbl"><span>8:36 AM</span><span>Live</span></div></div></div></div>
-            <h3>Scrub through history</h3><p>Drag back through everything ever painted, or open the <a href="/time-machine">time machine</a>.</p>
+            <div class="shot"><img src="/about-img/bookshop.webp" alt="A lamplit bookshop" loading="lazy" decoding="async" />
+              <div class="ui-over"><div class="glass cal"><div class="m">October</div><div class="g">
+                <i></i><i></i><i></i><i class="d">1</i><i class="d">2</i><i class="d">3</i><i class="d">4</i><i class="d">5</i><i class="d">6</i><i class="d">7</i><i class="d">8</i><i class="d">9</i><i class="d">10</i><i class="d">11</i><i class="d on">12</i><i class="d">13</i></div></div></div></div>
+            <h3>Time Machine</h3><p>Pick any day on the <a href="/time-machine">calendar</a> and replay everything that was painted.</p>
           </div>
           <div class="feat reveal">
-            <div class="shot"><img src="/about-img/reef.jpg" alt="" loading="lazy" style="object-position:30% 50%" />
-              <div class="drop">Drop to use as reference</div></div>
-            <h3>Drop an image as reference</h3><p>Drag a photo onto the page and the painting borrows its colours, light and texture.</p>
+            <div class="shot"><img src="/about-img/ukiyoe.webp" alt="Ukiyo-e waves at dawn" loading="lazy" decoding="async" /></div>
+            <h3>An AI screensaver</h3><p>Go fullscreen and the interface fades away, leaving just the painting drifting by.</p>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="alive" style="padding-top:0">
+    <section style="padding-top:0">
+      <div class="wrap">
+        <div class="share reveal">
+          <div class="shot"><img src="/about-img/cappadocia.webp" alt="Fairy chimneys in Cappadocia reflected in water" loading="lazy" decoding="async" /></div>
+          <div>
+            <p class="eyebrow">Scene pages</p>
+            <h2>Every scene gets its own page.</h2>
+            <p style="max-width:42ch">Hover a title to see who suggested it, and click it to open the scene's page with its strips, prompt and a link to replay it. Send it to anyone.</p>
+            <p style="margin-top:22px"><a class="cta ghost" href="/s/173">See an example <span>→</span></a></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="fuel" style="padding-top:0">
       <div class="wrap">
         <div class="alive">
           <div>
-            <p class="eyebrow reveal">Keep it alive</p>
-            <h2 class="reveal">It runs on one GPU, and the GPU runs on donations.</h2>
-            <p class="reveal" style="max-width:46ch">Nothing here is for sale. Every dollar goes into the fuel tank that keeps the painting going. If you'd like to chip in, you get a thank-you here and, if you want, a short line and link on your profile. No perks, no tiers.</p>
-            <div class="reveal banner-demo"><span class="small">thanks to</span> <span style="font-size:14px">@your-handle</span> <span class="small">· your line, your link</span></div>
-            <p class="reveal" style="margin-top:28px"><a class="cta ghost" href="/">Donate from the fuel meter <span>→</span></a></p>
-            <p class="small reveal" style="margin-top:12px">Payments are in test mode for now.</p>
+            <p class="eyebrow reveal">Fuel</p>
+            <h2 class="reveal">One GPU, painting around the clock.</h2>
+            <p class="reveal" style="max-width:46ch">The tapestry runs on a single GPU that costs about $0.90 an hour. The fuel meter in the drawer shows what's been chipped in toward that. It's just a display that helps cover costs. The painting doesn't stop when it runs low.</p>
           </div>
-          <div class="reveal" id="transparency">
+          <div class="reveal">
             <div class="stats">
-              <div class="stat"><b id="t-alive">—</b><span id="t-alive-l">alive</span></div>
-              <div class="stat"><b id="t-burn">—</b><span>burn rate</span></div>
-              <div class="stat"><b id="t-left">—</b><span>fuel left</span></div>
+              <div class="stat"><b>$0.90</b><span>GPU per hour</span></div>
+              <div class="stat"><b>24/7</b><span>painting</span></div>
+              <div class="stat"><b id="t-state">—</b><span id="t-state-l">right now</span></div>
             </div>
-            <div class="chart">
-              <svg id="t-chart" viewBox="0 0 600 180" preserveAspectRatio="none" role="img" aria-label="Fuel balance over time"></svg>
-              <div class="legend"><span><i></i>balance</span><span><i class="b"></i>GPU burn / hour</span><span><i class="d"></i>donation</span></div>
-            </div>
-            <p class="small" id="t-note" style="margin-top:10px">Loading the fuel ledger…</p>
           </div>
-        </div>
-        <div class="board">
-          <div class="reveal"><p class="eyebrow" style="margin:0">Recent donors</p><ol id="d-recent"></ol></div>
-          <div class="reveal"><p class="eyebrow" style="margin:0">All-time</p><ol id="d-top"></ol></div>
         </div>
       </div>
     </section>
@@ -146,7 +152,8 @@
 
   <footer class="wrap foot">
     <span>Infinite Tapestry</span>
-    <span><a href="/time-machine">Time machine</a><a href="/terms">Terms</a><a href="/">Live</a></span>
+    <span class="theme-toggle" data-theme-toggle></span>
+    <span><a href="/time-machine">Time Machine</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/">Live</a></span>
   </footer>
   <script src="/about.js" defer></script>
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>

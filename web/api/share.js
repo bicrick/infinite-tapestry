@@ -46,8 +46,9 @@ function page(res, host, m, status = 200) {
 ${status !== 200 ? '<meta name="robots" content="noindex" />' : ""}
 <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
 <style>
-:root{color-scheme:dark;--fg:#e8e6e3;--mu:rgba(232,230,227,.5);--ln:rgba(232,230,227,.12)}
-*{box-sizing:border-box}html,body{margin:0;background:#070707;color:var(--fg);font:14px/1.5 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+:root{color-scheme:dark;--bg:#070707;--fg:#e8e6e3;--mu:rgba(232,230,227,.5);--ln:rgba(232,230,227,.12);--hv:rgba(232,230,227,.06)}
+@media (prefers-color-scheme: light){:root{color-scheme:light;--bg:#fbfaf8;--fg:#141414;--mu:rgba(20,20,20,.55);--ln:rgba(20,20,20,.12);--hv:rgba(20,20,20,.05)}.art{background:#e9e7e3!important}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
 main{max-width:720px;margin:0 auto;padding:calc(28px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom))}
 .brand{color:var(--mu);text-decoration:none;font-size:12px;letter-spacing:.04em}
 .art{display:flex;overflow:hidden;width:100%;height:clamp(220px,52vw,380px);margin:22px 0 22px;border-radius:14px;background:#111;mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
@@ -57,9 +58,10 @@ h1{font-size:22px;font-weight:500;letter-spacing:-.01em;margin:0 0 6px}
 .meta{color:var(--mu);font-size:13px}.p{color:var(--mu);margin:14px 0 0;font-size:13px}
 nav{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap}
 nav a{color:var(--fg);text-decoration:none;border:1px solid var(--ln);border-radius:999px;padding:8px 16px;font-size:13px}
-nav a:hover{background:rgba(232,230,227,.06)}
+nav a:hover{background:var(--hv)}
+.theme-toggle{display:inline-flex;gap:2px;padding:2px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--ln);margin-top:36px}.theme-toggle button{all:unset;cursor:pointer;padding:4px 10px;border-radius:999px;font-size:12px;color:var(--mu)}.theme-toggle button[aria-pressed="true"]{background:var(--hv);color:var(--fg)}
 .rep{margin-top:28px}.rep button{background:none;border:0;padding:0;color:var(--mu);font:inherit;font-size:12px;cursor:pointer}.rep button:hover{color:var(--fg)}.rep span{color:var(--mu);font-size:12px;margin-left:8px}
-</style></head><body><main>
+</style><script src="/theme.js"></script></head><body><main>
 <a class="brand" href="/">Infinite Tapestry</a>
 ${imgs.length ? `<a class="art" href="${esc(m.replay)}" data-n="${imgs.length}">${imgs.map((i) => `<img src="${esc(stripUrl(i))}" alt="" loading="lazy" decoding="async" />`).join("")}</a>`
     : `<div class="art empty">${esc(m.empty || "Not painted yet")}</div>`}
@@ -68,6 +70,7 @@ ${imgs.length ? `<a class="art" href="${esc(m.replay)}" data-n="${imgs.length}">
 ${m.prompt && m.prompt !== m.title ? `<p class="p">${esc(m.prompt)}</p>` : ""}
 <nav><a href="/">Watch live</a>${m.replay ? `<a href="${esc(m.replay)}">Replay</a>` : ""}${m.day ? `<a data-day href="/time-machine">Time Machine</a>` : ""}</nav>
 ${m.report ? `<p class="rep"><button type="button" id="rep" data-r='${esc(JSON.stringify(m.report))}'>Report</button><span id="rep-ok"></span></p>` : ""}
+<span class="theme-toggle" data-theme-toggle></span>
 </main><script>
 const rb=document.getElementById("rep");if(rb)rb.onclick=async()=>{const n=prompt("Report this scene? Add a short reason (optional).");if(n===null)return;const r=await fetch("/api/report",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...JSON.parse(rb.dataset.r),reason:"other",note:n})}).catch(()=>null);document.getElementById("rep-ok").textContent=r&&r.ok?"Thanks, we'll take a look.":"Couldn't send it.";rb.disabled=true;};
 for(const t of document.querySelectorAll("time")){const d=new Date(t.dateTime);if(!isNaN(d))t.textContent=d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});}
