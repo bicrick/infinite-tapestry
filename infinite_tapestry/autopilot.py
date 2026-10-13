@@ -90,6 +90,11 @@ class Autopilot:
         self.admin_paused = False   # auto_config.paused (admin panel)
         self.admin_theme = ""
         self.config_fetch: Callable[[], dict | None] | None = None
+        # Story mode (admin playlist): {pid, id, title, theme, scenes:[{title,prompt}], start}
+        self.story: dict | None = None
+        self.story_done: Callable[[int], None] = lambda pid: None
+        self.story_progress: Callable[[int, int], None] = lambda pid, k: None
+        self._done_pids: set[int] = set()
 
     def state(self) -> dict[str, Any]:
         return {
@@ -97,7 +102,60 @@ class Autopilot:
             "error": self.last_error, "tokens": getattr(self.interpreter, "tokens_used", 0),
             "budget": self.token_budget, "mode": self.last_mode, "mood": self.last_mood,
             "paused": self.admin_paused, "theme": self.admin_theme,
+            "story": ({"id": self.story["id"], "title": self.story["title"], "scenes": len(self.story["scenes"])}
+                      if self.story else None),
         }
+
+    @staticmethod
+    def valid_story(row: Any) -> dict | None:
+        """Validate a playlist row from Supabase; None if unusable (the caller then keeps its last good state)."""
+        if not isinstance(row, dict):
+            return None
+        st = row.get("story")
+        if not isinstance(st, dict) or not isinstance(row.get("id"), int):
+            return None
+        scenes = []
+        for x in (st.get("scenes") or [])[:20] if isinstance(st.get("scenes"), list) else []:
+            if not isinstance(x, dict):
+                continue
+            pr = str(x.get("prompt") or "").strip()
+            if 3 <= len(pr) <= 600:
+                scenes.append({"title": str(x.get("title") or "").strip()[:80], "prompt": pr})
+        if not scenes:
+            return None
+        start = row.get("scene_index") if isinstance(row.get("scene_index"), int) else 0
+        return {"pid": row["id"], "id": st.get("id"), "title": str(st.get("title") or "")[:80],
+                "theme": str(st.get("theme") or "")[:200], "scenes": scenes, "start": max(0, min(start, len(scenes) - 1))}
+
+    def _story_tick(self) -> bool:
+        """Queue the next story scenes (no LLM). Returns False when the story is over."""
+        from .guard import is_disallowed
+        st, d = self.story, self.director
+        tag = f"story:{st['pid']}:"
+        seen = [int(x["source"][len(tag):]) for x in d.recent(80) if str(x.get("source") or "").startswith(tag)]
+        k = max(seen) + 1 if seen else st["start"]
+        n = len(st["scenes"])
+        if k >= n:
+            if any(src.startswith(tag) for src in d.pending_sources()):
+                return True  # last scenes still to play
+            return False
+        need = max(1, self.low_water - d.upcoming_count())
+        added = []
+        while k < n and len(added) < need:
+            sc = st["scenes"][k]
+            if not is_disallowed(sc["prompt"]) and not mentions_minor(sc["title"] + " " + sc["prompt"]):
+                added.append(make_scene(sc["prompt"], "", sc["title"], None, None, source=f"{tag}{k}", origin="auto"))
+            k += 1
+        if added:
+            d.add(added)
+            self.last_mode, self.last_mood = "story", st["title"]
+            logger.info("story %s queued %s", st["title"], [a["title"] for a in added])
+            try:
+                self.story_progress(st["pid"], k - 1)
+            except Exception:
+                logger.warning("story progress write failed")
+            self.on_change()
+        return True
 
     def configure(self, enabled: bool | None = None, vibe: str | None = None) -> None:
         if enabled is not None:
@@ -141,6 +199,23 @@ class Autopilot:
             self.on_change()
         if not self.enabled or self.admin_paused or self.busy or d.upcoming_count() >= (2 if waiting else self.low_water):
             return
+        if self.story:
+            if self._story_tick():
+                return
+            pid = self.story["pid"]
+            self._done_pids.add(pid)
+            self.story = None
+            try:
+                await asyncio.to_thread(self.story_done, pid)
+            except Exception:
+                logger.warning("story done write failed")
+            if self.config_fetch:  # pick up the next playlist entry right away
+                try:
+                    self.apply_config(await asyncio.to_thread(self.config_fetch))
+                except Exception:
+                    pass
+            if self.story and self._story_tick():
+                return
         if not self._can_call():
             if time.monotonic() >= self._next_allowed or not getattr(self.interpreter, "enabled", False):
                 self._variation()
@@ -224,6 +299,19 @@ class Autopilot:
             if hasattr(self.director, "drop_auto"):
                 self.director.drop_auto()  # regenerate toward the new theme
             self._next_allowed = 0.0
+        if "story" in cfg:
+            row = cfg.get("story")
+            if row is None:
+                self.story = None
+            else:
+                st = self.valid_story(row)
+                if st and st["pid"] not in self._done_pids and (not self.story or self.story["pid"] != st["pid"]):
+                    if self.story and hasattr(self.director, "drop_auto"):
+                        self.director.drop_auto()  # "Play now" replaced the story: drop its queued scenes
+                    self.story = st
+                    self._next_allowed = 0.0
+                elif not st:
+                    logger.warning("invalid story config ignored; keeping the last good state")
         w = cfg.get("mood_weights") or {}
         self.moods.weights = {str(k): float(v) for k, v in w.items() if isinstance(v, (int, float))}
 

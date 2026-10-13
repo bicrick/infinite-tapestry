@@ -12,6 +12,17 @@
         <button id="auto-theme-set">Set</button><button id="auto-theme-clear">Clear</button></div>
       <p class="fine" id="auto-note"></p>
       <details><summary>Mood rotation</summary><div id="moods" class="moods"></div><button id="moods-save">Save weights</button> <button id="moods-reset">Reset</button></details></section>
+    <section class="card-a" id="sec-chat"><h2>Talk to Auto</h2>
+      <div class="row chat-top"><select id="chat-pick"></select><button id="chat-new" type="button">New chat</button></div>
+      <div id="chat-log" class="chat-log"></div>
+      <form id="chat-form" class="chat-form"><textarea id="chat-in" rows="2" placeholder="Ask Auto, e.g. draft a story about Venice at carnival"></textarea><button type="submit">Send</button></form>
+    </section>
+    <section class="card-a" id="sec-stories"><h2>Stories</h2>
+      <p class="fine" id="story-now"></p>
+      <h3>Playlist</h3><table id="playlist"></table>
+      <h3>Library</h3><div id="library" class="library"></div>
+      <div id="story-edit"></div>
+    </section>
     <section class="card-a"><h2>Stats</h2><div class="kv" id="stats"></div><svg id="ideas-spark" class="spark" viewBox="0 0 240 40" preserveAspectRatio="none"></svg></section>
     <section class="card-a"><h2>Reports</h2><table id="reports"></table></section>
     <section class="card-a"><h2>Queue</h2><table id="queue"></table></section>

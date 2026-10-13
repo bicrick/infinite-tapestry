@@ -91,5 +91,110 @@ document.addEventListener("click", async (e) => {
   const { data } = await sb.auth.getSession();
   token = data.session && data.session.access_token;
   if (!token) { $("msg").innerHTML = 'Sign in on <a href="/">the tapestry</a> with an admin account first.'; return; }
-  try { await overview(); await load(); } catch (e) { $("msg").textContent = e.message === "admin_only" ? "This account isn't an admin." : "Error: " + e.message; }
+  try { await overview(); stories().catch(() => {}); chatList().then(openChat).catch(() => {}); await load(); } catch (e) { $("msg").textContent = e.message === "admin_only" ? "This account isn't an admin." : "Error: " + e.message; }
 })();
+
+// ---------- stories: library + playlist ----------
+let LIB = { stories: [], playlist: [], recent: [] };
+const storyName = (id) => (LIB.stories.find((s) => s.id === id) || {}).title || "#" + id;
+function storyCard(st, { saved = false } = {}) {
+  const el = document.createElement("div"); el.className = "story";
+  el.innerHTML = `<input class="t" value="${esc(st.title)}" aria-label="Story title" />
+    <input class="th" value="${esc(st.theme || "")}" placeholder="Theme" aria-label="Theme" />
+    <ol>${(st.scenes || []).map((s) => `<li><input value="${esc(s.title)}" aria-label="Scene title" /><textarea rows="2" aria-label="Scene prompt">${esc(s.prompt)}</textarea></li>`).join("")}</ol>
+    <div class="acts"><button data-sa="now">Play now</button><button data-sa="end">Add to playlist</button><button data-sa="save">${saved ? "Save changes" : "Save to library"}</button><span class="fine sa-msg"></span></div>`;
+  const read = () => ({ id: st.id, title: el.querySelector(".t").value, theme: el.querySelector(".th").value,
+    scenes: [...el.querySelectorAll("li")].map((li) => ({ title: li.querySelector("input").value, prompt: li.querySelector("textarea").value })) });
+  el.querySelector(".acts").addEventListener("click", async (e) => {
+    const k = e.target.dataset.sa; if (!k) return; e.stopPropagation();
+    const m = el.querySelector(".sa-msg");
+    try {
+      if (k === "now" && !confirm("Play this story now? It replaces the current story within ~30 s.")) return;
+      if (k === "save") { const r = await call("story_save", { story: read() }); st.id = r.story.id; m.textContent = "Saved"; }
+      else { const s = read(); const r = await call("playlist_add", st.id ? (await call("story_save", { story: s }), { story_id: st.id, when: k }) : { story: s, when: k }); m.textContent = k === "now" ? "Playing next" : "Added"; }
+      stories();
+    } catch (err) { m.textContent = "Failed: " + err.message; }
+  });
+  return el;
+}
+async function stories() {
+  LIB = await call("stories");
+  const now = LIB.playlist.find((p) => p.status === "playing");
+  $("story-now").textContent = now ? `Playing: ${storyName(now.story_id)} (scene ${now.scene_index + 1})` : LIB.playlist.length ? "Next story starts within ~30 s." : "Playlist empty: Auto uses the mood rotation.";
+  $("playlist").innerHTML = LIB.playlist.map((p, i) => `<tr><td class="m">${i + 1}</td><td>${esc(storyName(p.story_id))}</td><td class="m">${p.status}</td>
+    <td><button data-pm="${p.id}" data-dir="up">↑</button><button data-pm="${p.id}" data-dir="down">↓</button><button class="danger" data-pr="${p.id}">remove</button></td></tr>`).join("") || '<tr><td class="m">Nothing queued.</td></tr>';
+  $("library").innerHTML = LIB.stories.map((s) => `<div class="lib"><b>${esc(s.title)}</b><span>${esc(s.theme)} · ${s.scenes.length} scenes</span>
+    <div class="row"><button data-lq="${s.id}" data-when="now">Play now</button><button data-lq="${s.id}" data-when="end">Queue</button><button data-le="${s.id}">Edit</button></div></div>`).join("");
+}
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("button"); if (!t) return;
+  try {
+    if (t.dataset.pm) { await call("playlist_move", { id: +t.dataset.pm, dir: t.dataset.dir }); stories(); }
+    else if (t.dataset.pr) { await call("playlist_remove", { id: +t.dataset.pr }); stories(); }
+    else if (t.dataset.lq) { if (t.dataset.when === "now" && !confirm("Play this story now?")) return; await call("playlist_add", { story_id: +t.dataset.lq, when: t.dataset.when }); stories(); }
+    else if (t.dataset.le) { const s = LIB.stories.find((x) => x.id === +t.dataset.le); const box = $("story-edit"); box.innerHTML = "<h3>Edit</h3>"; box.append(storyCard(structuredClone(s), { saved: true })); box.scrollIntoView({ behavior: "smooth" }); }
+  } catch (err) { $("msg").textContent = "Failed: " + err.message; }
+});
+
+// ---------- Talk to Auto ----------
+let CHAT = null;
+const ACTION_TEXT = { set_theme: (i) => `Set theme “${esc(i.theme)}” for ${i.minutes || 60} min`, set_paused: (i) => i.paused ? "Pause Auto" : "Resume Auto",
+  queue_story: (i) => `Queue “${esc(storyName(i.story_id))}” (${i.when || "end"})` };
+const doneKey = (id) => "it_act_" + id;
+async function applyAction(c) {
+  const i = c.input || {};
+  if (c.name === "set_theme") await call("auto_set", { theme: i.theme, minutes: i.minutes || 60 });
+  else if (c.name === "set_paused") await call("auto_set", { paused: !!i.paused });
+  else if (c.name === "queue_story") await call("playlist_add", { story_id: i.story_id, when: i.when || "end" });
+}
+function renderMsg(m) {
+  const out = [];
+  for (const c of Array.isArray(m.content) ? m.content : []) {
+    if (c.type === "text" && c.text.trim()) { const d = document.createElement("div"); d.className = "msg " + m.role; d.textContent = c.text; out.push(d); }
+    else if (c.type === "tool_use" && c.name === "propose_story") out.push(storyCard(structuredClone(c.input)));
+    else if (c.type === "tool_use" && ACTION_TEXT[c.name]) {
+      const d = document.createElement("div"); const done = localStorage.getItem(doneKey(c.id));
+      d.className = "action" + (done ? " done" : "");
+      d.innerHTML = `<div>Auto suggests: <b>${ACTION_TEXT[c.name](c.input || {})}</b></div><div class="acts">${done ? `<span class="fine">${esc(done)}</span>` : '<button data-ok>Apply</button><button data-no>Dismiss</button>'}</div>`;
+      d.addEventListener("click", async (e) => {
+        if (e.target.dataset.ok !== undefined) { await applyAction(c); localStorage.setItem(doneKey(c.id), "Applied"); overview(); stories(); }
+        else if (e.target.dataset.no !== undefined) localStorage.setItem(doneKey(c.id), "Dismissed");
+        else return;
+        d.replaceWith(...renderMsg({ role: "assistant", content: [c] }));
+      });
+      out.push(d);
+    }
+  }
+  return out;
+}
+async function openChat(id) {
+  CHAT = id; localStorage.setItem("it_chat", id || "");
+  const log = $("chat-log"); log.innerHTML = "";
+  if (id) for (const m of (await call("chat_get", { id })).messages) log.append(...renderMsg(m));
+  if (!log.children.length) log.innerHTML = '<div class="msg assistant">Hi, I\'m Auto. Ask what\'s playing, or let\'s draft a story.</div>';
+  log.scrollTop = log.scrollHeight;
+}
+async function chatList(sel) {
+  const { chats } = await call("chat_list");
+  $("chat-pick").innerHTML = chats.map((c) => `<option value="${c.id}">${esc(c.title)}</option>`).join("") || '<option value="">New chat</option>';
+  const id = sel || +localStorage.getItem("it_chat") || (chats[0] && chats[0].id) || null;
+  if (id) $("chat-pick").value = id;
+  return id;
+}
+$("chat-pick").onchange = () => openChat(+$("chat-pick").value || null);
+$("chat-new").onclick = async () => { const { chat } = await call("chat_new"); await chatList(chat.id); openChat(chat.id); };
+$("chat-in").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("chat-form").requestSubmit(); } });
+$("chat-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("chat-in").value.trim(); if (!text) return;
+  const log = $("chat-log"); if (!CHAT) log.innerHTML = "";
+  $("chat-in").value = "";
+  log.append(...renderMsg({ role: "user", content: [{ type: "text", text }] }));
+  const w = document.createElement("div"); w.className = "msg assistant wait"; w.textContent = "Auto is thinking…"; log.append(w); log.scrollTop = log.scrollHeight;
+  try {
+    const r = await call("chat_send", { chat_id: CHAT, text });
+    w.replaceWith(...renderMsg(r.message));
+    if (r.chat_id !== CHAT) { CHAT = r.chat_id; localStorage.setItem("it_chat", CHAT); chatList(CHAT); }
+  } catch (err) { w.textContent = "Auto couldn't answer just now. Try again."; }
+  log.scrollTop = log.scrollHeight;
+};

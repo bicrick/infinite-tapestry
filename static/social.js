@@ -209,6 +209,27 @@ async function boot() {
     if (error) { $("auth-msg").textContent = A.AUTH_ERR(error.message); $("auth-code").select(); return; }
     $("auth-msg").textContent = ""; $("auth-code").value = "";
   });
+  // ---------- sign-in nudge: once a visit, after ~10 min watching as a guest or at the guest idea limit ----------
+  const NUDGE_KEY = "it_nudge_shown";
+  S.nudge = () => {
+    if (S.session || sessionStorage.getItem(NUDGE_KEY)) return false;
+    const b = document.body;
+    if (document.fullscreenElement || b.classList.contains("saver") || b.classList.contains("ambient") || document.hidden) return false;
+    sessionStorage.setItem(NUDGE_KEY, "1");
+    toast(`<span>Sign in with Google to add more ideas and vote</span><button type="button" id="nudge-go">Sign in</button><button type="button" id="nudge-x" aria-label="Dismiss">×</button>`, 20000);
+    const t = $("toast"), c = $("chat").getBoundingClientRect();
+    t.classList.add("nudge");
+    if (c.height) t.style.setProperty("--nudge-top", Math.max(8, c.top - 44) + "px");
+    $("nudge-go").onclick = () => sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + location.search } });
+    $("nudge-x").onclick = () => t.classList.remove("show");
+    try { window.va && window.va("event", { name: "signin_nudge" }); } catch (_) {}
+    return true;
+  };
+  { let watched = 0; const tick = setInterval(() => {
+      if (S.session || sessionStorage.getItem(NUDGE_KEY)) return clearInterval(tick);
+      if (!document.hidden) watched += 15;
+      if (watched >= 600 && S.nudge()) clearInterval(tick);
+    }, 15000); }
   $("auth-google").addEventListener("click", () => sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + location.search } }));
   $("handle-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -291,6 +312,7 @@ async function boot() {
       if (refFile) { needLogin(); return false; }          // reference images need an account
       if (!guest.enabled) { toast(ERR.signin_required); openAuth(); return false; }
       const res = await submitAsGuest(text);
+      if (!res.ok && (res.err === "guest_rate" || res.err === "guest_pending") && S.nudge()) return false;
       if (!res.ok) { toast(ERR[res.err] || "Something went wrong. Try again."); if (res.err === "signin_required") openAuth(); return false; }
       addLocal(text, guest.handle, res.id); addMine(res.id);
       try { window.va && window.va("event", { name: "idea_submitted", data: { who: "guest" } }); } catch (_) {}

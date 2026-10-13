@@ -1074,6 +1074,7 @@
   let toastTimer = 0;
   function toast(html, ms = 4500) {
     const t = $("toast");
+    t.classList.remove("nudge"); t.style.removeProperty("--nudge-top");
     t.innerHTML = html;
     t.classList.add("show");
     clearTimeout(toastTimer);

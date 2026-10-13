@@ -19,3 +19,22 @@
     .adm table { display: block; overflow-x: auto; } .adm td { word-break: break-word; }
     .adm code { font-size: 11px; } .adm a { color: var(--fg); }
     @media (max-width: 600px) { .adm { padding: 0 14px; margin-top: 20px; } .adm td { padding: 6px 4px; } }
+
+.adm h3 { font-size: 12px; font-weight: 500; margin: 14px 0 6px; color: var(--muted); }
+.chat-top select { flex: 1; min-width: 0; }
+.chat-log { max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px 0; }
+.msg { max-width: 92%; padding: 8px 12px; border-radius: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+.msg.user { align-self: flex-end; background: rgba(var(--ink),.10); } .msg.assistant { align-self: flex-start; border: 1px solid var(--line); }
+.msg.wait { color: var(--muted); }
+.chat-form { display: flex; gap: 8px; align-items: flex-end; }
+.chat-form textarea, .story textarea, .story input { font: inherit; color: var(--fg); background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; box-sizing: border-box; resize: vertical; }
+.chat-form textarea { flex: 1; }
+.story { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 4px 0; align-self: stretch; }
+.story ol { margin: 8px 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px; }
+.story li input { font-weight: 500; margin-bottom: 3px; } .story .t { font-size: 15px; font-weight: 500; }
+.story .acts, .action .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.action { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; align-self: stretch; }
+.action.done { opacity: .55; }
+.library { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.library .lib { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.library .lib span { color: var(--muted); font-size: 11px; }

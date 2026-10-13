@@ -256,6 +256,11 @@ class LiveDirector:
         with self._lock:
             self._queue = [s for s in self._queue if s.get("origin") != "auto"]
 
+    def pending_sources(self) -> list[str]:
+        """`source` of the scene in flight and everything queued (story mode tracks progress with it)."""
+        with self._lock:
+            return [str(s.get("source") or "") for s in ([self._target] if self._target else []) + list(self._queue)]
+
     def upcoming_count(self) -> int:
         with self._lock:
             return len(self._queue) + (1 if self._target else 0)

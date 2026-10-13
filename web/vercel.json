@@ -1,5 +1,8 @@
 {
  "functions": {
+  "api/admin.js": {
+   "maxDuration": 60
+  },
   "api/*.js": {
    "maxDuration": 20,
    "includeFiles": "lib/fonts/**"

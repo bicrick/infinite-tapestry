@@ -1,6 +1,8 @@
 // Admin-only moderation for guest ideas: recent submissions, one-click bans, shadow-mute,
 // and the sign-in-only kill switch. Auth: the verified Supabase email must be in ADMIN_EMAILS (adminFromToken); anyone else gets an empty 403.
 const UI = require("./_admin_ui.json");
+const stories = require("../lib/stories");
+const chat = require("../lib/autochat");
 const { env, rest, adminFromToken, audit, runpod, MIN_BALANCE, POD } = require("../lib/common");
 const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svc = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
@@ -49,6 +51,24 @@ module.exports = async (req, res) => {
   const a = body.action || "recent";
   try {
     if (a === "ui") return res.status(200).json(UI);
+    if (a === "stories") return res.status(200).json(await stories.library());
+    if (a === "story_save") return res.status(200).json({ story: await stories.save(body.story || {}) });
+    if (a === "story_archive") { await rest("PATCH", `stories?id=eq.${Number(body.id)}`, { archived: true }, { prefer: "return=minimal" }); return res.status(200).json({ ok: true }); }
+    if (a === "playlist_add") {   // {story_id} or {story: {...}} (saved first), when: now|next|end
+      const sid = body.story_id || (await stories.save(body.story || {})).id;
+      const row = await stories.enqueue(sid, body.when);
+      await audit("admin_story", { actor: me.id, target: String(sid), detail: { when: body.when || "end" } });
+      return res.status(200).json({ row });
+    }
+    if (a === "playlist_remove") { await stories.remove(body.id); return res.status(200).json({ ok: true }); }
+    if (a === "playlist_move") { await stories.move(body.id, body.dir); return res.status(200).json({ ok: true }); }
+    if (a === "chat_list") return res.status(200).json({ chats: await chat.chats() });
+    if (a === "chat_get") return res.status(200).json({ messages: await chat.messages(body.id) });
+    if (a === "chat_new") return res.status(200).json({ chat: await chat.newChat() });
+    if (a === "chat_send") {
+      try { return res.status(200).json(await chat.send(body.chat_id, body.text)); }
+      catch (e) { return res.status(502).json({ error: e.message === "empty" ? "empty" : "auto_unavailable" }); }
+    }
     if (a === "recent") {
       const [ideas, shadow, sessions, bans, limits] = await Promise.all([
         rest("GET", "ideas?guest_id=not.is.null&order=created_at.desc&limit=60&select=id,handle,body,status,created_at,guest_id,ip_hash,fp_hash"),

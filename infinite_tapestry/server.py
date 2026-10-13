@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import struct
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -226,8 +227,27 @@ def create_app(
     if autopilot is not None and supa is not None:
         def _auto_cfg() -> dict | None:
             rows = supa.rest("GET", "auto_config?id=eq.1&select=paused,theme,theme_until,mood_weights")
-            return rows[0] if rows else None
+            cfg = dict(rows[0]) if rows else {}
+            try:
+                st = supa.rest("GET", "story_playlist?status=in.(queued,playing)&order=position.asc,id.asc&limit=1"
+                                      "&select=id,status,scene_index,story:stories(id,title,theme,scenes)")
+                cfg["story"] = st[0] if st else None
+            except Exception:
+                logger.warning("story playlist fetch failed; keeping the current story")
+            return cfg
         autopilot.config_fetch = _auto_cfg
+
+        def _story_progress(pid: int, k: int) -> None:
+            supa.rest("PATCH", f"story_playlist?id=eq.{int(pid)}&status=in.(queued,playing)",
+                      {"status": "playing", "scene_index": int(k)}, prefer="return=minimal")
+            supa.rest("PATCH", f"story_playlist?id=eq.{int(pid)}&started_at=is.null",
+                      {"started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, prefer="return=minimal")
+
+        def _story_done(pid: int) -> None:
+            supa.rest("PATCH", f"story_playlist?id=eq.{int(pid)}&status=in.(queued,playing)",
+                      {"status": "done", "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, prefer="return=minimal")
+        autopilot.story_progress = lambda pid, k: threading.Thread(target=_story_progress, args=(pid, k), daemon=True).start()
+        autopilot.story_done = _story_done
     if generator is not None:
         def _on_flag(scene: dict) -> None:
             """Explicit output after one repaint: strike the source idea(s) and log it (runs on the generator thread)."""
