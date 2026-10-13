@@ -13,7 +13,7 @@ const INK = "#f3eee6", DIM = "rgba(243,238,230,0.72)", BG = "#0b0b0d";
 const brand = (size = 26) => h("div", { style: { display: "flex", alignItems: "center", gap: 14 } },
   h("img", { src: MARK, width: size * 1.67, height: size }),
   h("div", { style: { fontSize: size * 0.92, fontWeight: 500, color: INK, letterSpacing: -0.2 } }, "Infinite Tapestry"));
-const url = () => h("div", { style: { fontSize: 20, color: DIM, fontWeight: 400, flexShrink: 0 } }, "infinite-tapestry.vercel.app");
+const url = () => h("div", { style: { fontSize: 20, color: DIM, fontWeight: 400, flexShrink: 0 } }, String(process.env.SITE_URL || "https://infinite-tapestry.vercel.app").replace(/^https?:\/\//, "").replace(/\/$/, ""));
 const livePill = (n) => h("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 18px", borderRadius: 999, background: "rgba(11,11,13,0.55)", border: "1px solid rgba(243,238,230,0.18)", fontSize: 20, color: INK } },
   h("div", { style: { width: 10, height: 10, borderRadius: 10, background: "#4ade80" } }),
   n > 0 ? `live · ${n} watching` : "live now");

@@ -1,4 +1,4 @@
-const { env, rest, audit, verifyStripe, reconcile, readRaw } = require("../lib/common");
+const { rest, audit, verifyStripe, reconcile, readRaw, stripeLive, stripeWebhookSecret } = require("../lib/common");
 
 // Stripe fees (2.9% + 30c) come out before fuel is credited, so the ledger matches real money.
 const net = (cents) => Math.max(0, cents - Math.round(cents * 0.029 + 30));
@@ -7,11 +7,13 @@ const handler = async (req, res) => {
   if (req.method !== "POST") return res.status(405).end();
   let raw;
   try { raw = await readRaw(req); } catch (e) { return res.status(413).end(); }
-  if (!verifyStripe(raw, req.headers["stripe-signature"], env("STRIPE_WEBHOOK_SECRET"))) {
+  if (!verifyStripe(raw, req.headers["stripe-signature"], stripeWebhookSecret())) {
     await audit("stripe_bad_signature", { detail: { len: raw.length } });
     return res.status(400).json({ error: "bad signature" });
   }
   const evt = JSON.parse(raw);
+  // A test event never credits live fuel and vice versa (guards a mis-pointed webhook).
+  if (!!evt.livemode !== stripeLive()) { await audit("stripe_mode_mismatch", { target: evt.id, detail: { livemode: !!evt.livemode } }); return res.status(200).json({ ignored: "mode" }); }
   if (evt.type !== "checkout.session.completed" && evt.type !== "checkout.session.async_payment_succeeded") return res.status(200).json({ ignored: evt.type });
   const s = evt.data.object;
   if (s.payment_status !== "paid") return res.status(200).json({ pending: true });

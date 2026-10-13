@@ -1261,7 +1261,7 @@
       if (s.kind === "idea") {
         const c = credit(s.by, "user"), eta = s.eta != null && window.TapestrySocial && window.TapestrySocial.etaLabel ? window.TapestrySocial.etaLabel(s.eta) : "soon";
         li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc(c === "Auto" ? "Auto" : "Suggested by " + c)}">${esc(s.title)}</div>` +
-          `<div class="meta">${esc(c)} · ${esc(eta)}</div><div class="p"><a class="open-s" href="/s/${s.idea_id}" target="_blank" rel="noopener">Open ↗</a></div></div>` +
+          `<div class="meta">${esc(c)} · ${esc(eta)}</div><div class="p"><a class="open-s" href="/s/${s.idea_id}" target="_blank" rel="noopener">Open ↗</a><button class="linkish" type="button" data-report="${s.idea_id}">Report</button></div></div>` +
           (window.TapestrySocial && window.TapestrySocial.heart ? window.TapestrySocial.heart(s.idea_id, s.votes) : "");
         list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
         prev = li;

@@ -35,6 +35,10 @@ const handler = async (req, res) => {
     "line_items[0][price_data][product_data][tax_code]": env("STRIPE_TAX_CODE", "txcd_10000000"),
     "line_items[0][price_data][product_data][description]": "Keeps the GPU painting. Thank you.",
     submit_type: "donate",
+    // Receipts: Stripe emails one for live payments when the customer email is known (signed-in users), or
+    // asks for it on the Checkout page otherwise. Enable "Successful payments" emails in the Stripe dashboard.
+    customer_email: user && user.email ? user.email : undefined,
+    customer_creation: "if_required",
     success_url: back + (back.includes("?") ? "&" : "?") + "thanks=1",
     cancel_url: back,
     metadata: { user_id: user ? user.id : "", handle: user && user.handle ? user.handle : "", idea_id: ideaId || "", note, kind: ideaId ? "boost" : "fuel", ip_hash: ip },

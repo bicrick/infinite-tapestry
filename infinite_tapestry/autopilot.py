@@ -87,12 +87,16 @@ class Autopilot:
         self.last_mood = ""
         self.pressure: Callable[[], int] = lambda: 0  # waiting pool ideas -> keep Auto filler thin
         self.epoch = 0  # bumped on every user enqueue; stale auto results are discarded
+        self.admin_paused = False   # auto_config.paused (admin panel)
+        self.admin_theme = ""
+        self.config_fetch: Callable[[], dict | None] | None = None
 
     def state(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled, "vibe": self.vibe, "busy": self.busy,
             "error": self.last_error, "tokens": getattr(self.interpreter, "tokens_used", 0),
             "budget": self.token_budget, "mode": self.last_mode, "mood": self.last_mood,
+            "paused": self.admin_paused, "theme": self.admin_theme,
         }
 
     def configure(self, enabled: bool | None = None, vibe: str | None = None) -> None:
@@ -135,7 +139,7 @@ class Autopilot:
         waiting = self.pressure()
         if waiting and hasattr(d, "trim_auto") and d.trim_auto(2):
             self.on_change()
-        if not self.enabled or self.busy or d.upcoming_count() >= (2 if waiting else self.low_water):
+        if not self.enabled or self.admin_paused or self.busy or d.upcoming_count() >= (2 if waiting else self.low_water):
             return
         if not self._can_call():
             if time.monotonic() >= self._next_allowed or not getattr(self.interpreter, "enabled", False):
@@ -198,8 +202,40 @@ class Autopilot:
             self.busy = False
             self.on_change()
 
+    def apply_config(self, cfg: dict | None) -> None:
+        """Admin steering from Supabase auto_config: pause, a temporary theme, mood weights. No redeploy."""
+        if not cfg:
+            return
+        paused = bool(cfg.get("paused"))
+        if paused != self.admin_paused:
+            self.admin_paused = paused
+            self.on_change()
+        theme = (cfg.get("theme") or "").strip()[:200]
+        until = cfg.get("theme_until")
+        try:
+            from datetime import datetime, timezone
+            live = bool(theme and until and datetime.fromisoformat(str(until).replace("Z", "+00:00")) > datetime.now(timezone.utc))
+        except Exception:
+            live = False
+        want = theme if live else ""
+        if want != self.admin_theme:
+            self.admin_theme = want
+            self.vibe = want
+            if hasattr(self.director, "drop_auto"):
+                self.director.drop_auto()  # regenerate toward the new theme
+            self._next_allowed = 0.0
+        w = cfg.get("mood_weights") or {}
+        self.moods.weights = {str(k): float(v) for k, v in w.items() if isinstance(v, (int, float))}
+
     async def run(self, period: float = 2.0) -> None:
+        last_cfg = 0.0
         while True:
+            if self.config_fetch and time.monotonic() - last_cfg > 30:
+                last_cfg = time.monotonic()
+                try:
+                    self.apply_config(await asyncio.to_thread(self.config_fetch))
+                except Exception:
+                    logger.warning("auto_config fetch failed")
             try:
                 await self.tick()
             except Exception:

@@ -1,6 +1,42 @@
 // Admin-only moderation for guest ideas: recent submissions, one-click bans, shadow-mute,
 // and the sign-in-only kill switch. Auth: Supabase bearer token of a profile with is_admin.
-const { rest, userFromToken, audit } = require("../lib/common");
+const { env, rest, userFromToken, audit, runpod, MIN_BALANCE, POD } = require("../lib/common");
+const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
+const svc = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
+const DESIRED = new Set(["on", "off", "auto"]);
+const SHA = /^[0-9a-f]{40}$/;
+
+async function gpu() {
+  const [d, ps] = await Promise.all([
+    runpod(`query { myself { clientBalance currentSpendPerHr } pod(input: {podId: "${POD()}"}) { desiredStatus costPerHr machine { gpuDisplayName } } }`).catch(() => null),
+    rest("GET", "pod_state?id=eq.1&select=status,desired,note,updated_at").catch(() => []),
+  ]);
+  const bal = d && d.myself ? Number(d.myself.clientBalance) : null;
+  const rate = d && d.pod ? Number(d.pod.costPerHr) : null;
+  const running = d && d.pod && d.pod.desiredStatus === "RUNNING";
+  const spend = d && d.myself ? Number(d.myself.currentSpendPerHr) : null;
+  const burn = running ? (spend || rate) : spend;
+  const floor = MIN_BALANCE();
+  return { pod: d && d.pod ? d.pod.desiredStatus : "UNKNOWN", gpu: d && d.pod && d.pod.machine ? d.pod.machine.gpuDisplayName : null,
+    balance: bal, rate_per_hr: rate, spend_per_hr: spend, floor,
+    hours_left: bal != null && rate ? Math.max(0, (bal - floor) / rate) : null, burning: !!(burn && burn > 0.05),
+    state: ps[0] || null };
+}
+async function storageList(prefix) {
+  const r = await fetch(`${SB()}/storage/v1/object/list/deploy`, { method: "POST", headers: { ...svc(), "content-type": "application/json" },
+    body: JSON.stringify({ prefix, limit: 100, sortBy: { column: "created_at", order: "desc" } }) });
+  return r.ok ? r.json() : [];
+}
+async function latestRelease() {
+  const r = await fetch(`${SB()}/storage/v1/object/deploy/worker/latest.txt?t=${Date.now()}`, { headers: svc() });
+  return r.ok ? (await r.text()).trim().slice(0, 40) : null;
+}
+async function viewers() {
+  const pod = POD(); if (!pod) return null;
+  const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
+  try { const r = await fetch(`https://${pod}-8000.proxy.runpod.net/health`, { signal: ctl.signal }); return r.ok ? (await r.json()).viewers ?? null : null; }
+  catch (_) { return null; } finally { clearTimeout(t); }
+}
 const LIMIT_KEYS = ["guests_enabled", "guest_per_10min", "guest_max_pending", "ip_per_10min", "ip_max_pending", "brake_pending", "turnstile_required", "shadow_after_strikes", "per_minute", "max_pending"];
 
 module.exports = async (req, res) => {
@@ -20,6 +56,80 @@ module.exports = async (req, res) => {
         rest("GET", "idea_limits?id=eq.1"),
       ]);
       return res.status(200).json({ ideas, shadow, sessions, bans, limits: limits[0] });
+    }
+    if (a === "overview") {
+      const [g, cfg, usage, fuel, v, rel, files, deploys, reports, ideas, sanctions] = await Promise.all([
+        gpu(), rest("GET", "auto_config?id=eq.1"), rest("POST", "rpc/admin_usage", {}), rest("GET", "fuel_status?select=balance_cents"),
+        viewers(), latestRelease(), storageList("worker/"),
+        rest("GET", "deploy_log?order=created_at.desc&limit=20"),
+        rest("GET", "reports?order=created_at.desc&limit=50&status=eq.open&select=id,idea_id,strip_a,strip_b,reason,created_at,ideas(body,handle,status,user_id,guest_id)"),
+        rest("GET", "ideas?status=in.(pending,playing)&order=created_at.desc&limit=100&select=id,handle,body,status,votes,created_at,user_id,guest_id"),
+        rest("GET", "sanctions?or=(until.is.null,until.gt.now())&order=created_at.desc&limit=50&select=id,user_id,kind,until,reason,created_at"),
+      ]);
+      const releases = (files || []).filter((f) => /^[0-9a-f]{40}\.tgz$/.test(f.name)).map((f) => ({ sha: f.name.slice(0, 40), at: f.created_at, size: f.metadata && f.metadata.size }));
+      const { MOODS } = require("../lib/moods.json");
+      return res.status(200).json({ gpu: g, auto: cfg[0], moods: MOODS, usage, fuel_cents: fuel[0] ? Number(fuel[0].balance_cents) : null, viewers: v,
+        release: rel, releases, deploys, reports, ideas, sanctions, vercel_url: "https://vercel.com/bicricks-projects/infinite-tapestry-app/deployments" });
+    }
+    if (a === "gpu_set") {   // {desired: on|off|auto, dry?}: writes the desired state; the 5-minute controller acts on it
+      if (!DESIRED.has(body.desired)) return res.status(400).json({ error: "bad" });
+      if (body.dry) return res.status(200).json({ ok: true, dry: true, would: { desired: body.desired } });
+      await rest("PATCH", "pod_state?id=eq.1", { desired: body.desired, updated_at: new Date().toISOString(), note: `admin: desired ${body.desired}` }, { prefer: "return=minimal" });
+      await audit("admin_gpu_desired", { actor: me.id, target: POD(), detail: { desired: body.desired } });
+      return res.status(200).json({ ok: true, gpu: await gpu() });
+    }
+    if (a === "auto_set") {  // {paused, theme, minutes, mood_weights}
+      const patch = { updated_at: new Date().toISOString(), updated_by: me.id };
+      if ("paused" in body) patch.paused = !!body.paused;
+      if ("theme" in body) {
+        const t = String(body.theme || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 200);
+        patch.theme = t || null;
+        patch.theme_until = t ? new Date(Date.now() + Math.max(5, Math.min(1440, Number(body.minutes) || 60)) * 60000).toISOString() : null;
+      }
+      if (body.mood_weights && typeof body.mood_weights === "object") {
+        const w = {}; for (const [k, v] of Object.entries(body.mood_weights)) if (k.length <= 40) w[k] = Math.max(0, Math.min(50, Number(v) || 0));
+        patch.mood_weights = w;
+      }
+      await rest("PATCH", "auto_config?id=eq.1", patch, { prefer: "return=minimal" });
+      await audit("admin_auto", { actor: me.id, detail: patch });
+      return res.status(200).json({ ok: true });
+    }
+    if (a === "idea") {      // {id, op: reject|remove}
+      const id = Number(body.id); if (!id || !["reject", "remove"].includes(body.op)) return res.status(400).json({ error: "bad" });
+      await rest("PATCH", `ideas?id=eq.${id}&status=in.(pending,playing)`, { status: body.op === "reject" ? "rejected" : "withdrawn" }, { prefer: "return=minimal" });
+      await audit("admin_idea_" + body.op, { actor: me.id, target: String(id) });
+      return res.status(200).json({ ok: true });
+    }
+    if (a === "sanction") {  // {user_id, kind: mute|ban, minutes}
+      if (!/^[0-9a-f-]{36}$/.test(String(body.user_id)) || !["mute", "ban"].includes(body.kind)) return res.status(400).json({ error: "bad" });
+      const m = Number(body.minutes) || 0;
+      await rest("POST", "sanctions", { user_id: body.user_id, kind: body.kind, until: m > 0 ? new Date(Date.now() + m * 60000).toISOString() : null, reason: "admin", by_user: me.id }, { prefer: "return=minimal" });
+      if (body.kind === "ban") await rest("PATCH", `ideas?user_id=eq.${body.user_id}&status=eq.pending`, { status: "rejected" }, { prefer: "return=minimal" });
+      await audit("admin_" + body.kind, { actor: me.id, target: body.user_id, detail: { minutes: m } });
+      return res.status(200).json({ ok: true });
+    }
+    if (a === "unsanction") {
+      const id = Number(body.id); if (!id) return res.status(400).json({ error: "bad" });
+      await rest("PATCH", `sanctions?id=eq.${id}`, { until: new Date().toISOString() }, { prefer: "return=minimal" });
+      await audit("admin_unsanction", { actor: me.id, target: String(id) });
+      return res.status(200).json({ ok: true });
+    }
+    if (a === "report") {    // {id, status: resolved|dismissed}
+      const id = Number(body.id); if (!id || !["resolved", "dismissed"].includes(body.status)) return res.status(400).json({ error: "bad" });
+      await rest("PATCH", `reports?id=eq.${id}`, { status: body.status }, { prefer: "return=minimal" });
+      return res.status(200).json({ ok: true });
+    }
+    if (a === "rollback") {  // {sha, confirm: sha}: repoint the pod release pointer; the pod picks it up on its next restart
+      const sha = String(body.sha || "");
+      if (!SHA.test(sha) || body.confirm !== sha) return res.status(400).json({ error: "confirm" });
+      const files = await storageList("worker/");
+      if (!files.some((f) => f.name === sha + ".tgz")) return res.status(404).json({ error: "no_release" });
+      const r = await fetch(`${SB()}/storage/v1/object/deploy/worker/latest.txt`, { method: "PUT",
+        headers: { ...svc(), "content-type": "text/plain", "x-upsert": "true", "cache-control": "no-cache" }, body: sha });
+      if (!r.ok) return res.status(500).json({ error: "write_failed" });
+      await rest("POST", "deploy_log", { kind: "rollback", sha, note: `admin rollback by ${me.handle || me.id}` }, { prefer: "return=minimal" });
+      await audit("admin_release_rollback", { actor: me.id, target: sha });
+      return res.status(200).json({ ok: true, release: sha });
     }
     if (a === "ban") {   // {kind: session|ip|fp, value}
       if (!["session", "ip", "fp"].includes(body.kind) || !body.value) return res.status(400).json({ error: "bad" });

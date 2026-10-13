@@ -223,6 +223,11 @@ def create_app(
     if generator is not None:   # reactions on the scene on stage stretch its hold (LiveDirector._hold_len)
         generator.director.heat = lambda since: sum(sum(reactions.by_strip[i].values()) for i in range(since, since + 40) if i in reactions.by_strip)
     app.state.crowd = crowd
+    if autopilot is not None and supa is not None:
+        def _auto_cfg() -> dict | None:
+            rows = supa.rest("GET", "auto_config?id=eq.1&select=paused,theme,theme_until,mood_weights")
+            return rows[0] if rows else None
+        autopilot.config_fetch = _auto_cfg
     if generator is not None:
         def _on_flag(scene: dict) -> None:
             """Explicit output after one repaint: strike the source idea(s) and log it (runs on the generator thread)."""

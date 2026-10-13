@@ -23,6 +23,8 @@ CFG
 # Facebook/LinkedIn/iMessage need absolute og/twitter image URLs.
 SITE="${SITE_URL:-https://infinite-tapestry.vercel.app}"
 SITE="${SITE%/}"
+# SITE_URL is the single source of truth for the public domain: rewrite every absolute URL in the pages.
+for f in "$OUT"/*.html; do sed -i "s|https://infinite-tapestry.vercel.app|${SITE}|g" "$f"; done
 for f in "$OUT/index.html" "$OUT/profile.html"; do
   [ -f "$f" ] || continue
   sed -i "s|content=\"/brand/og.jpg\"|content=\"${SITE}/brand/og.jpg\"|g" "$f"

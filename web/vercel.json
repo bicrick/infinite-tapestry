@@ -114,6 +114,10 @@
    "destination": "/terms.html"
   },
   {
+   "source": "/privacy",
+   "destination": "/privacy.html"
+  },
+  {
    "source": "/admin",
    "destination": "/admin.html"
   },

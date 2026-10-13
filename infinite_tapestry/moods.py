@@ -40,12 +40,14 @@ class MoodRotator:
         self.current = ""
         self.left = 0
         self.fresh = True  # first batch of a new journey
+        self.weights: dict[str, float] = {}  # admin overrides (auto_config.mood_weights); missing keys keep defaults
 
     def _pick(self) -> str:
-        cands = [m for m in MOODS if m[0] not in self.recent]
+        wt = lambda m: float(self.weights.get(m[0], m[1]))
+        cands = [m for m in MOODS if m[0] not in self.recent and wt(m) > 0] or [m for m in MOODS if wt(m) > 0] or MOODS
         # nudge toward beauty if the last two picks were both non-beautiful
         boost = 1.6 if sum(1 for k in list(self.recent)[-2:] if not _BY_KEY[k][2]) >= 2 else 1.0
-        w = [m[1] * (boost if m[2] else 1.0) for m in cands]
+        w = [max(wt(m), 1e-6) * (boost if m[2] else 1.0) for m in cands]
         return self.rng.choices([m[0] for m in cands], w)[0]
 
     def next(self, scenes: int = 2) -> str:

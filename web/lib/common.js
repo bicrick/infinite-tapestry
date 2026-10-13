@@ -2,6 +2,8 @@
 const crypto = require("crypto");
 
 const env = (k, d) => process.env[k] || d;
+// The public domain is ONE config value (SITE_URL); everything else derives from it.
+const SITE_URL = () => env("SITE_URL", "https://infinite-tapestry.vercel.app").replace(/\/$/, "");
 const SB_URL = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svcHeaders = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY"), "content-type": "application/json" });
 
@@ -45,6 +47,11 @@ async function audit(action, { actor = null, handle = null, ip = null, target = 
   } catch (e) { console.error("audit failed", e.message); }
 }
 
+// Stripe mode is pure config: STRIPE_MODE=live switches to STRIPE_LIVE_SECRET_KEY / STRIPE_LIVE_WEBHOOK_SECRET.
+// Anything else (default) uses the test keys in STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET.
+const stripeLive = () => env("STRIPE_MODE", "test") === "live";
+const stripeKey = () => (stripeLive() ? env("STRIPE_LIVE_SECRET_KEY") : env("STRIPE_SECRET_KEY"));
+const stripeWebhookSecret = () => (stripeLive() ? env("STRIPE_LIVE_WEBHOOK_SECRET") : env("STRIPE_WEBHOOK_SECRET"));
 async function stripe(path, form) {
   const body = new URLSearchParams();
   const add = (k, v) => {
@@ -55,7 +62,7 @@ async function stripe(path, form) {
   Object.entries(form || {}).forEach(([k, v]) => add(k, v));
   const r = await fetch(`https://api.stripe.com/v1/${path}`, {
     method: form ? "POST" : "GET",
-    headers: { authorization: "Bearer " + env("STRIPE_SECRET_KEY"), "content-type": "application/x-www-form-urlencoded" },
+    headers: { authorization: "Bearer " + stripeKey(), "content-type": "application/x-www-form-urlencoded" },
     body: form ? body : undefined,
   });
   const j = await r.json();
@@ -134,4 +141,4 @@ function storagePrefixes() {
   return [...new Set([env("TAPESTRY_STORAGE_PREFIX", "live-sdxl"), "live-sdxl", "live"])];
 }
 
-module.exports = { env, rest, userFromToken, clientIp, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };
+module.exports = { SITE_URL, stripeLive, stripeWebhookSecret, runpod, runpodBalance, MIN_BALANCE, env, rest, userFromToken, clientIp, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };

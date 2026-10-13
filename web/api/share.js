@@ -58,6 +58,7 @@ h1{font-size:22px;font-weight:500;letter-spacing:-.01em;margin:0 0 6px}
 nav{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap}
 nav a{color:var(--fg);text-decoration:none;border:1px solid var(--ln);border-radius:999px;padding:8px 16px;font-size:13px}
 nav a:hover{background:rgba(232,230,227,.06)}
+.rep{margin-top:28px}.rep button{background:none;border:0;padding:0;color:var(--mu);font:inherit;font-size:12px;cursor:pointer}.rep button:hover{color:var(--fg)}.rep span{color:var(--mu);font-size:12px;margin-left:8px}
 </style></head><body><main>
 <a class="brand" href="/">Infinite Tapestry</a>
 ${imgs.length ? `<a class="art" href="${esc(m.replay)}" data-n="${imgs.length}">${imgs.map((i) => `<img src="${esc(stripUrl(i))}" alt="" loading="lazy" decoding="async" />`).join("")}</a>`
@@ -66,7 +67,9 @@ ${imgs.length ? `<a class="art" href="${esc(m.replay)}" data-n="${imgs.length}">
 <div class="meta">${esc(m.by)}${m.at ? ` · <time datetime="${esc(m.at)}">${esc(m.at)}</time>` : ""}${m.note ? " · " + esc(m.note) : ""}</div>
 ${m.prompt && m.prompt !== m.title ? `<p class="p">${esc(m.prompt)}</p>` : ""}
 <nav><a href="/">Watch live</a>${m.replay ? `<a href="${esc(m.replay)}">Replay</a>` : ""}${m.day ? `<a data-day href="/time-machine">Time Machine</a>` : ""}</nav>
+${m.report ? `<p class="rep"><button type="button" id="rep" data-r='${esc(JSON.stringify(m.report))}'>Report</button><span id="rep-ok"></span></p>` : ""}
 </main><script>
+const rb=document.getElementById("rep");if(rb)rb.onclick=async()=>{const n=prompt("Report this scene? Add a short reason (optional).");if(n===null)return;const r=await fetch("/api/report",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...JSON.parse(rb.dataset.r),reason:"other",note:n})}).catch(()=>null);document.getElementById("rep-ok").textContent=r&&r.ok?"Thanks, we'll take a look.":"Couldn't send it.";rb.disabled=true;};
 for(const t of document.querySelectorAll("time")){const d=new Date(t.dateTime);if(!isNaN(d))t.textContent=d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});}
 const a=document.querySelector("[data-day]"),t=document.querySelector("time");if(a&&t){const d=new Date(t.dateTime);if(!isNaN(d))a.href="/time-machine#"+d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 (function fitArt(){const art=document.querySelector("a.art");if(!art)return;const imgs=[...art.querySelectorAll("img")];if(!imgs.length)return;const ov=192/448;const go=()=>{const W=art.clientWidth,H=art.clientHeight,n=imgs.length;if(!W||!H)return;const w=W/(n-(n-1)*ov);imgs.forEach((img,i)=>{img.style.width=w+"px";img.style.height=H+"px";img.style.marginLeft=i?(-w*ov)+"px":"0";});};go();addEventListener("resize",go);imgs.forEach(img=>img.decode&&img.decode().then(go).catch(()=>{}));})();
@@ -93,7 +96,7 @@ module.exports = async (req, res) => {
       const by = credit(sc.by, sc.origin);
       return page(res, host, { path: `/s/${a}-${b}`, title, by: by === "Auto" ? "Auto" : `Suggested by ${by}`, at: rows[0].created_at,
         desc: by === "Auto" ? "Painted live on the Infinite Tapestry." : `Suggested by ${by} · painted live on the Infinite Tapestry.`,
-        og: `${host}/api/og?card=at&a=${a}&b=${b}`, strips: rows.map((r) => r.idx), replay: `/?at=${a}&to=${b}`, day: true,
+        og: `${host}/api/og?card=at&a=${a}&b=${b}`, strips: rows.map((r) => r.idx), replay: `/?at=${a}&to=${b}`, day: true, report: { a, b },
         cache: "public, s-maxage=86400, stale-while-revalidate=604800" });
     }
     const id = /^\d{1,12}$/.test(raw) ? +raw : 0;
@@ -113,13 +116,13 @@ module.exports = async (req, res) => {
         const p = (await rest("POST", "rpc/queue_place", { p_id: id }).catch(() => []))[0];
         if (p && p.place) note = `#${p.place} in line · ${fmtEta(p.eta_s)}`;
       }
-      return page(res, host, { path: `/s/${id}`, title, by: byLine, note, prompt: idea.body, desc, og: `${host}/brand/og/og-3-close.jpg`,
+      return page(res, host, { path: `/s/${id}`, title, by: byLine, note, prompt: idea.body, desc, og: `${host}/brand/og/og-3-close.jpg`, report: { idea_id: id },
         empty: idea.status === "playing" ? "Painting now. Watch live." : "Not painted yet", cache: "public, s-maxage=15" });
     }
     const a = idea.start_strip, b = idea.end_strip ?? a + 12;
     const rows = await strips(a, Math.min(b, a + 63));
     return page(res, host, { path: `/s/${id}`, title, by: byLine, prompt: idea.body, desc, at: idea.played_at || (rows[0] && rows[0].created_at),
-      og: `${host}/api/og?card=idea&id=${id}`, strips: rows.map((r) => r.idx), replay: `/?at=${a}&to=${b}`, day: true,
+      og: `${host}/api/og?card=idea&id=${id}`, strips: rows.map((r) => r.idx), replay: `/?at=${a}&to=${b}`, day: true, report: { idea_id: id },
       cache: idea.status === "played" ? "public, s-maxage=3600, stale-while-revalidate=86400" : "public, s-maxage=30" });
   } catch (e) {
     console.error("share", e.message);

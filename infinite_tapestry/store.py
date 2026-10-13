@@ -70,7 +70,8 @@ class R2Public:
 
     # r2.dev answers 403 to urllib's default "Python-urllib" agent, which made cors_ok() always False
     # (so every strip was also copied to Supabase) and get() always miss.
-    UA = "infinite-tapestry/1.0 (+https://infinite-tapestry.vercel.app)"
+    SITE = os.environ.get("TAPESTRY_SITE_URL", "https://infinite-tapestry.vercel.app").rstrip("/")
+    UA = f"infinite-tapestry/1.0 (+{SITE})"
 
     def put(self, key: str, data: bytes, ctype: str) -> None:
         self.s3.put_object(Bucket=self.bucket, Key=key, Body=data, ContentType=ctype, CacheControl=self.CACHE)
@@ -90,7 +91,7 @@ class R2Public:
             return ok
         try:
             req = urllib.request.Request(f"{self.public_url}/_probe.txt", method="GET",
-                                         headers={"Origin": "https://infinite-tapestry.vercel.app", "User-Agent": self.UA})
+                                         headers={"Origin": self.SITE, "User-Agent": self.UA})
             with urllib.request.urlopen(req, timeout=10) as r:
                 ok = bool(r.headers.get("Access-Control-Allow-Origin"))
         except Exception:

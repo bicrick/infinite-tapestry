@@ -391,7 +391,7 @@ async function boot() {
     return `<li class="item idea user" data-id="i${it.id}"><span class="n">${it.place ?? ""}</span><div class="body">` +
       `<div class="t" data-tip="${esc(by === "Auto" ? "Auto" : "Suggested by " + by)}">${esc(it.body)}</div>` +
       `<div class="meta">${esc(by)}${it.eta_s != null ? " · " + etaLabel(it.eta_s) : ""}${mine ? " · yours" : ""}</div>` +
-      `<div class="p"><a class="open-s" href="/s/${it.id}" target="_blank" rel="noopener">Open ↗</a>` +
+      `<div class="p"><a class="open-s" href="/s/${it.id}" target="_blank" rel="noopener">Open ↗</a><button class="linkish" type="button" data-report="${it.id}">Report</button>` +
       (mine ? ` <button class="linkish" type="button" data-act="withdraw_idea" data-iid="${it.id}">Withdraw</button>` : "") +
       (S.isAdmin() ? ` <button class="linkish" type="button" data-act="admin_reject_idea" data-iid="${it.id}">Reject</button>` : "") + `</div></div>` +
       heart(it.id, it.votes) + `</li>`;
@@ -430,6 +430,16 @@ async function boot() {
     const { error } = await sb.rpc(b.dataset.act, { p_id: +b.dataset.iid });
     if (error) return toast(friendly(error));
     b.closest("li")?.remove(); refreshIdeas();
+  }, true);
+  // Report an idea (queue rows): feeds the admin Reports list.
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-report]"); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const note = prompt("Report this idea? Add a short reason (optional).");
+    if (note === null) return;
+    const r = await fetch("/api/report", { method: "POST", headers: { "content-type": "application/json", ...(S.session ? { authorization: "Bearer " + S.session.access_token } : {}) },
+      body: JSON.stringify({ idea_id: +b.dataset.report, reason: "other", note }) }).catch(() => null);
+    toast(r && r.ok ? "Thanks, we'll take a look." : r && r.status === 429 ? "Too many reports. Try later." : "Couldn't send the report.");
   }, true);
   S.place = async (id) => { if (!id || id < 0) return null; const { data } = await sb.rpc("queue_place", { p_id: id }); return (data || [])[0] || null; };
   async function placeToast(id, tail) {
