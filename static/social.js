@@ -217,9 +217,9 @@ async function boot() {
     if (document.fullscreenElement || b.classList.contains("saver") || b.classList.contains("ambient") || document.hidden) return false;
     sessionStorage.setItem(NUDGE_KEY, "1");
     toast(`<span>Sign in with Google to add more ideas and vote</span><button type="button" id="nudge-go">Sign in</button><button type="button" id="nudge-x" aria-label="Dismiss">×</button>`, 20000);
-    const t = $("toast"), c = $("chat").getBoundingClientRect();
+    const t = $("toast"), box = $("cmd-input"), c = (box.closest("form") || box).getBoundingClientRect();
     t.classList.add("nudge");
-    if (c.height) t.style.setProperty("--nudge-top", Math.max(8, c.top - 44) + "px");
+    if (c.height) t.style.setProperty("--nudge-top", Math.max(8, c.top - t.offsetHeight - 10) + "px");
     $("nudge-go").onclick = () => sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname + location.search } });
     $("nudge-x").onclick = () => t.classList.remove("show");
     try { window.va && window.va("event", { name: "signin_nudge" }); } catch (_) {}
