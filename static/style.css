@@ -870,3 +870,12 @@ body.composing .dock, body.composing.away .dock { bottom: calc(40px + var(--sb, 
   translate: 0 calc(-1 * max(0px, var(--kb, 0px) - 28px - var(--sb, 0px))); transition: translate .28s cubic-bezier(.2,.8,.2,1), opacity .3s, transform .3s; }
 #intro { background: transparent; }
 body { transition: background-color .6s var(--ease); }
+/* terms: always just below the chat window, tiny, never over the ribbon */
+.dock .cmd-terms, .dock:focus-within .cmd-terms, body.composing .cmd-terms { position: absolute; top: 100%; left: 0; right: 0; margin: 5px 0 0;
+  max-height: none; opacity: .6; font-size: 10px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto; }
+body.away .dock .cmd-terms, body.intro .dock .cmd-terms { opacity: 0; pointer-events: none; }
+@media (max-width: 760px), (pointer: coarse) {
+  .dock { bottom: calc(56px + var(--sb)); }
+  body.composing .dock, body.composing.away .dock { bottom: calc(56px + var(--sb)) !important; translate: 0 calc(-1 * max(0px, var(--kb, 0px) - 40px - var(--sb, 0px))); }
+  .dock .cmd-terms, .dock:focus-within .cmd-terms, body.composing .cmd-terms { margin-top: 4px; font-size: 9px; letter-spacing: 0; }
+}
