@@ -947,3 +947,6 @@ body.idle .amb-title, body.ambient .amb-title { opacity: 1 !important; translate
 .status-mini, #status-text { display: inline-flex; align-items: flex-start; line-height: 1.3em; }
 .status-mini > span, #status-text > span { line-height: 1.3em; white-space: pre; }
 .status-mini .odo, #status-text .odo { vertical-align: 0; }
+
+/* Google-only sign-in */
+#auth-form, #auth-or, #auth-code-form { display: none !important; }

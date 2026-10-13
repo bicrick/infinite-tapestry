@@ -108,7 +108,7 @@ async function boot() {
   $("chat").classList.remove("hidden");
   $("cmd-input").placeholder = innerWidth < 480 ? "Where next?" : "Suggest where the tapestry goes next…";
   let google = !!CFG.google;
-  A.googleEnabled().then((on) => { google = on; $("auth-google").classList.toggle("hidden", !on || !!S.session); $("auth-or").classList.toggle("hidden", !on || !!S.session); });
+  A.googleEnabled().then((on) => { google = on; $("auth-google").classList.toggle("hidden", !!S.session); });
 
   // Hoisted above first loadProfile(): loadVotes/renderIdeas run from loadProfile
   // and must not hit TDZ (was: ReferenceError myVotes before initialization).
@@ -151,18 +151,19 @@ async function boot() {
   function openAuth() {
     const signed = !!S.session, needHandle = signed && !(S.profile && S.profile.handle);
     document.body.classList.toggle("signed-in", signed);
-    $("auth-form").classList.toggle("hidden", signed);
-    $("auth-google").classList.toggle("hidden", signed || !google);
-    $("auth-or").classList.toggle("hidden", signed || !google);
+    // Google-only sign-in: the email magic-link form stays hidden.
+    $("auth-form").classList.add("hidden");
+    $("auth-google").classList.toggle("hidden", signed);
+    $("auth-or").classList.add("hidden");
     $("auth-code-form").classList.add("hidden");
-    if (!signed) { $("auth-form").classList.remove("hidden"); if (!$("auth-email").value) $("auth-email").value = A.lastEmail(); }
+
     $("handle-form").classList.toggle("hidden", !needHandle);
     $("auth-signed").classList.toggle("hidden", !signed || needHandle);
     $("auth-handle").textContent = S.profile && S.profile.handle ? "@" + S.profile.handle : "";
     document.querySelector("#auth-pop .sheet-title").textContent = needHandle ? "Almost there" : signed ? "Your account" : "Join the tapestry";
     $("auth-pop").classList.remove("hidden");
     if (needHandle && !$("handle-input").value && guest.handle) $("handle-input").value = guest.handle.replace("-", "_");
-    setTimeout(() => (needHandle ? $("handle-input") : $("auth-email")).focus(), 50);
+    if (needHandle) setTimeout(() => $("handle-input").focus(), 50);
   }
   S.openAuth = openAuth;
   // Signed in with a handle: your name opens your profile. Otherwise it opens sign-in.
