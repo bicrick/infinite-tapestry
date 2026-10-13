@@ -1439,7 +1439,9 @@
         config = Object.assign(config, j.config);
         window.dispatchEvent(new CustomEvent("tapestry:config", { detail: j.config }));
       }
-      (j.items || []).forEach((r) => onStripRef(r, false));
+      const it = j.items || [];
+      if (it.length) onStripRef(it[it.length - 1], false);   // newest first: the live view initialises at the real edge
+      it.forEach((r) => onStripRef(r, false));
       if (!connected && j.last_at && j.now - j.last_at > 60) lastFreshAt = performance.now() - 61000;
     }).catch(() => {});
   }
