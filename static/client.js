@@ -1180,7 +1180,7 @@
     }
     list.classList.remove("skeleton");
     const items = d.upcoming || d.items || [];
-    $("queue-count").textContent = items.length;
+    $("queue-count").textContent = items.length || "";
     $("queue-empty").classList.toggle("hidden", items.length > 0);
     $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>Auto is dreaming up what comes next.' : "Nothing queued. Type a destination below.";
     const cur = d.current_scene || { title: d.current, prompt: d.current };

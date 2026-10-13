@@ -1014,3 +1014,29 @@ body.composing:not(.away) .dock .cmd-terms { margin-top: var(--s2) !important; f
 .card.current { margin: var(--s2) var(--s3) var(--s1) !important; }
 #queue-list { padding: var(--s1) var(--s3) !important; }
 .empty { padding: var(--s4) !important; }
+
+/* ===== split: composer = text + image + send; reactions by the scene; queue in the top bar ===== */
+.cmd #react-btn, .cmd #queue-btn { display: none !important; }
+body:not(.composing) .cmd #ref-btn:not(.hidden) { display: grid !important; width: 40px; height: 40px; border-radius: 20px; }
+body:not(.composing) .cmd .send { display: grid !important; width: 40px; height: 40px; border-radius: 20px; }
+/* reaction row: a small glass pill just under the title, over the top edge of the scene */
+.react-tray, body.react-open .react-tray { position: fixed !important; left: 50% !important; right: auto !important; bottom: auto !important;
+  top: calc(var(--band-top, 30vh) + var(--s3)) !important; z-index: 35; padding: 2px !important; gap: 0 !important;
+  transform: translate(-50%, -4px) !important; transform-origin: 50% 0 !important; }
+.react-tray { opacity: 0; pointer-events: none; transition: opacity .3s var(--ease), transform .3s var(--ease) !important; }
+body.react-open .react-tray { opacity: 1; pointer-events: auto; transform: translate(-50%, 0) !important; }
+.react-tray button { padding: 6px 7px !important; font-size: 18px !important; }
+.react-tray .clip-btn { font-size: var(--t-sm) !important; padding: 6px 10px !important; }
+body.idle .react-tray, body.ambient .react-tray, body.composing .react-tray, body.intro .react-tray, body.away .react-tray { opacity: 0 !important; pointer-events: none !important; }
+body.react-open .dock .now { visibility: visible; }
+body.react-open .cmd-terms { display: revert !important; }
+/* floats rise from the right edge of the scene */
+.react-layer { top: auto !important; bottom: calc(100vh - var(--band-bot, 70vh)) !important; height: calc(var(--band-bot, 70vh) - var(--band-top, 30vh)) !important; right: 0; }
+/* "up next" in the top bar */
+.upnext-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 !important; border: 0; background: none; cursor: pointer;
+  color: var(--muted); font: inherit; font-size: var(--t-md) !important; line-height: 16px; letter-spacing: .01em; white-space: nowrap; transition: color .2s, opacity .5s var(--ease); }
+.upnext-btn:hover { color: var(--fg); }
+.upnext-n { font-variant-numeric: tabular-nums; color: rgba(var(--ink),.38); }
+.upnext-n:empty, .upnext-n[data-z] { display: none; }
+body.idle .upnext-btn, body.ambient .upnext-btn { opacity: 0 !important; pointer-events: none !important; }
+@media (max-width: 420px) { .upnext-btn { font-size: var(--t-sm) !important; } }

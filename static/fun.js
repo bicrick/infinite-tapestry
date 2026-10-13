@@ -16,14 +16,20 @@ const bar = document.createElement("div"); bar.className = "react-bar ui"; bar.s
 bar.innerHTML = R.map(([k, e]) => `<button type="button" data-k="${k}" aria-label="React ${e}">${e}</button>`).join("") +
   `<span class="react-sep"></span><button type="button" id="clip-btn" class="clip-btn" title="Share the last 10 seconds">Clip</button>`;
 bar.className = "react-tray"; bar.id = "react-tray";
-(document.querySelector(".dock") || document.body).appendChild(bar);
+document.body.appendChild(bar);
 const rbtn = document.getElementById("react-btn");
 const setTray = (on) => { document.body.classList.toggle("react-open", on); rbtn && rbtn.setAttribute("aria-expanded", on ? "true" : "false"); };
 let trayTimer = 0;
-const armTray = () => { clearTimeout(trayTimer); trayTimer = setTimeout(() => setTray(false), 6000); };
+const armTray = () => { clearTimeout(trayTimer); trayTimer = setTimeout(() => setTray(false), 3500); };
 rbtn && rbtn.addEventListener("click", (e) => { e.preventDefault(); const on = !document.body.classList.contains("react-open"); setTray(on); if (on) armTray(); });
 bar.addEventListener("click", armTray);
-document.addEventListener("pointerdown", (e) => { if (!bar.contains(e.target) && !(rbtn && rbtn.contains(e.target))) setTray(false); });
+// Reactions live by the scene: hovering/tapping the ribbon shows the row; it fades after a few seconds.
+let bandT = 0, bandB = 0; const readBand = () => { const cs = getComputedStyle(document.documentElement); bandT = parseFloat(cs.getPropertyValue("--band-top")) || 0; bandB = parseFloat(cs.getPropertyValue("--band-bot")) || 0; };
+readBand(); addEventListener("resize", readBand);
+const nearScene = (e) => { if (!bandB) readBand(); return e.clientY >= bandT - 48 && e.clientY <= bandB && !e.target.closest(".dock, .drawer, .top, .sheet"); };
+const wake = (e) => { if (bar.contains(e.target)) { armTray(); return; } if (nearScene(e)) { if (!document.body.classList.contains("react-open")) setTray(true); armTray(); } };
+document.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") wake(e); }, { passive: true });
+document.addEventListener("pointerdown", (e) => { if (bar.contains(e.target)) return; if (nearScene(e)) wake(e); else setTray(false); }, { passive: true });
 let live = 0;
 function floatUp(e, own) {
   if (live >= (own ? 30 : 22) || document.hidden) return;
