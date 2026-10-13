@@ -841,3 +841,20 @@ body.intro #amb-blobs { opacity: 0; }
 #past-veil { position: fixed; right: 0; top: var(--band-top, 30vh); height: calc(var(--band-bot, 70vh) - var(--band-top, 30vh)); width: 0; opacity: 0; pointer-events: none;
   -webkit-backdrop-filter: blur(6px) saturate(.7); backdrop-filter: blur(6px) saturate(.7); background: color-mix(in srgb, var(--bg) 45%, transparent);
   -webkit-mask-image: linear-gradient(to right, transparent, #000 24px); mask-image: linear-gradient(to right, transparent, #000 24px); transition: opacity .2s; }
+
+/* ---- Compose v2 (same on mobile + desktop): the pill grows UPWARD into a roomy sheet; nothing slides down ---- */
+.cmd-terms { font-size: 10px; letter-spacing: .01em; }
+body.signed-in .cmd-terms .anon-only { display: none; }
+#cmd-input { resize: none; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; min-width: 0; flex: 1;
+  height: 40px; line-height: 40px; padding: 0; white-space: nowrap; overflow: hidden; }
+body.composing .dock, body.composing.away .dock { bottom: max(calc(40px + var(--sb, 0px)), calc(12px + var(--kb, 0px))) !important; }
+body.composing #cmd-input { flex: 1 0 100%; white-space: normal; overflow-y: auto; line-height: 1.45; padding: 6px 0 0;
+  height: clamp(64px, calc(100vh - var(--band-bot, 70vh) - 230px - var(--kb, 0px)), 220px) !important; }
+body.composing .cmd .seg { margin-right: auto; }
+/* Away from live: the chat pill crossfades into "Return to live", same spot */
+.dock .cmd, .dock .cmd-terms { transition: opacity .3s var(--ease), transform .3s var(--ease); }
+.dock .pill#live-btn { position: absolute; top: auto; bottom: 0; left: 50%; height: 52px; padding: 0 22px; border-radius: 26px;
+  transform: translate(-50%, 6px); opacity: 0; pointer-events: none; transition: opacity .3s var(--ease), transform .3s var(--ease); white-space: nowrap; }
+body.away .dock .pill#live-btn { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+body.away .dock .cmd, body.away .dock .cmd-terms { opacity: 0; transform: translateY(6px); pointer-events: none; }
+body.away .dock .now { opacity: 0 !important; pointer-events: none; }

@@ -143,6 +143,7 @@ async function boot() {
 
   function openAuth() {
     const signed = !!S.session, needHandle = signed && !(S.profile && S.profile.handle);
+    document.body.classList.toggle("signed-in", signed);
     $("auth-form").classList.toggle("hidden", signed);
     $("auth-google").classList.toggle("hidden", signed || !google);
     $("auth-or").classList.toggle("hidden", signed || !google);

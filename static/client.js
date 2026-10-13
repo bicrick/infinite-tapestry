@@ -13,6 +13,13 @@
   const statusText = $("status-text");
   const DEBUG = /[?&]debug/.test(location.search);
   const liveBtn = $("live-btn");
+  // Away from live: the "Return to live" pill takes the chat pill's place (crossfade); an open compose sheet closes, draft kept.
+  { const dk = document.querySelector(".dock"); if (dk && liveBtn) dk.appendChild(liveBtn); liveBtn.classList.remove("hidden"); }
+  function setAway(on) {
+    if (document.body.classList.contains("away") === on) return;
+    document.body.classList.toggle("away", on);
+    if (on && document.body.classList.contains("composing")) { const i = $("cmd-input"); if (i) i.blur(); document.body.classList.remove("composing"); }
+  }
 
   const MAGIC = "ITAP";
   const HEADER_SIZE = 16;
@@ -733,7 +740,7 @@
     }
     if (live && typeof refreshTimeline === "function") refreshTimeline();   // fresh scene index for captions
     live = false;
-    liveBtn.classList.remove("hidden");
+    setAway(true);
   }
 
   // ---------- permalinks: ?at=<strip>[&to=<strip>] ----------
@@ -763,7 +770,7 @@
     ret = { from: shownPan(), t0: performance.now(), dur: Math.min(1100, 420 + Math.sqrt(dist) * 9) };
     panMode = "return";
     panVel = 0;
-    liveBtn.classList.add("hidden");
+    setAway(false);
   }
   // Gentle spring: easeOutBack with a small overshoot.
   const easeSpring = (t) => 1 - Math.pow(1 - t, 3);   // ease-out, no overshoot (overshoot carried the view past live)
@@ -797,7 +804,7 @@
         panPos += panVel * dt;
         if (Math.abs(out) < 0.5 && Math.abs(panVel) < 5) {
           panPos = panPos > hi ? hi : Math.max(lo, panPos); panVel = 0;
-          if (panPos >= hi - 0.5) { panMode = "live"; live = true; liveBtn.classList.add("hidden"); }
+          if (panPos >= hi - 0.5) { panMode = "live"; live = true; setAway(false); }
         }
       } else {
         // Friction: firm at normal speeds (~0.4-0.7s glide), loose once in turbo so it hums.
@@ -822,11 +829,11 @@
             driftAcc += (k * (target - driftVel) - c * driftAcc) * dt;
             driftVel += driftAcc * dt;
             panPos += Math.max(0, driftVel) * dt;
-            if (panPos >= hi) { panPos = hi; holdDrift(); panMode = "live"; live = true; liveBtn.classList.add("hidden"); return; }
+            if (panPos >= hi) { panPos = hi; holdDrift(); panMode = "live"; live = true; setAway(false); return; }
           }
         } else holdDrift();
         // Gliding into the live edge with speed: just hand over to live.
-        if (panPos >= hi && panVel > 0) { panPos = hi; panVel = 0; panMode = "live"; live = true; liveBtn.classList.add("hidden"); }
+        if (panPos >= hi && panVel > 0) { panPos = hi; panVel = 0; panMode = "live"; live = true; setAway(false); }
       }
     }
   }
@@ -1053,6 +1060,7 @@
     toast(interpreterOn ? `Planning <span class="muted">“${esc(text)}”</span>…` : `Queued <span class="muted">“${esc(text)}”</span>`, 2500);
   });
   $("cmd-input").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && !ev.isComposing && !(ev.metaKey || ev.ctrlKey || ev.shiftKey)) { ev.preventDefault(); $("cmd").requestSubmit(); return; }   // textarea: Enter sends
     if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey || ev.shiftKey)) {
       ev.preventDefault();
       const prev = when; when = "now";
