@@ -881,3 +881,14 @@ body.away .dock .cmd-terms, body.intro .dock .cmd-terms { opacity: 0; pointer-ev
 /* terms only while composing; hidden when closed */
 .dock .cmd-terms, .dock:focus-within .cmd-terms { opacity: 0 !important; visibility: hidden; pointer-events: none; }
 body.composing:not(.away) .dock .cmd-terms { opacity: .6 !important; visibility: visible; pointer-events: auto; }
+/* Layout v3 (mobile = desktop): closed pill / return pill centred between ribbon and wheel; open sheet sits low with terms beneath, wheel hidden */
+.dock, body.composing .dock, body.composing.away .dock { bottom: calc(28px + var(--sb, 0px)) !important;
+  --wheel-h: calc(40px + max(0px, var(--sb, 0px) - 6px));
+  --centre: max(0px, calc((100dvh - var(--band-bot, 70dvh) + var(--wheel-h)) / 2 - 26px - 28px - var(--sb, 0px)));
+  translate: 0 calc(-1 * var(--centre));
+  transition: translate .5s cubic-bezier(.22,1,.36,1), opacity .4s var(--ease), transform .4s var(--ease) !important; }
+body.composing:not(.away) .dock { translate: 0 calc(-1 * max(0px, var(--kb, 0px) - 28px - var(--sb, 0px))); }
+body.composing:not(.away) .hwheel { opacity: 0; pointer-events: none; transition: opacity .3s var(--ease); }
+.hwheel { transition: opacity .4s var(--ease); }
+body.composing:not(.away) .dock .cmd-terms { margin-top: 10px; font-size: 10px; letter-spacing: .01em; }
+body.composing:not(.away) .dock .cmd-terms { white-space: normal; text-wrap: balance; overflow: visible; }
