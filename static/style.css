@@ -1106,3 +1106,5 @@ body.idle .panel-btn, body.ambient .panel-btn, body.idle .top .status, body.ambi
   font-size: var(--t-md); color: rgba(var(--ink),.32); opacity: 1 !important; }
 .drawer .build-id { bottom: calc(52px + env(safe-area-inset-bottom)) !important; left: var(--s4) !important; }
 .sheet { z-index: 90 !important; }
+@media (min-width: 561px) { .sheet { place-items: center !important; } }
+body:has(.drawer.open) .hwheel { opacity: 0 !important; pointer-events: none !important; }
