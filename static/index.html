@@ -76,7 +76,7 @@
     <div class="chat-head"><span class="chat-title">Chat</span><button id="chat-close" class="chat-x" type="button" aria-label="Close chat"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
     <ol id="chat-list" class="chat-list" aria-live="polite"></ol>
     <div class="chat-foot">
-      <form id="chat-form" class="chat-form hidden" autocomplete="off" role="presentation"><input id="chat-input" type="text" name="chat-message" maxlength="200" placeholder="Say something" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" inputmode="text" data-lpignore="true" data-1p-ignore aria-label="Chat message" /><button id="chat-send" class="chat-send" type="submit" aria-label="Send"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button></form>
+      <div id="chat-form" class="chat-form hidden" role="group" data-form-type="other"><input id="chat-input" type="text" name="x-c1" data-form-type="other" maxlength="200" placeholder="Say something" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" inputmode="text" data-lpignore="true" data-1p-ignore aria-label="Chat message" /><button id="chat-send" class="chat-send" type="button" data-submit aria-label="Send"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button></div>
       <button id="chat-signin" class="chat-signin" type="button">Sign in to chat</button>
       <div id="chat-note" class="chat-note" role="status"></div>
     </div>
@@ -99,7 +99,7 @@
       </form>
       <p id="auth-msg" class="fine auth-msg" role="status"></p>
       <form id="handle-form" class="hidden" autocomplete="off">
-        <input id="handle-input" type="text" name="display-name" class="vibe" maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-1p-ignore placeholder="handle" aria-label="Handle (letters, numbers, underscore)" />
+        <input id="handle-input" type="text" name="x-h1" data-form-type="other" class="vibe" maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-1p-ignore placeholder="handle" aria-label="Handle (letters, numbers, underscore)" />
         <button class="primary" type="submit">Save</button>
       </form>
       <div id="auth-signed" class="hidden"><p class="fine">Signed in as <b id="auth-handle"></b></p><button id="auth-out" class="ghost wide" type="button">Sign out</button></div>
@@ -127,9 +127,9 @@
       <span class="bar"><span id="now-bar"></span></span>
     </div>
     <p class="cmd-terms">By submitting you agree to the <a href="/terms" target="_blank" rel="noopener">terms</a> and <a href="/privacy" target="_blank" rel="noopener">privacy</a>.<span class="anon-only"> No account needed; sign in for more.</span></p>
-    <form id="cmd" class="cmd" autocomplete="off">
+    <div id="cmd" class="cmd" role="group" data-form-type="other">
       <span id="ref-chip" class="ref-chip hidden"><img id="ref-thumb" alt="" /><button type="button" id="ref-clear" title="Remove image">×</button></span>
-      <textarea id="cmd-input" name="idea" rows="1" placeholder="Where should the world go next?" spellcheck="false" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" data-lpignore="true" data-1p-ignore></textarea>
+      <textarea id="cmd-input" name="x-c2" data-form-type="other" rows="1" placeholder="Where should the world go next?" spellcheck="false" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" data-lpignore="true" data-1p-ignore></textarea>
       <label id="ref-btn" class="icon social-only hidden" title="Add a reference image (optional)">
         <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9.5" cy="10" r="1.6"/><path d="M5 17l4.5-4.5 3 3L15 13l4 4"/></svg>
         <input id="ref-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />
@@ -152,13 +152,13 @@
       <button id="export-btn" type="button" class="icon sec" title="Export tapestry (E)">
         <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
       </button>
-      <button id="send-btn" type="submit" class="icon send phone-only" title="Send" aria-label="Send">
+      <button id="send-btn" type="button" data-submit class="icon send phone-only" title="Send" aria-label="Send">
         <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
       </button>
       <button id="more-btn" type="button" class="icon phone-only" title="More" aria-label="More" aria-expanded="false">
         <svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>
       </button>
-    </form>
+    </div>
     <div id="export-pop" class="pop hidden">
       <div class="pop-title">Export the tapestry</div>
       <p class="fine" id="export-meta">Everything painted so far, stitched into one PNG.</p>

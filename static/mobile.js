@@ -38,7 +38,8 @@
     const fit = () => { raf = 0;
       if (scrollX || scrollY) scrollTo(0, 0);             // cancel iOS focus scroll: layout never moves
       const kb = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)), h = Math.round(vv.height);
-      if (kb !== last) { last = kb; de.style.setProperty("--kb", kb + "px"); de.classList.toggle("kb-open", kb > 80); }
+      if (kb !== last) { const was = last > 80, now = kb > 80; last = kb; de.style.setProperty("--kb", kb + "px"); de.classList.toggle("kb-open", now);
+        if (was !== now) dispatchEvent(new CustomEvent("tapestry:kb", { detail: { open: now, height: kb } })); }
       if (h !== lastH) { lastH = h; de.style.setProperty("--vvh", h + "px"); }
     };
     const q = () => { if (!raf) raf = requestAnimationFrame(fit); };

@@ -1,3 +1,14 @@
+// Composer and chat are plain <div>s, not <form>s (iOS shows its password/card/address bar for anything form-like).
+// Give them form-style submit: requestSubmit(submitter) fires a cancelable "submit" event; [data-submit] buttons call it.
+for (const id of ["cmd", "chat-form"]) {
+  const el = document.getElementById(id);
+  if (!el || el.tagName === "FORM") continue;
+  el.requestSubmit = (submitter) => { const ev = new Event("submit", { cancelable: true }); ev.submitter = submitter || null; el.dispatchEvent(ev); };
+  el.addEventListener("pointerdown", (e) => { if (e.target.closest && e.target.closest("[data-submit]")) e.preventDefault(); });   // keep focus (and the keyboard) on send
+  el.addEventListener("click", (e) => { const b = e.target.closest && e.target.closest("[data-submit]"); if (b && el.contains(b)) { e.preventDefault(); el.requestSubmit(b); } });
+}
+const chatIn = document.getElementById("chat-input");
+if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); document.getElementById("chat-form").requestSubmit(); } });
 /**
  * Infinite Tapestry browser client.
  * - Backend WS URL: ?ws=... > window.TAPESTRY_CONFIG.wsUrl > page origin (/ws).
@@ -1623,19 +1634,33 @@
   // Compose: focusing the pill turns the dock into a sheet with attach + queue/now + send.
   // Compose open/close: the pill morphs into the sheet via a View Transition (compositor transform + opacity, eased);
   // only the dock is captured, so the live tapestry keeps running underneath. Falls back to an instant switch.
+  // Opening is synchronous (no View Transition): focus must land in the same tap so iOS raises the keyboard.
   const setCompose = (on) => {
     on = !!(on && phone.matches);
     if (body.classList.contains("composing") === on) return;
     const go = () => body.classList.toggle("composing", on);
-    if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) { try { document.startViewTransition(go); return; } catch (_) {} }
+    if (!on && document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) { try { document.startViewTransition(go); return; } catch (_) {} }
     go();
   };
-  input.addEventListener("focus", () => { setCompose(true); setMore(false); });
-  cmd.addEventListener("focusout", () => setTimeout(() => { if (!cmd.contains(document.activeElement) && !input.value) setCompose(false); }, 120));
+  window.TapestryCompose = setCompose;
+  // Expand only after the tap's synthesized click: expanding mid-tap moves the box, the click lands elsewhere and iOS drops focus.
+  let tapping = false, tapTimer = 0;
+  cmd.addEventListener("pointerdown", () => { tapping = true; clearTimeout(tapTimer); tapTimer = setTimeout(() => { tapping = false; }, 700); });
+  input.addEventListener("focus", () => { setMore(false); if (!tapping) setCompose(true); });
+  // Tap on the compact pill: focus inside the click gesture (iOS raises the keyboard) and expand, every time.
+  cmd.addEventListener("click", (e) => {
+    tapping = false; clearTimeout(tapTimer);
+    if (e.target.closest("button, label, a, input[type=file]")) return;
+    if (document.activeElement !== input) input.focus({ preventScroll: true });
+    setCompose(true);
+  });
+  // Keyboard gone (blur, Done, tap off) -> back to the compact pill. The draft stays in the box.
+  cmd.addEventListener("focusout", () => setTimeout(() => { if (!cmd.contains(document.activeElement)) setCompose(false); }, 120));
+  window.addEventListener("tapestry:kb", (e) => { if (!e.detail.open && body.classList.contains("composing")) { if (document.activeElement === input) input.blur(); setCompose(false); } });
   cmd.addEventListener("submit", () => { input.blur(); setCompose(false); setMore(false); setTimeout(() => { input.blur(); setCompose(false); }, 60); });   // collapse to the pill + dismiss keyboard right away
   document.addEventListener("pointerdown", (e) => {
     if (e.target.closest && e.target.closest(".cmd-terms")) return;
-    if (body.classList.contains("composing") && !cmd.contains(e.target) && !input.value) { input.blur(); setCompose(false); }
+    if (body.classList.contains("composing") && !cmd.contains(e.target)) { input.blur(); setCompose(false); }
     if (body.classList.contains("more-open") && !cmd.contains(e.target)) setMore(false);
   }, true);
   // Overflow: secondary actions in a compact row above the pill.

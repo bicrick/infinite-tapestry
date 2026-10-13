@@ -512,9 +512,15 @@ async function boot() {
   function setChatOpen(on) {
     if (on && (!chatOn || !chatSettings.enabled)) return;
     document.body.classList.toggle("chat-open", !!on);
-    if (on) { chatList.scrollTop = chatList.scrollHeight; if (canChat() && matchMedia("(hover: hover)").matches) setTimeout(() => chatInput.focus({ preventScroll: true }), 60); }
+    if (on) { chatList.scrollTop = chatList.scrollHeight; if (canChat()) { if (matchMedia("(hover: hover)").matches) setTimeout(() => chatInput.focus({ preventScroll: true }), 60); else chatInput.focus({ preventScroll: true }); } }
     else if (document.activeElement === chatInput) chatInput.blur();
   }
+  // Phones: when the keyboard goes away, the sheet goes back to the compact strip (draft kept).
+  const narrow = () => innerWidth < 1200 || innerWidth <= innerHeight;
+  window.addEventListener("tapestry:kb", (e) => { if (!e.detail.open && narrow() && document.body.classList.contains("chat-open")) setChatOpen(false); });
+  chatInput.addEventListener("blur", () => setTimeout(() => {
+    if (narrow() && document.body.classList.contains("chat-open") && !chatEl.contains(document.activeElement) && !document.documentElement.classList.contains("kb-open") && matchMedia("(pointer: coarse)").matches) setChatOpen(false);
+  }, 400));
   window.__chatOpen = () => setChatOpen(true); window.__chatClose = () => setChatOpen(false);
   const canChat = () => !!(S.session && S.profile && S.profile.handle);
   S.chatAuth = () => {
