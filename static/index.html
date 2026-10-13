@@ -41,13 +41,8 @@
   <header class="top ui">
     <div class="brand"><a class="brand-link" href="/about" aria-label="About Infinite Tapestry"><img class="brand-mark" src="brand/mark-plain.svg" alt="" /></a>Infinite Tapestry<span id="top-clock" class="top-clock" aria-label="Local time"></span><button id="snd-btn" class="snd-btn" type="button" aria-label="Ambient sound" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6v4h2.5l3.5 3V3L5 6z"/><path class="w1" d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8"/><path class="w2" d="M12.6 3.8a6 6 0 0 1 0 8.4"/><path class="x" d="M11 6l3.5 4M14.5 6L11 10"/></svg></button></div>
     <div class="top-right">
-      <button id="fs-btn" class="fs-btn" type="button" aria-label="Full screen" title="Full screen (Esc exits)"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
-      <button id="fuel-chip" class="fuel-chip hidden" type="button" title="Fuel keeps the GPU painting">
-        <span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span>
-      </button>
-      <button id="queue-btn" type="button" class="upnext-btn" title="Up next" aria-label="Up next">up next<span id="queue-count" class="upnext-n">0</span></button>
       <div id="status" class="status"><span class="dot"></span><span id="status-text">connecting</span><span id="status-mini" class="status-mini"></span></div>
-      <button id="account-btn" class="quiet hidden" type="button">Sign in</button>
+      <button id="queue-btn" type="button" class="panel-btn" title="Panel" aria-label="Open panel"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M10 3v10"/></svg><span id="queue-count" class="panel-n"></span></button>
     </div>
   </header>
 
@@ -196,9 +191,12 @@
       </nav>
       <button id="drawer-close" type="button" class="icon" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
-    <div class="drawer-theme desk-only" role="group" aria-label="Theme"><span>Theme</span><button data-theme="">Auto</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
     <div class="build-id" id="build-id" aria-hidden="true"></div>
     <section class="panel hidden" id="panel-chat"></section>
+    <section class="panel hidden" id="panel-you">
+      <div class="you-row"><span class="muted">Account</span><button id="account-btn" class="quiet hidden" type="button">Sign in</button></div>
+      <p class="fine pad">Your handle opens your profile. Sign in with Google to vote, chat and keep your ideas.</p>
+    </section>
     <section class="panel" id="panel-next">
     <div id="current-card" class="card current"></div>
     <ol id="queue-list" class="list skeleton"></ol>
@@ -237,6 +235,12 @@
       <div class="pad"><input id="audit-filter" class="vibe" placeholder="Filter by action (e.g. chat, vote, admin_ban)" /></div>
       <ol id="audit-list" class="list audit"></ol>
     </section>
+    <div class="drawer-bar">
+      <button id="fuel-chip" class="fuel-chip hidden" type="button" title="Painting left (fuel)"><span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span></button>
+      <button id="clip-btn" class="bar-btn" type="button" title="Share the last 10 seconds">Clip</button>
+      <button id="fs-btn" class="bar-btn fs-btn" type="button" aria-label="Full screen" title="Full screen (Esc exits)"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+      <div class="drawer-theme" role="group" aria-label="Theme"><button data-theme="">Auto</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
+    </div>
   </aside>
 
   <script src="config.js"></script>

@@ -562,9 +562,7 @@ async function boot() {
   // ---------- tabs ----------
   function openTab(name) {
     if (name === "you") {   // your profile when signed in, otherwise sign in
-      if (S.session && S.profile && S.profile.handle) location.href = "/u/" + encodeURIComponent(S.profile.handle);
-      else { $("drawer").classList.remove("open"); openAuth(); }
-      return;
+      if (!S.session) { $("drawer").classList.remove("open"); openAuth(); return; }
     }
     $("drawer").classList.add("open");
     if (name === "next" && window.TapestryWS) window.TapestryWS.send({ type: "upcoming_request" });

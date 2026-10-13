@@ -7,68 +7,8 @@ const send = (o) => window.TapestryWS && window.TapestryWS.send(o);
 const track = (name, data) => { try { window.va && window.va("event", { name, data }); } catch (_) {} };
 const coarse = matchMedia("(pointer: coarse)");
 
-// ---------- reactions ----------
-const R = [["lol", "😂"], ["fire", "🔥"], ["mind", "🤯"], ["love", "❤️"], ["dead", "💀"]];
-const EMO = Object.fromEntries(R);
-const layer = document.createElement("div"); layer.className = "react-layer"; layer.setAttribute("aria-hidden", "true");
-document.body.appendChild(layer);
-const bar = document.createElement("div"); bar.className = "react-bar ui"; bar.setAttribute("role", "group"); bar.setAttribute("aria-label", "React");
-bar.innerHTML = R.map(([k, e]) => `<button type="button" data-k="${k}" aria-label="React ${e}">${e}</button>`).join("") +
-  `<span class="react-sep"></span><button type="button" id="clip-btn" class="clip-btn" title="Share the last 10 seconds">Clip</button>`;
-bar.className = "react-tray"; bar.id = "react-tray";
-document.body.appendChild(bar);
-const rbtn = document.getElementById("react-btn");
-const setTray = (on) => { document.body.classList.toggle("react-open", on); rbtn && rbtn.setAttribute("aria-expanded", on ? "true" : "false"); };
-let trayTimer = 0;
-const armTray = () => { clearTimeout(trayTimer); trayTimer = setTimeout(() => setTray(false), 3500); };
-rbtn && rbtn.addEventListener("click", (e) => { e.preventDefault(); const on = !document.body.classList.contains("react-open"); setTray(on); if (on) armTray(); });
-bar.addEventListener("click", armTray);
-// Reactions live by the scene: hovering/tapping the ribbon shows the row; it fades after a few seconds.
-let bandT = 0, bandB = 0; const readBand = () => { const cs = getComputedStyle(document.documentElement); bandT = parseFloat(cs.getPropertyValue("--band-top")) || 0; bandB = parseFloat(cs.getPropertyValue("--band-bot")) || 0; };
-readBand(); addEventListener("resize", readBand);
-const nearScene = (e) => { if (!bandB) readBand(); return e.clientY >= bandT - 48 && e.clientY <= bandB && !e.target.closest(".dock, .drawer, .top, .sheet"); };
-const wake = (e) => { if (bar.contains(e.target)) { armTray(); return; } if (nearScene(e)) { if (!document.body.classList.contains("react-open")) setTray(true); armTray(); } };
-document.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") wake(e); }, { passive: true });
-document.addEventListener("pointerdown", (e) => { document.body.dataset.trayWas = "1"; if (bar.contains(e.target)) return; if (nearScene(e)) { if (!document.body.classList.contains("react-open")) document.body.dataset.trayWas = "0"; wake(e); } else setTray(false); }, { passive: true });
-let live = 0;
-function floatUp(e, own) {
-  if (live >= (own ? 30 : 22) || document.hidden) return;
-  live++;
-  const el = document.createElement("span"); el.className = "react-float" + (own ? " own" : ""); el.textContent = e;
-  const lw = Math.max(60, layer.clientWidth - 34);
-  const right = 6 + Math.random() * (own ? lw * 0.6 : lw);
-  el.style.right = right + "px";
-  el.style.setProperty("--dx", (Math.random() * 40 - 20).toFixed(0) + "px");
-  el.style.animationDuration = (2.6 + Math.random() * 1.4).toFixed(2) + "s";
-  layer.appendChild(el);
-  el.addEventListener("animationend", () => { el.remove(); live--; });
-}
-// Client-side bucket mirrors the server (1/s, burst 5) so taps never feel ignored.
-const bucket = { t: 5, at: performance.now() };
-const recentOwn = {};
-bar.addEventListener("click", (ev) => {
-  const b = ev.target.closest("button[data-k]"); if (!b) return;
-  const now = performance.now();
-  bucket.t = Math.min(5, bucket.t + (now - bucket.at) / 1000); bucket.at = now;
-  if (bucket.t < 1) { b.classList.add("cool"); setTimeout(() => b.classList.remove("cool"), 300); return; }
-  bucket.t -= 1;
-  const k = b.dataset.k;
-  recentOwn[k] = (recentOwn[k] || 0) + 1; setTimeout(() => { recentOwn[k] = Math.max(0, (recentOwn[k] || 0) - 1); }, 1500);
-  floatUp(EMO[k], true);
-  send({ type: "react", k, i: V().center ? Math.round(V().center()) : -1, s: V().title ? V().title() : "" });
-  if (!fun.reacted) { fun.reacted = true; track("reaction", { k }); }
-});
-const fun = { reacted: false };
-window.addEventListener("tapestry:react", (ev) => {
-  const c = (ev.detail && ev.detail.c) || {};
-  for (const [k, n0] of Object.entries(c)) {
-    const e = EMO[k]; if (!e) continue;
-    let n = n0;
-    const mine = Math.min(n, recentOwn[k] || 0); n -= mine; recentOwn[k] = (recentOwn[k] || 0) - mine;
-    n = Math.min(n, 6);   // subtle: at most a handful per batch per emoji
-    for (let j = 0; j < n; j++) setTimeout(() => floatUp(e, false), j * 90 + Math.random() * 300);
-  }
-});
+// Reactions were removed (UI). Server endpoints stay but nothing sends to them.
+const fun = { primed: false };
 
 // ---------- chat notices + up-next / on-now ----------
 function sysChat(html) {
