@@ -77,6 +77,16 @@ _scene_ids = __import__("itertools").count(1)
 from .themes import clean_title as _clean_title  # noqa: E402
 
 
+def soft_title(s: str, n: int = 40) -> str:
+    """Short label for a scene: word-boundary trim with an ellipsis when cut."""
+    s = " ".join(str(s or "").split())
+    if len(s) <= n:
+        return s
+    cut = s[: n - 1]
+    sp = cut.rfind(" ")
+    return ((cut[:sp] if sp > n * 0.5 else cut).rstrip() + "…")
+
+
 def make_scene(
     prompt: str,
     negative: str = "",

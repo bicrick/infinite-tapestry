@@ -6,7 +6,13 @@ const { env, rest } = require("../lib/common");
 // Moderation: only pending/playing/played ideas are ever shown (rejected, withdrawn, expired and
 // shadow-muted ideas never are; shadow ideas live in a separate table).
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const clip = (s, n) => { s = String(s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s; };
+const clip = (s, n) => {
+  s = String(s || "").replace(/\s+/g, " ").trim();
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n - 1);
+  const sp = cut.lastIndexOf(" ");
+  return (sp > n * 0.5 ? cut.slice(0, sp) : cut).trimEnd() + "…";
+};
 const SESSION = () => env("TAPESTRY_STORAGE_PREFIX", "live-sdxl");
 const CDN = () => env("R2_PUBLIC_URL", "https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev").replace(/\/$/, "");
 const stripUrl = (i) => `${CDN()}/${SESSION()}/strips/${String(i).padStart(8, "0")}.webp`;
@@ -44,8 +50,8 @@ ${status !== 200 ? '<meta name="robots" content="noindex" />' : ""}
 *{box-sizing:border-box}html,body{margin:0;background:#070707;color:var(--fg);font:14px/1.5 Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
 main{max-width:720px;margin:0 auto;padding:calc(28px + env(safe-area-inset-top)) 20px calc(40px + env(safe-area-inset-bottom))}
 .brand{color:var(--mu);text-decoration:none;font-size:12px;letter-spacing:.04em}
-.art{display:flex;overflow:hidden;height:clamp(220px,52vw,380px);margin:22px 0 22px;border-radius:14px;background:#111;mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
-.art img{height:100%;width:auto;flex:none;margin-left:calc(var(--h) * -.1875)}.art img:first-child{margin-left:0}
+.art{display:flex;overflow:hidden;width:100%;height:clamp(220px,52vw,380px);margin:22px 0 22px;border-radius:14px;background:#111;mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+.art img{height:100%;width:auto;flex:none;object-fit:cover;object-position:left center}.art img:first-child{margin-left:0}
 .art.empty{display:grid;place-items:center;color:var(--mu);font-size:13px;mask-image:none}
 h1{font-size:22px;font-weight:500;letter-spacing:-.01em;margin:0 0 6px}
 .meta{color:var(--mu);font-size:13px}.p{color:var(--mu);margin:14px 0 0;font-size:13px}
@@ -54,7 +60,7 @@ nav a{color:var(--fg);text-decoration:none;border:1px solid var(--ln);border-rad
 nav a:hover{background:rgba(232,230,227,.06)}
 </style></head><body><main>
 <a class="brand" href="/">Infinite Tapestry</a>
-${imgs.length ? `<a class="art" href="${esc(m.replay)}" style="--h:clamp(220px,52vw,380px)">${imgs.map((i) => `<img src="${esc(stripUrl(i))}" alt="" loading="lazy" decoding="async" />`).join("")}</a>`
+${imgs.length ? `<a class="art" href="${esc(m.replay)}" data-n="${imgs.length}">${imgs.map((i) => `<img src="${esc(stripUrl(i))}" alt="" loading="lazy" decoding="async" />`).join("")}</a>`
     : `<div class="art empty">${esc(m.empty || "Not painted yet")}</div>`}
 <h1>${esc(m.title)}</h1>
 <div class="meta">${esc(m.by)}${m.at ? ` · <time datetime="${esc(m.at)}">${esc(m.at)}</time>` : ""}${m.note ? " · " + esc(m.note) : ""}</div>
@@ -63,6 +69,7 @@ ${m.prompt && m.prompt !== m.title ? `<p class="p">${esc(m.prompt)}</p>` : ""}
 </main><script>
 for(const t of document.querySelectorAll("time")){const d=new Date(t.dateTime);if(!isNaN(d))t.textContent=d.toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});}
 const a=document.querySelector("[data-day]"),t=document.querySelector("time");if(a&&t){const d=new Date(t.dateTime);if(!isNaN(d))a.href="/time-machine#"+d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
+(function fitArt(){const art=document.querySelector("a.art");if(!art)return;const imgs=[...art.querySelectorAll("img")];if(!imgs.length)return;const ov=192/448;const go=()=>{const W=art.clientWidth,H=art.clientHeight,n=imgs.length;if(!W||!H)return;const w=W/(n-(n-1)*ov);imgs.forEach((img,i)=>{img.style.width=w+"px";img.style.height=H+"px";img.style.marginLeft=i?(-w*ov)+"px":"0";});};go();addEventListener("resize",go);imgs.forEach(img=>img.decode&&img.decode().then(go).catch(()=>{}));})();
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>
@@ -95,7 +102,10 @@ module.exports = async (req, res) => {
     if (!idea) return notFound(res, host, `/s/${id}`);
     const by = credit(idea.handle, "user");
     const byLine = by === "Auto" ? "Auto" : `Suggested by ${by}`;
-    const title = clip((idea.plan && idea.plan.titles && idea.plan.titles[0]) || idea.body, 80);
+    // Prefer the full idea body: plan titles are often body[:40] cut mid-word with no ellipsis.
+    const planned = (idea.plan && idea.plan.titles && idea.plan.titles[0]) || "";
+    const body = String(idea.body || "").replace(/\s+/g, " ").trim();
+    const title = clip(body || planned || "A moment from the Infinite Tapestry", 120);
     const desc = `${by === "Auto" ? "" : byLine + " · "}Infinite Tapestry, an endless painting steered by everyone watching.`;
     if (idea.start_strip == null) {             // still waiting / about to paint
       let note = idea.status === "playing" ? "painting now" : "waiting in line";

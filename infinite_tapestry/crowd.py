@@ -19,7 +19,8 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from .prompts import make_scene
+from .prompts import make_scene, soft_title
+
 
 
 def direct_plan(bodies: list[str], hold: int = 4) -> dict:
@@ -27,7 +28,7 @@ def direct_plan(bodies: list[str], hold: int = 4) -> dict:
     scenes = []
     for b in bodies:
         b = " ".join(str(b).split())[:400]
-        scenes.append({"title": b[:40], "prompt": f"{b}, rich detail",
+        scenes.append({"title": soft_title(b), "prompt": f"{b}, rich detail",
                        "negative": "", "transition": 1, "hold": hold})
     return {"scenes": scenes, "note": "straight to your idea", "source": "direct", "model": None}
 

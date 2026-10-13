@@ -97,3 +97,10 @@ def test_fuel_never_stops_the_pod():
     assert "_stop_self" not in src and "podStop" not in src
     js = (ROOT / "web/lib/common.js").read_text()
     assert "RUNPOD_MIN_BALANCE" in js and "balance <= 0" not in js
+
+
+def test_soft_title_word_boundary():
+    from infinite_tapestry.prompts import soft_title
+    assert soft_title("short") == "short"
+    assert soft_title("Mayan temple with hidden technology inside") == "Mayan temple with hidden technology…"
+    assert "…" in soft_title("abcdefghijklmnopqrstuvwxyz0123456789ABCDEF")

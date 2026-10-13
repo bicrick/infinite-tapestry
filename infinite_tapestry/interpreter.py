@@ -14,6 +14,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from .prompts import soft_title
+
 logger = logging.getLogger(__name__)
 
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -319,7 +321,7 @@ def fallback_plan(intent: str, reason: str = "") -> dict[str, Any]:
     return {
         "scenes": [
             {
-                "title": intent[:40],
+                "title": soft_title(intent),
                 "prompt": intent,
                 "negative": "",
                 "transition": 2,

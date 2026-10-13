@@ -10,7 +10,7 @@ import random
 import time
 from typing import Any, Callable
 
-from .prompts import make_scene
+from .prompts import make_scene, soft_title
 from .moods import MoodRotator
 from .themes import HeadlineCache, ThemeMemory, brief, clean_title, mentions_minor, pick_mode
 
@@ -126,7 +126,7 @@ class Autopilot:
         cur = d.recent(1)[-1]
         base = cur["prompt"].split(", seen through")[0]
         mod = random.choice(VARIATIONS)
-        d.add([make_scene(f"{base}, {mod}", cur.get("negative", ""), f"{cur['title'][:40]}, {mod.split()[-1]}",
+        d.add([make_scene(f"{base}, {mod}", cur.get("negative", ""), soft_title(f"{cur['title']}, {mod.split()[-1]}"),
                           20, 16, source="variation", origin="auto", style=cur.get("style"))])
         self.on_change()
 
