@@ -9,7 +9,6 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 const S = { enabled: false, session: null, profile: null, isAdmin: () => !!(S.profile && S.profile.is_admin), token: () => S.session && S.session.access_token, submitIdea: async () => false };
 window.TapestrySocial = S;
 
-const UP = '<svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg>';
 const ERR = {
   not_signed_in: "Sign in to vote and add more ideas.",
   handle_required: "Pick a handle first.",
@@ -295,7 +294,7 @@ async function boot() {
       addLocal(text, guest.handle, res.id); addMine(res.id);
       try { window.va && window.va("event", { name: "idea_submitted", data: { who: "guest" } }); } catch (_) {}
             window.dispatchEvent(new CustomEvent("tapestry:submitted"));
-      toast(`Added, you're up soon <span class="muted">· @${esc(guest.handle || "guest")}</span>`, 3200);
+      placeToast(res.id, ` <span class="muted">· @${esc(guest.handle || "guest")}</span>`);
       refreshIdeas();
       if (window.TapestryWS) window.TapestryWS.send({ type: "idea_added" });
       return true;
@@ -313,7 +312,7 @@ async function boot() {
     try { window.va && window.va("event", { name: "idea_submitted", data: { who: "signed_in", image: !!image } }); } catch (_) {}
     clearRef();
     window.dispatchEvent(new CustomEvent("tapestry:submitted"));
-    toast(`Added, you're up soon`, 3000);
+    placeToast(typeof newId === "number" ? newId : null);
     refreshIdeas();
     if (window.TapestryWS) window.TapestryWS.send({ type: "idea_added" });
     return true;
@@ -326,94 +325,118 @@ async function boot() {
     }
     renderIdeas();
   }
-  async function refreshIdeas() {
-    sb.from("ideas").select("id,handle,body,image_path,start_strip,end_strip,played_at").eq("status", "played")
-      .not("start_strip", "is", null).order("played_at", { ascending: false }).limit(20).then(({ data }) => renderWoven(data || []));
-    const { data } = await sb.from("ideas").select("id,handle,body,votes,boost_cents,status,user_id,created_at,image_path")
-      .in("status", ["pending", "playing"]).order("status", { ascending: false })
-      .order("votes", { ascending: false }).order("created_at").limit(60);
+  // Pending + playing ideas for fun.js ("your idea is on") and the expired notice. Debounced: realtime
+  // fires on every idea change, so at scale this must not run per event.
+  let ideasAt = 0, ideasTimer = 0;
+  function refreshIdeas() {
+    const wait = Math.max(0, 3000 - (Date.now() - ideasAt));
+    if (ideasTimer) return;
+    ideasTimer = setTimeout(() => { ideasTimer = 0; ideasAt = Date.now(); loadIdeas(); }, wait);
+  }
+  async function loadIdeas() {
+    const { data } = await sb.from("ideas").select("id,handle,body,votes,status,user_id,created_at,image_path")
+      .in("status", ["pending", "playing"]).order("created_at").limit(60);
     ideas = data || [];
-    // Adaptive voting: few pending ideas play first-come-first-served; votes only matter when busy.
-    const pending = ideas.filter((i) => i.status === "pending").length;
-    queueMode = pending > 3 ? "vote" : "fifo";
-    if (queueMode === "fifo") ideas.sort((a, b) => (a.status === "playing" ? -1 : b.status === "playing" ? 1 : 0) || String(a.created_at).localeCompare(String(b.created_at)));
-    renderIdeas();
+    queueMode = ideas.filter((i) => i.status === "pending").length > 3 ? "vote" : "fifo";
     S.ideas = ideas;
     window.dispatchEvent(new CustomEvent("tapestry:ideas", { detail: ideas }));
+    checkExpired();
+    if (qsort !== "up") loadList(true);
   }
-  function renderIdeas() {
-    const list = $("idea-list");
-    if (!list) return;
-    list.classList.toggle("fifo", queueMode === "fifo");
-    let hint = $("idea-mode-hint");
-    if (!hint) { hint = document.createElement("p"); hint.id = "idea-mode-hint"; hint.className = "idea-mode-hint"; list.before(hint); }
-    hint.textContent = queueMode === "vote" ? "Busy right now · vote to choose what's painted next" : "";
-    hint.classList.toggle("hidden", queueMode !== "vote");
-    const echo = S.session ? [] : localIdeas().filter((x) => !ideas.some((i) => i.body === x.body && i.handle === x.handle))
-      .map((x) => ({ id: null, body: x.body, handle: x.handle, votes: 0, status: "pending", local: true }));
-    const shown = [...ideas, ...echo];
-    $("idea-empty").classList.toggle("hidden", shown.length > 0);
-    list.innerHTML = "";
-    shown.forEach((it) => {
-      const li = document.createElement("li");
-      li.className = "item idea";
-      const mine = S.session && it.user_id === S.session.user.id;
-      li.innerHTML =
-        `<button class="votes${myVotes.has(it.id) ? " on" : ""}" title="Vote">${UP}<span>${it.votes}</span></button>` +
-        `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}<div class="t">${esc(it.body)}</div><div class="who">${isGuestHandle(it.handle) ? `<span class="who-guest">@${esc(it.handle)}</span>` : `<a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a>`}${it.status === "playing" ? " · weaving in now" : ""}` +
-        `</div></div>` +
-        `<div class="acts">` +
-        `<button class="icon" data-a="remix" title="Remix">↻</button>` +
-        
-        (mine && it.status === "pending" ? `<button class="icon" data-a="withdraw" title="Withdraw">✕</button>` : "") +
-        (S.isAdmin() ? `<button class="icon" data-a="reject" title="Reject (admin)">⊘</button>` : "") + `</div>`;
-      if (it.local) { li.querySelector(".acts").innerHTML = ""; li.querySelector(".votes").disabled = true; li.classList.add("local"); list.appendChild(li); return; }
-      li.querySelector(".votes").addEventListener("click", async () => {
-        if (needLogin()) return;
-        const { data, error } = await sb.rpc("toggle_vote", { p_idea: it.id });
-        if (error) return toast(friendly(error));
-        myVotes.has(it.id) ? myVotes.delete(it.id) : myVotes.add(it.id);
-        it.votes = data ?? it.votes;
-        renderIdeas();
-      });
-      li.querySelectorAll(".acts button").forEach((b) => b.addEventListener("click", async () => {
-        const a = b.dataset.a;
-        if (a === "remix") return window.TapestryRemix && window.TapestryRemix(it.body);
-        const fn = a === "withdraw" ? "withdraw_idea" : "admin_reject_idea";
-        const { error } = await sb.rpc(fn, { p_id: it.id });
-        if (error) return toast(friendly(error));
-        refreshIdeas();
-      }));
-      list.appendChild(li);
-    });
+  // Busy-queue expiry: tell the author once, kindly.
+  const SEEN_KEY = "it:expired-seen";
+  async function checkExpired() {
+    const since = new Date(Date.now() - 864e5).toISOString();
+    let q = sb.from("ideas").select("id,body").eq("status", "expired").gte("created_at", since).limit(5);
+    if (S.session) q = q.eq("user_id", S.session.user.id);
+    else { const ids = mineIds().map((x) => x.id); if (!ids.length) return; q = q.in("id", ids); }
+    const { data } = await q;
+    let seen = []; try { seen = JSON.parse(localStorage.getItem(SEEN_KEY) || "[]"); } catch (_) {}
+    const fresh = (data || []).filter((r) => !seen.includes(r.id));
+    if (!fresh.length) return;
+    try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen, ...fresh.map((r) => r.id)].slice(-50))); } catch (_) {}
+    const r = fresh[0];
+    toast(`Your idea didn't make it in time. Resubmit? <span class="muted">· ${esc(String(r.body).slice(0, 50))}</span>`, 7000);
   }
-  function permalink(it) {
-    const u = new URL(location.origin + location.pathname);
-    u.searchParams.set("at", it.start_strip);
-    if (it.end_strip != null) u.searchParams.set("to", it.end_strip);
-    return u.toString();
+
+  // ---------- Queue tab: sort toggle (display only) over the whole pending set, paged on the server ----------
+  let qsort = "up", listRows = [], listDone = false, listBusy = false;
+  const PAGE = 50;
+  async function loadList(reset) {
+    if (listBusy || (!reset && listDone)) return;
+    listBusy = true;
+    const target = qsort === "up" ? $("queue-more") : $("idea-list");
+    const off = reset ? (qsort === "up" ? 20 : 0) : (qsort === "up" ? 20 : 0) + listRows.length;
+    const { data, error } = await sb.rpc("queue_list", { p_sort: qsort, p_offset: off, p_limit: PAGE });
+    listBusy = false;
+    if (error) return;
+    listRows = reset ? (data || []) : listRows.concat(data || []);
+    listDone = (data || []).length < PAGE;
+    renderList(target);
   }
-  function renderWoven(rows) {
-    $("woven-list").innerHTML = "";
-    rows.forEach((it) => {
-      const li = document.createElement("li");
-      li.className = "item";
-      li.innerHTML = `<div>${it.image_path ? `<img class="thumb" src="${esc(refUrl(it.image_path))}" alt="" loading="lazy" />` : ""}` +
-        `<div class="t">${esc(it.body)}</div><div class="who">${isGuestHandle(it.handle) ? `<span class="who-guest">@${esc(it.handle)}</span>` : `<a class="who-link" href="/u/${encodeURIComponent(it.handle)}">@${esc(it.handle)}</a>`} · strip ${it.start_strip}</div>` +
-        `<div class="links"><a data-a="view">View where it landed</a><a data-a="copy">Copy link</a></div></div>`;
-      li.addEventListener("click", async (e) => {
-        if (e.target.dataset.a === "copy") {
-          e.stopPropagation();
-          try { await navigator.clipboard.writeText(permalink(it)); toast("Link copied"); } catch (_) { toast(esc(permalink(it))); }
-          return;
-        }
-        $("drawer").classList.remove("open");
-        window.TapestrySeek && window.TapestrySeek(it.start_strip, it.end_strip);
-      });
-      $("woven-list").appendChild(li);
-    });
-    if (!rows.length) $("woven-list").innerHTML = '<li class="empty">Ideas appear here once they are painted.</li>';
+  function renderList(target) {
+    for (const el of [$("idea-list"), $("queue-more")]) if (el !== target) el.innerHTML = "";
+    target.innerHTML = listRows.map((it) => ideaRow(it)).join("");
+    $("idea-empty").classList.toggle("hidden", qsort === "up" || listRows.length > 0);
+    $("q-more").classList.toggle("hidden", listDone || (qsort === "up" && !listRows.length && !upFull));
   }
+  let upFull = false;   // the server's Up-next pool is capped at 20: offer "Show more" past it
+  window.addEventListener("tapestry:pool", (e) => { upFull = (e.detail || 0) >= 20; if (qsort === "up") $("q-more").classList.toggle("hidden", !upFull || listDone && listRows.length > 0); });
+  const etaLabel = (s) => (s == null ? "" : s < 60 ? "soon" : s < 3600 ? `~${Math.round(s / 60)} min` : `~${Math.round(s / 360) / 10} h`);
+  S.etaLabel = etaLabel;
+  function ideaRow(it) {
+    const by = window.TapestryCredit ? window.TapestryCredit(it.handle, "user") : "@" + it.handle;
+    const mine = S.isMine(it);
+    return `<li class="item idea user" data-id="i${it.id}"><span class="n">${it.place ?? ""}</span><div class="body">` +
+      `<div class="t" data-tip="${esc(by === "Auto" ? "Auto" : "Suggested by " + by)}">${esc(it.body)}</div>` +
+      `<div class="meta">${esc(by)}${it.eta_s != null ? " · " + etaLabel(it.eta_s) : ""}${mine ? " · yours" : ""}</div>` +
+      `<div class="p"><a class="open-s" href="/s/${it.id}" target="_blank" rel="noopener">Open ↗</a>` +
+      (mine ? ` <button class="linkish" type="button" data-act="withdraw_idea" data-iid="${it.id}">Withdraw</button>` : "") +
+      (S.isAdmin() ? ` <button class="linkish" type="button" data-act="admin_reject_idea" data-iid="${it.id}">Reject</button>` : "") + `</div></div>` +
+      heart(it.id, it.votes) + `</li>`;
+  }
+  const HEART = '<svg viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg>';
+  function heart(id, n) {
+    return `<button class="heart${myVotes.has(id) ? " on" : ""}" type="button" data-vote="${id}" aria-label="Like">${HEART}<span>${n || 0}</span></button>`;
+  }
+  S.heart = heart;
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-vote]");
+    if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    if (needLogin()) return;
+    const id = +b.dataset.vote;
+    const { data, error } = await sb.rpc("toggle_vote", { p_idea: id });
+    if (error) return toast(friendly(error));
+    myVotes.has(id) ? myVotes.delete(id) : myVotes.add(id);
+    document.querySelectorAll(`[data-vote="${id}"]`).forEach((x) => { x.classList.toggle("on", myVotes.has(id)); x.querySelector("span").textContent = data ?? 0; });
+    const r = listRows.find((x) => x.id === id); if (r) r.votes = data ?? r.votes;
+  }, true);
+  $("qsort").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-s]"); if (!b || b.dataset.s === qsort) return;
+    qsort = b.dataset.s;
+    $("qsort").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    $("panel-next").dataset.sort = qsort;
+    listRows = []; listDone = false;
+    $("idea-list").innerHTML = ""; $("queue-more").innerHTML = "";
+    if (qsort !== "up") loadList(true); else $("q-more").classList.toggle("hidden", !upFull);
+  });
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-act][data-iid]"); if (!b) return;
+    e.stopPropagation();
+    const { error } = await sb.rpc(b.dataset.act, { p_id: +b.dataset.iid });
+    if (error) return toast(friendly(error));
+    b.closest("li")?.remove(); refreshIdeas();
+  }, true);
+  S.place = async (id) => { if (!id || id < 0) return null; const { data } = await sb.rpc("queue_place", { p_id: id }); return (data || [])[0] || null; };
+  async function placeToast(id, tail) {
+    const p = await S.place(id).catch(() => null);
+    toast(p && p.place ? `Added · #${p.place} in line · ${etaLabel(p.eta_s)}${tail || ""}` : `Added, you're up soon${tail || ""}`, 3600);
+  }
+  S.placeToast = placeToast;
+  $("q-more").addEventListener("click", () => loadList(listRows.length === 0));
+  function renderIdeas() { if (listRows.length) renderList(qsort === "up" ? $("queue-more") : $("idea-list")); }
+  S.myVotes = () => myVotes;
   refreshIdeas();
   sb.channel("ideas").on("postgres_changes", { event: "*", schema: "public", table: "ideas" }, (p) => { refreshIdeas(); window.dispatchEvent(new CustomEvent("tapestry:idea", { detail: p })); }).subscribe();
   setInterval(refreshIdeas, 60000);

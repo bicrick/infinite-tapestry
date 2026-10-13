@@ -66,7 +66,8 @@
     $("d-meta").textContent = `${fmtT(new Date(d.t0))} – ${fmtT(new Date(d.t1))} · ${d.scene_count} scenes`;
     const ideas = (d.ideas || []).slice().sort((x, y) => x.a - y.a);
     $("d-chips").innerHTML = "";
-    const chip = (x) => `<a class="chip" href="/?at=${x.a}" title="${esc(x.text)}">${esc(x.text)}</a>`;
+    const who = (h) => (!h ? "Auto" : /^[a-z]+-\d{4}$/.test(h) ? "Suggested by a guest" : "Suggested by @" + h);
+    const chip = (x) => `<a class="chip" href="${x.id ? "/s/" + x.id : "/?at=" + x.a}" title="${esc(who(x.handle))}">${esc(x.text)}</a>`;
     const [Y, M, D] = k.split("-").map(Number);
     let rows = "";
     for (let h = 0; h < 24; h++) {

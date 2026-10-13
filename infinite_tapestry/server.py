@@ -250,7 +250,8 @@ def create_app(
         autos = [dict(i, kind="scene") for i in items if i.get("origin") == "auto"]
         woven = {x for i in items for x in (i.get("idea_ids") or [])}
         pool = [{"id": f"idea-{p['id']}", "kind": "idea", "origin": "user", "title": p["body"][:80],
-                 "prompt": p["body"], "by": "@" + p["handle"] if p.get("handle") else None, "image": p.get("image")}
+                 "prompt": p["body"], "by": "@" + p["handle"] if p.get("handle") else None, "image": p.get("image"),
+                 "idea_id": p["id"], "votes": p.get("votes", 0), "place": p.get("place"), "eta": p.get("eta")}
                 for p in (crowd.pending if crowd else []) if p["id"] not in woven]
         return users + pool + autos
 

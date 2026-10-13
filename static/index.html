@@ -196,16 +196,15 @@
       <div class="you-row"><span class="muted">Account</span><button id="account-btn" class="quiet hidden" type="button">Sign in</button></div>
       <p class="fine pad">Your handle opens your profile. Sign in with Google to vote, chat and keep your ideas.</p>
     </section>
-    <section class="panel" id="panel-next">
+    <section class="panel" id="panel-next" data-sort="up">
+    <div class="seg small qsort" id="qsort" aria-label="Sort"><button data-s="up" class="on" type="button">Up next</button><button data-s="new" type="button">New</button><button data-s="liked" type="button">Most liked</button></div>
     <div id="current-card" class="card current"></div>
     <ol id="queue-list" class="list skeleton"></ol>
+    <ol id="queue-more" class="list"></ol>
     <div id="queue-empty" class="empty hidden">Nothing queued. Type a destination below.</div>
-      <div class="drawer-sub social-only hidden">Ideas</div>
-      <p class="fine pad social-only hidden">From everyone. The most-loved are woven in next.</p>
       <ol id="idea-list" class="list social-only"></ol>
-      <div id="idea-empty" class="empty hidden">The pool is empty. Auto is improvising.</div>
-      <div class="drawer-sub social-only hidden">Woven in</div>
-      <ol id="woven-list" class="list woven social-only"></ol>
+      <div id="idea-empty" class="empty hidden">No ideas waiting. Auto is improvising.</div>
+      <button id="q-more" class="q-more hidden" type="button">Show more</button>
     <div class="drawer-foot">
       <div class="auto-row">
         <label class="toggle"><input id="autopilot" type="checkbox" checked /><span class="sw"></span><b class="spark">✦</b> Autopilot</label>
@@ -222,7 +221,7 @@
         <div class="fuel-caption"><span id="fuel-hours">…</span><span class="muted"> of painting left</span></div></div>
       <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="Fuel balance over time"></svg>
       <p id="fuel-chart-note" class="fine pad"></p>
-      <p class="fine pad">Fuel pays for the GPU (about $0.17 an hour) and the AI director. When it runs out, the tapestry sleeps until someone adds more.</p>
+      <p class="fine pad">Fuel pays for the GPU (about $0.90 an hour) and the AI director. When it runs out, the tapestry sleeps until someone adds more.</p>
       <div class="tiers" id="tiers">
         <button data-cents="300">$3<small>~17 h</small></button>
         <button data-cents="1000">$10<small>~2 days</small></button>

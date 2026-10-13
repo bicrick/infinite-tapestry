@@ -33,7 +33,7 @@ async function allStrips() {
 async function history(tz) {
   const [strips, ideas, reacts] = await Promise.all([
     allStrips(),
-    rest("GET", "ideas?select=handle,body,created_at,start_strip,end_strip,image_path&status=eq.played&start_strip=not.is.null&order=start_strip.asc&limit=1000").catch(() => []),
+    rest("GET", "ideas?select=id,handle,body,created_at,start_strip,end_strip,image_path&status=eq.played&start_strip=not.is.null&order=start_strip.asc&limit=1000").catch(() => []),
     rest("GET", "strip_reactions?select=strip,lol,fire,mind,love,dead&order=strip.desc&limit=2000").catch(() => []),
   ]);
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
@@ -62,7 +62,7 @@ async function history(tz) {
       const end = i.end_strip || i.start_strip + 10;
       const r = d.scenes.filter(s => s.b >= i.start_strip && s.a <= end).reduce((n, s) => n + s.rx, 0);
       picks.push({ a: i.start_strip, b: end, text: i.body.slice(0, 120), handle: i.handle, image: !!i.image_path, rx: r, kind: "idea" });
-      (d.ideas = d.ideas || []).push({ a: i.start_strip, text: i.body.slice(0, 80), handle: i.handle });
+      (d.ideas = d.ideas || []).push({ id: i.id, a: i.start_strip, text: i.body.slice(0, 80), handle: OWNER.has(String(i.handle).toLowerCase()) ? null : i.handle });
     }
     const scenes = d.scenes.filter(s => s.title && s.b - s.a >= 6 && !(s.by && OWNER.has(String(s.by).replace("@", "").toLowerCase())));
     scenes.sort((x, y) => y.rx - x.rx || (y.b - y.a) - (x.b - x.a));

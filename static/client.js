@@ -5,6 +5,14 @@
  */
 (function () {
   "use strict";
+  // Who suggested a scene: '@handle', 'a guest' or 'Auto'. The owner is never credited (shown as Auto).
+  function credit(by, origin) {
+    const hs = String(by || "").split(",").map((h) => h.trim().replace(/^@/, "")).filter(Boolean)
+      .filter((h) => h.toLowerCase() !== "bicrick");
+    if (origin === "auto" || !hs.length) return origin === "user" && !by ? "a guest" : "Auto";
+    return hs.map((h) => (/^[a-z]+-\d{4}$/.test(h) ? "a guest" : "@" + h)).filter((v, i, a) => a.indexOf(v) === i).join(", ");
+  }
+  window.TapestryCredit = credit;
 
   const $ = (id) => document.getElementById(id);
   const canvas = $("view");
@@ -384,7 +392,24 @@
     tlScenes.push([i, sc[0], sc[1], sc[2], sc[3]]);
   }
   let liveCapKey = null;
-  function srcLabel(by, origin) { return origin === "auto" ? "✦ Auto" : by ? "by " + by : origin === "user" ? "Audience" : "Now"; }
+  (() => {
+    const el = $("now-title"); if (!el) return;
+    let t = 0, long = false;
+    el.addEventListener("click", (e) => { if (long) { long = false; return; } if (el.dataset.href) { e.stopPropagation(); window.open(el.dataset.href, "_blank", "noopener"); } });
+    el.addEventListener("touchstart", () => { long = false; t = setTimeout(() => { long = true; el.classList.add("tip-on"); setTimeout(() => el.classList.remove("tip-on"), 1800); }, 450); }, { passive: true });
+    el.addEventListener("touchend", () => clearTimeout(t), { passive: true });
+    el.addEventListener("touchmove", () => clearTimeout(t), { passive: true });
+  })();
+  function srcLabel(by, origin) { const c = credit(by, origin); return c === "Auto" ? "✦ Auto" : by ? "by " + c : origin === "user" ? "Audience" : "Now"; }
+  // On-stage title: tooltip with who suggested it, click opens the scene's share page (/s/<a>-<b>).
+  function stageTitle(index, title, by, origin) {
+    const el = $("now-title");
+    const c = credit(by, origin);
+    el.dataset.tip = c === "Auto" ? "Auto" : "Suggested by " + c;
+    let b = index + 15;
+    for (const r of tlScenes) if (r[0] > index) { b = r[0] - 1; break; }
+    if (typeof index === "number" && index >= 0) el.dataset.href = `/s/${index}-${Math.min(b, index + 63)}`; else delete el.dataset.href;
+  }
   function centerScene() {
     if (!tlScenes.length) return null;
     const r = sceneAt(Math.max(0, Math.min(maxIndex, Math.round(centerIdx()))));
@@ -403,6 +428,7 @@
       liveCapKey = key;
       const { title, by, style, origin } = r0;
       $("now-title").textContent = title || "—";
+      stageTitle(r0.index, title, by, origin);
       const src = $("now-src");
       src.textContent = srcLabel(by, origin) + (style && style !== "none" && style !== "photo" ? " · " + style : "");
       src.className = "src" + (origin === "auto" ? " auto" : "");
@@ -435,10 +461,12 @@
     document.body.classList.add("hist-cap");
     const cap = document.querySelector(".dock .now");
     const apply = () => {
-      const [, title, by, style, origin] = r;
+      const [i0, title, by, style, origin] = r;
       $("now-title").textContent = title || "—";
+      stageTitle(i0, title, by, origin);
       const src = $("now-src");
-      src.textContent = (origin === "auto" ? "✦ Auto" : by ? "by " + by : origin === "user" ? "Audience" : "Earlier") + (style && style !== "none" ? " · " + style : "");
+      const c = credit(by, origin);
+      src.textContent = (c === "Auto" ? "✦ Auto" : by ? "by " + c : origin === "user" ? "Audience" : "Earlier") + (style && style !== "none" ? " · " + style : "");
       src.className = "src" + (origin === "auto" ? " auto" : "");
       $("now-arrow").classList.add("hidden"); $("next-title").textContent = "";
       cap && cap.classList.remove("swap");
@@ -1180,6 +1208,7 @@
     }
     list.classList.remove("skeleton");
     const items = d.upcoming || d.items || [];
+    window.dispatchEvent(new CustomEvent("tapestry:pool", { detail: items.filter((x) => x.kind === "idea").length }));
     $("queue-count").textContent = items.length || "";
     $("queue-empty").classList.toggle("hidden", items.length > 0);
     $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>Auto is dreaming up what comes next.' : "Nothing queued. Type a destination below.";
@@ -1194,7 +1223,8 @@
     let prev = null;
     items.forEach((s, i) => {
       const key = String(s.id);
-      const sig = JSON.stringify([i, s.title, s.origin, s.by, s.kind, s.prompt]);
+      const voted = !!(window.TapestrySocial && window.TapestrySocial.myVotes && window.TapestrySocial.myVotes().has(s.idea_id));
+      const sig = JSON.stringify([i, s.title, s.origin, s.by, s.kind, s.prompt, s.votes, s.eta, voted]);
       let li = old.get(key);
       if (li && li.dataset.sig === sig) {
         old.delete(key);
@@ -1210,15 +1240,17 @@
       li.className = "item " + (s.origin === "auto" ? "auto" : "user") + (s.kind === "idea" ? " idea" : "");
       li.dataset.id = key;
       if (s.kind === "idea") {
-        li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t">${esc(s.title)}</div>` +
-          `<div class="meta">${s.by ? esc(s.by) + " · " : ""}weaving in soon</div></div>`;
+        const c = credit(s.by, "user"), eta = s.eta != null && window.TapestrySocial && window.TapestrySocial.etaLabel ? window.TapestrySocial.etaLabel(s.eta) : "soon";
+        li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc(c === "Auto" ? "Auto" : "Suggested by " + c)}">${esc(s.title)}</div>` +
+          `<div class="meta">${esc(c)} · ${esc(eta)}</div><div class="p"><a class="open-s" href="/s/${s.idea_id}" target="_blank" rel="noopener">Open ↗</a></div></div>` +
+          (window.TapestrySocial && window.TapestrySocial.heart ? window.TapestrySocial.heart(s.idea_id, s.votes) : "");
         list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
         prev = li;
         return;
       }
       // View-only queue: no reorder, drag, edit or remove controls.
-      li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t">${esc(s.title)}</div>` +
-        `<div class="meta">${s.origin === "auto" ? "Auto" : s.by ? esc(s.by) : "Audience"}</div>${s.prompt && s.prompt !== s.title ? `<div class="p">${esc(s.prompt)}</div>` : ""}</div>`;
+      li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc(credit(s.by, s.origin) === "Auto" ? "Auto" : "Suggested by " + credit(s.by, s.origin))}">${esc(s.title)}</div>` +
+        `<div class="meta">${esc(credit(s.by, s.origin))}</div>${s.prompt && s.prompt !== s.title ? `<div class="p">${esc(s.prompt)}</div>` : ""}</div>`;
       list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
       prev = li;
     });

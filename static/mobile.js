@@ -162,7 +162,7 @@
 (() => { const d = document.getElementById("drawer"); if (!d) return;
   d.addEventListener("click", (e) => {
     if (e.target.closest("button, a, input, textarea, label")) return;
-    const it = e.target.closest("#queue-list .item, #idea-list .item, #current-card"); if (it) it.classList.toggle("open");
+    const it = e.target.closest("#queue-list .item, #queue-more .item, #idea-list .item, #current-card"); if (it) it.classList.toggle("open");
   });
 })();
 

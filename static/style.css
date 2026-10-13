@@ -265,12 +265,7 @@ body.loaded #view { transition: transform 1.1s var(--ease), border-radius 1.1s v
 #ref-btn { cursor: pointer; display: inline-grid; place-items: center; }
 #ref-btn.hidden { display: none; }
 #ref-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; }
-.idea .thumb, .woven .thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); float: right; margin-left: 8px; }
-.woven .item { grid-template-columns: 1fr; cursor: pointer; transition: background .2s; }
-.woven .item:hover { background: rgba(var(--ink),.04); }
-.woven .links { margin-top: 4px; display: flex; gap: 12px; font-size: 11px; }
-.woven .links a { color: var(--muted); text-decoration: none; cursor: pointer; }
-.woven .links a:hover { color: var(--fg); }
+.idea .thumb { width: 34px; height: 34px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); float: right; margin-left: 8px; }
 .brand { display: inline-flex; align-items: center; gap: 9px; } .brand-mark { width: 22px; height: 13px; opacity: .9; }
 
 /* ---------- timeline scrubber: a hairline at the very bottom ---------- */
@@ -1131,7 +1126,35 @@ body.idle .top-fs, body.ambient .top-fs { opacity: 0 !important; pointer-events:
 /* footer: build label sits on its own line above the bar */
 .drawer .build-id { position: static !important; padding: 0 var(--s4) var(--s1); order: 98; flex: none; }
 .drawer-bar { order: 99; }
-#woven-list .item .t { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#woven-list .item .thumb, #woven-list .item .links { display: none; }
-#woven-list .item:hover .links { display: flex; }
 #panel-next .empty { padding: var(--s2) var(--s4) !important; font-size: var(--t-md); }
+
+/* ===== queue sort + hearts + credit tooltips ===== */
+.qsort { display: flex; margin: 0 var(--s4) var(--s3); }
+.qsort button { flex: 1; }
+#panel-next:not([data-sort="up"]) #current-card, #panel-next:not([data-sort="up"]) #queue-list,
+#panel-next:not([data-sort="up"]) #queue-more, #panel-next:not([data-sort="up"]) #queue-empty,
+#panel-next[data-sort="up"] #idea-list, #panel-next[data-sort="up"] #idea-empty { display: none !important; }
+#queue-list .item, #queue-more .item, #idea-list .item { display: grid; grid-template-columns: auto 1fr auto; align-items: start; }
+#queue-more .item .t, #idea-list .item .t, #queue-list .item .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#queue-more .item.open .t, #idea-list .item.open .t, #queue-list .item.open .t { white-space: normal; }
+#queue-more .item .p, #idea-list .item .p { display: none; margin-top: var(--s1); font-size: var(--t-sm); }
+#queue-more .item.open .p, #idea-list .item.open .p { display: block; }
+.open-s, .linkish { color: var(--muted); text-decoration: none; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; margin-right: var(--s3); }
+.open-s:hover, .linkish:hover { color: var(--fg); }
+.heart { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 2px 0 2px 8px; color: rgba(var(--ink),.35);
+  font-size: 11px; font-variant-numeric: tabular-nums; cursor: pointer; min-height: 24px; }
+.heart svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.4; }
+.heart:hover { color: var(--fg); }
+.heart.on { color: var(--fg); } .heart.on svg { fill: currentColor; }
+.q-more { display: block; margin: var(--s2) auto var(--s4); border: 0; background: none; color: var(--muted); font-size: var(--t-sm); cursor: pointer; }
+.q-more:hover { color: var(--fg); }
+#idea-list .item .n, #queue-more .item .n { cursor: default; }
+[data-tip] { position: relative; }
+@media (hover: hover) {
+  [data-tip]:hover::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 6px); white-space: nowrap; pointer-events: none;
+    background: var(--glass-strong, rgba(20,20,20,.85)); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px;
+    font-size: 11px; font-weight: 400; letter-spacing: 0; z-index: 5; backdrop-filter: blur(8px); }
+}
+[data-tip].tip-on::after { content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 6px); white-space: nowrap; pointer-events: none;
+  background: var(--glass-strong, rgba(20,20,20,.85)); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-size: 11px; z-index: 5; }
+#now-title[data-href] { cursor: pointer; }

@@ -16,29 +16,32 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from .prompts import make_scene
 
 
-def direct_plan(bodies: list[str]) -> dict:
+def direct_plan(bodies: list[str], hold: int = 4) -> dict:
     """One scene per idea, the user's own words verbatim (+ a neutral quality hint; no framing or subject imposed)."""
     scenes = []
     for b in bodies:
         b = " ".join(str(b).split())[:400]
         scenes.append({"title": b[:40], "prompt": f"{b}, rich detail",
-                       "negative": "", "transition": 1, "hold": 4})
+                       "negative": "", "transition": 1, "hold": hold})
     return {"scenes": scenes, "note": "straight to your idea", "source": "direct", "model": None}
 
 logger = logging.getLogger(__name__)
 
-GPU_CENTS_PER_HOUR = float(os.environ.get("TAPESTRY_GPU_CENTS_PER_HOUR", "17"))
+GPU_CENTS_PER_HOUR = float(os.environ.get("TAPESTRY_GPU_CENTS_PER_HOUR", "90"))
 # Haiku pricing used for the fuel meter (input, output) in cents per token.
 CLAUDE_CENTS_PER_TOKEN = float(os.environ.get("TAPESTRY_CLAUDE_CENTS_PER_MTOK", "30")) / 1_000_000
 
 
 
 VOTE_THRESHOLD = 3  # pending ideas; at or below this, play FIFO and hide voting
+BUSY_PENDING = 15   # more than this waiting -> fair queue (Supabase pick_ideas), shorter holds
+BUSY_HOLD = 2       # strips held per idea when busy (+1 blend, ~9 s); quiet keeps 4
 
 
 def queue_mode(pending: int) -> str:
@@ -95,6 +98,7 @@ class Crowd:
         self.burn = os.environ.get("TAPESTRY_FUEL_BURN", "0" if mock else "1") == "1"
 
     queue_mode = "fifo"
+    busy = False                         # fair-queue mode (more than BUSY_PENDING waiting)
     pending: list = []
     viewers = staticmethod(lambda: 0)   # set by the server: live viewer count
     _prio_run = 0                        # priority picks since the last free one (fairness interleave)
@@ -105,13 +109,14 @@ class Crowd:
         """Priority-queue knobs from idea_limits (editable without code), cached for a minute."""
         if time.monotonic() - self._limits_at > 60:
             try:
-                rows = self.supa.rest("GET", "idea_limits?id=eq.1&select=prio_viewers,prio_pending,prio_ratio")
+                rows = self.supa.rest("GET", "idea_limits?id=eq.1&select=prio_viewers,prio_pending,prio_ratio,busy_pending")
                 self._limits = (rows or [{}])[0] or {}
             except Exception:
                 pass
             self._limits_at = time.monotonic()
         return {"viewers": int(self._limits.get("prio_viewers") or 10), "pending": int(self._limits.get("prio_pending") or 6),
-                "ratio": max(1, int(self._limits.get("prio_ratio") or 2))}
+                "ratio": max(1, int(self._limits.get("prio_ratio") or 2)),
+                "busy": int(self._limits.get("busy_pending") or BUSY_PENDING)}
 
     def _pick(self, rows: list, n: int, busy: bool, ratio: int) -> list:
         """Busy: donor/boosted ideas jump ahead, interleaved `ratio` priority : 1 free so free ideas still play.
@@ -141,12 +146,18 @@ class Crowd:
         return any(i.get("origin") == "user" for i in items)
 
     async def refresh_pending(self) -> None:
-        """Cache the waiting pool so the Next sheet shows ideas the moment they're submitted."""
-        order = "created_at.asc" if self.queue_mode == "fifo" else "votes.desc,created_at.asc"
-        rows = await asyncio.to_thread(
-            self.supa.rest, "GET", f"ideas?status=eq.pending&order={order}&limit=20&select=id,handle,body,image_path")
-        rows = [{"id": r["id"], "handle": r.get("handle"), "body": (r.get("body") or "")[:200],
-                 "image": bool(r.get("image_path"))} for r in (rows or [])]
+        """Cache the waiting pool (canonical play order, with place + honest ETA) for the Next sheet."""
+        try:
+            rows = await asyncio.to_thread(self.supa.rest, "POST", "rpc/fair_line", {"p_limit": 20})
+            rows = [{"id": r["id"], "handle": r.get("handle"), "body": (r.get("body") or "")[:200],
+                     "image": bool(r.get("image_path")), "votes": r.get("votes") or 0,
+                     "place": r.get("place"), "eta": r.get("eta_s")} for r in (rows or [])]
+        except Exception:
+            order = "created_at.asc" if self.queue_mode == "fifo" else "votes.desc,created_at.asc"
+            rows = await asyncio.to_thread(
+                self.supa.rest, "GET", f"ideas?status=eq.pending&order={order}&limit=20&select=id,handle,body,image_path,votes")
+            rows = [{"id": r["id"], "handle": r.get("handle"), "body": (r.get("body") or "")[:200],
+                     "image": bool(r.get("image_path")), "votes": r.get("votes") or 0} for r in (rows or [])]
         if rows != self.pending:
             self.pending = rows
             self.on_change()
@@ -167,10 +178,16 @@ class Crowd:
         order = "created_at.asc" if mode == "fifo" else "votes.desc,created_at.asc"
         # FIFO: weave one idea at a time, in arrival order, so each starts right away.
         want = 1 if mode == 'fifo' else 3
-        rows = await asyncio.to_thread(
-            self.supa.rest, "GET",
-            f"ideas?status=eq.pending&order={order}&limit={40 if busy else want}"
-            "&select=id,handle,body,votes,boost_cents,image_path,user_id")
+        self.busy = n_pending > knobs.get("busy", BUSY_PENDING)
+        if self.busy:
+            # Fair queue: one idea per person per round, votes + waiting-time score, pick cooldown and
+            # expiry, chosen atomically in Supabase (already marked playing). No LLM involved.
+            rows = await asyncio.to_thread(self.supa.rest, "POST", "rpc/pick_ideas", {"p_n": want})
+        else:
+            rows = await asyncio.to_thread(
+                self.supa.rest, "GET",
+                f"ideas?status=eq.pending&order={order}&limit={40 if busy else want}"
+                "&select=id,handle,body,votes,boost_cents,image_path,user_id")
         if not rows:
             return
         rows = self._pick(rows, want, busy, knobs["ratio"])
@@ -195,7 +212,8 @@ class Crowd:
         if not rows:
             return
         ids = ",".join(str(r["id"]) for r in rows)
-        await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})&status=eq.pending", {"status": "playing"}, "return=minimal")
+        await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})&status=eq.pending",
+                                {"status": "playing", "picked_at": datetime.now(timezone.utc).isoformat()}, "return=minimal")
         if len(rows) == 1:
             intent = rows[0]["body"]
             if intent.strip().lower() == "inspired by this image" and images:
@@ -209,7 +227,10 @@ class Crowd:
             plan = await asyncio.to_thread(self.interpreter.plan, intent, st["target"] or st["current"], None, images or None)
         else:
             # Text ideas go straight to the screen: one prompt per idea, no LLM planning, beats or bridges.
-            plan = direct_plan([r["body"] for r in rows])
+            plan = direct_plan([r["body"] for r in rows], hold=BUSY_HOLD if self.busy else 4)
+        if self.busy:
+            for s_ in plan.get("scenes") or []:
+                s_["hold"] = min(int(s_.get("hold") or BUSY_HOLD), BUSY_HOLD + 1)
         from . import refs as _refs
 
         if images and (_refs.blocked(plan.get("image_flags")) or plan.get("source") != "haiku"):
