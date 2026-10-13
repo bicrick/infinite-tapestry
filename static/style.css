@@ -1157,7 +1157,7 @@ body:has(.drawer.open) .amb-title { opacity: 0 !important; pointer-events: none 
 
 /* sign-in nudge: the one notification spot, placed just above the chat box */
 .toast.nudge { top: var(--nudge-top, auto) !important; pointer-events: auto; height: auto; min-height: 36px; padding: 4px 4px 4px var(--s3) !important;
-  white-space: normal; border-radius: 18px !important; }
+  white-space: normal; border-radius: 18px !important; width: max-content; max-width: calc(100vw - 2 * var(--edge, 16px)) !important; }
 .toast.nudge span { flex: 1; min-width: 0; } .toast.nudge button { flex-shrink: 0; }
 .toast.nudge button { font: inherit; font-size: var(--t-md); border: 0; border-radius: 999px; padding: 4px 12px; cursor: pointer; color: var(--fg); background: rgba(var(--ink), .12); }
 .toast.nudge #nudge-x { background: none; padding: 4px 8px; color: var(--muted); }
