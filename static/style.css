@@ -858,3 +858,13 @@ body.composing .cmd .seg { margin-right: auto; }
 body.away .dock .pill#live-btn { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 body.away .dock .cmd, body.away .dock .cmd-terms { opacity: 0; transform: translateY(6px); pointer-events: none; }
 body.away .dock .now { opacity: 0 !important; pointer-events: none; }
+/* Mobile lock: fixed layout, no zoom; only the compose sheet rides above the keyboard (transform) */
+html:not(.page):not(:has(body.page)) { height: 100%; overflow: hidden; }
+body:not(.page) { position: fixed; inset: 0; width: 100%; overflow: hidden; }
+body, .ui, button, .dock, .top { touch-action: manipulation; }
+input, textarea, select, #cmd-input { font-size: max(16px, 1em); }
+@media (max-width: 760px), (pointer: coarse) {
+  input, textarea, select, #cmd-input, #chat-input, .item textarea, .p-banner-edit input { font-size: 16px !important; }
+}
+body.composing .dock, body.composing.away .dock { bottom: calc(40px + var(--sb, 0px)) !important;
+  translate: 0 calc(-1 * max(0px, var(--kb, 0px) - 28px - var(--sb, 0px))); transition: translate .28s cubic-bezier(.2,.8,.2,1), opacity .3s, transform .3s; }

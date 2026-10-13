@@ -33,11 +33,25 @@
   if (cmd && input) {
     // keep the sheet above the on-screen keyboard
     if (window.visualViewport) {
-      const vv = window.visualViewport;
-      const fit = () => { const kb = Math.max(0, innerHeight - vv.height - vv.offsetTop); document.documentElement.style.setProperty("--kb", kb + "px"); };
-      vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); fit();
+      const vv = window.visualViewport, de = document.documentElement;
+      let raf = 0, last = -1;
+      const fit = () => { raf = 0;
+        if (scrollX || scrollY) scrollTo(0, 0);             // cancel iOS focus scroll: layout never moves
+        const kb = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop));
+        if (kb !== last) { last = kb; de.style.setProperty("--kb", kb + "px"); de.classList.toggle("kb-open", kb > 80); }
+      };
+      const q = () => { if (!raf) raf = requestAnimationFrame(fit); };
+      vv.addEventListener("resize", q); vv.addEventListener("scroll", q); addEventListener("scroll", q, { passive: true }); fit();
+      // leave no zoom behind once the keyboard closes
+      input.addEventListener("blur", () => setTimeout(() => { scrollTo(0, 0); if (vv.scale && vv.scale !== 1) { const m = document.querySelector('meta[name=viewport]'); const c = m.content; m.content = c + ",initial-scale=1"; setTimeout(() => { m.content = c; }, 60); } q(); }, 60));
+      input.addEventListener("focus", () => { requestAnimationFrame(() => scrollTo(0, 0)); setTimeout(q, 300); });
     }
   }
+  // no pinch / double-tap zoom (the tapestry still scrolls natively on x)
+  for (const ev of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+  document.addEventListener("touchmove", e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  let lastTap = 0;
+  document.addEventListener("touchend", e => { const t = e.timeStamp; if (t - lastTap < 300 && !e.target.closest("input,textarea,[contenteditable]")) e.preventDefault(); lastTap = t; }, { passive: false });
 
   // 4) Long-press the painting = share this moment (permalink with its own preview card).
   const cv = $("view");
