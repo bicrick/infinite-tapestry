@@ -89,7 +89,7 @@ jobs:
           BID=$(curl -sf "$URL/build.json?x-vercel-protection-bypass=$VERCEL_BYPASS")
           echo "build $BID"
           # Only the newest main commit may take the domain (a manual deploy or a later push wins otherwise).
-          HEAD=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/main | cut -f1)
+          HEAD=$(git -C "$GITHUB_WORKSPACE" ls-remote origin refs/heads/main | cut -f1)
           if [ "$HEAD" != "$GITHUB_SHA" ]; then echo "main moved on ($HEAD); leaving the domains alone"; exit 0; fi
           for d in infinite-tapestry.vercel.app infinite-tapestry-preview.vercel.app; do
             npx -y vercel@latest alias set "$URL" "$d" --token "$VERCEL_TOKEN"
