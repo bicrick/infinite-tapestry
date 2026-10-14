@@ -7,10 +7,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT=${OUT:-/workspace/tapestry-app}
 set -a; . ~/.tapestry/supabase.env; . ~/.tapestry/app.env; set +a
 mkdir -p /tmp/keep && cp -r "$OUT/.vercel" /tmp/keep/ 2>/dev/null || true
-if [ -z "${WS_URL:-}" ]; then
-  echo "error: WS_URL must be set explicitly (e.g. wss://<pod>-8000.proxy.runpod.net/ws)" >&2
-  exit 1
-fi
+if [ -z "${WS_URL:-}" ]; then eval "$("$ROOT/scripts/resolve_ws_url.sh")"; export WS_URL; fi
+echo "ws: $WS_URL"
 "$ROOT/scripts/build_web.sh" "$OUT" >/dev/null
 cp -r /tmp/keep/.vercel "$OUT/" && printf '.env*\n' > "$OUT/.vercelignore"
 cd "$OUT"
