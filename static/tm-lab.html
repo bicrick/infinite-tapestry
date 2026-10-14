@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Time Machine lab · Infinite Tapestry</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a0a0c; color: #e9e6df; font: 13px/1.35 system-ui, -apple-system, sans-serif; overflow: hidden; overscroll-behavior: none; }
+    canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+    #top { position: fixed; left: 0; right: 0; top: 0; display: flex; gap: 8px; align-items: center; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); background: linear-gradient(#0a0a0ccc, #0a0a0c00); pointer-events: none; }
+    #top > * { pointer-events: auto; }
+    #when { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; }
+    #era { opacity: .7; }
+    .sp { flex: 1; }
+    button, input { background: #1b1b20; color: inherit; border: 1px solid #2c2c33; border-radius: 8px; padding: 6px 10px; font: inherit; }
+    #needle { position: fixed; top: 18%; bottom: 18%; left: 50%; width: 1px; background: #fff6; pointer-events: none; }
+    #perf { position: fixed; left: 8px; bottom: 8px; font: 11px ui-monospace, monospace; background: #000a; padding: 6px 8px; border-radius: 6px; white-space: pre; display: none; }
+    #marks { position: fixed; left: 0; right: 0; top: 16%; height: 0; pointer-events: none; }
+    .mk { position: absolute; transform: translateX(-50%); font-size: 11px; white-space: nowrap; color: #f5d27a; }
+    .mk::after { content: ""; position: absolute; left: 50%; top: 16px; width: 1px; height: 66vh; background: #f5d27a55; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="marks"></div>
+  <div id="needle"></div>
+  <div id="top">
+    <span id="when">…</span><span id="era"></span><span class="sp"></span>
+    <input id="jump" type="date" aria-label="Jump to date" />
+    <button id="all" title="Zoom out to all of history">All</button>
+    <button id="live" title="Jump to the newest strips">Live →</button>
+  </div>
+  <div id="perf"></div>
+  <script src="/tm-lab.js"></script>
+</body>
+</html>
