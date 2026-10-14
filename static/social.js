@@ -523,7 +523,10 @@ async function boot() {
   };
   function setChatOpen(on) {
     if (on && (!chatOn || !chatSettings.enabled)) return;
+    const was = document.body.classList.contains("chat-open");
     document.body.classList.toggle("chat-open", !!on);
+    if (on) $("chat-pill").classList.remove("unread");
+    else if (was && chatEl.contains(document.activeElement) && !narrow()) setTimeout(() => $("chat-pill").focus({ preventScroll: true }), 0);   // keyboard users land back on the pill
     if (on) { chatList.scrollTop = chatList.scrollHeight; if (canChat()) { if (matchMedia("(hover: hover)").matches) setTimeout(() => chatInput.focus({ preventScroll: true }), 60); else chatInput.focus({ preventScroll: true }); } }
     else if (document.activeElement === chatInput) chatInput.blur();
   }
@@ -578,11 +581,53 @@ async function boot() {
     const left = FADE_MS - (Date.now() - t);
     if (left <= 0) li.classList.add("aged"); else setTimeout(() => li.classList.add("aged"), left);
   }
+  const queuedHtml = (m) => `<span class="msg">${esc(hideHandle(m.handle) ? "Someone" : m.handle)} queued “${esc(m.body)}”${m.extra > 0 ? ` and ${m.extra} more` : ""}</span>`;
+  // Only the last 2 hours: filtered in the query and aged out live (nothing is deleted).
+  const CHAT_WINDOW_MS = 2 * 3600e3;
+  // Desktop resting state: one always-visible pill with the latest line + an unread dot (CSS shows it on wide screens only).
+  const pill = $("chat-pill"), pillText = $("cp-text");
+  let chatLoaded = false;
+  function syncPill(fresh) {
+    const lis = chatList.querySelectorAll("li:not(.empty)"), last = lis[lis.length - 1];
+    let html;
+    if (!last) html = `<span class="cp-quiet">No one's said anything lately</span>`;
+    else if (last.classList.contains("sys")) html = esc(last.querySelector(".msg").textContent);
+    else { const w = last.querySelector(".who"), mm = last.querySelector(".msg"); html = (w ? `<b>${esc(w.textContent)}</b> ` : "") + esc(mm ? mm.textContent : ""); }
+    if (pillText.innerHTML === html) return;
+    pillText.innerHTML = html;
+    pill.setAttribute("aria-label", "Open chat" + (last ? ". Latest: " + pillText.textContent : ""));
+    if (fresh) { pillText.classList.remove("new"); void pillText.offsetWidth; pillText.classList.add("new"); }
+  }
+  pill.addEventListener("click", (e) => { e.stopPropagation(); setChatOpen(true); if (!canChat()) $("chat-close").focus({ preventScroll: true }); });
+  function syncEmpty() {
+    const live = chatList.querySelectorAll("li:not(.empty)").length, em = chatList.querySelector("li.empty");
+    if (!live && !em) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "No one's said anything lately"; chatList.appendChild(li); }
+    else if (live && em) em.remove();
+    syncPill(false);
+  }
+  setInterval(() => {
+    const cut = Date.now() - CHAT_WINDOW_MS;
+    chatList.querySelectorAll("li[data-t]").forEach((li) => { if (+li.dataset.t < cut) li.remove(); });
+    syncEmpty();
+  }, 60000);
   function addChat(m, mine) {
     if (seen.has(m.id) || m.hidden) return;
+    const mt = m.created_at ? Date.parse(m.created_at) : Date.now();
+    if (mt < Date.now() - CHAT_WINDOW_MS) return;
     seen.add(m.id);
     const li = document.createElement("li");
-    li.dataset.id = m.id;
+    li.dataset.id = m.id; li.dataset.t = mt;
+    const em = chatList.querySelector("li.empty"); if (em) em.remove();
+    if (m.kind === "queued") {   // system line: '<name> queued "<idea>"'
+      li.className = "sys";
+      li.innerHTML = queuedHtml(m);
+      chatList.appendChild(li);
+      fadeLater(li, m.created_at ? Date.parse(m.created_at) : Date.now());
+      while (chatList.children.length > KEEP) chatList.firstChild.remove();
+      if (chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 80) chatList.scrollTop = chatList.scrollHeight;
+      afterAdd(false);
+      return;
+    }
     const who = hideHandle(m.handle) ? "" : `<span class="who">${esc(m.handle)}</span>`;
     const mod = S.isAdmin() && m.user_id ? `<span class="mod" data-a="hide">delete</span><span class="mod" data-a="mute">mute</span><span class="mod" data-a="ban">ban</span>` : "";
     li.innerHTML = `${who}<span class="msg">${esc(m.body)}</span>${mod}`;
@@ -601,6 +646,12 @@ async function boot() {
     fadeLater(li, mine ? Date.now() : t);
     while (chatList.children.length > KEEP) chatList.firstChild.remove();
     if (atBottom || mine) chatList.scrollTop = chatList.scrollHeight;
+    afterAdd(mine);
+  }
+  function afterAdd(mine) {
+    if (!chatLoaded) return;
+    syncPill(true);
+    if (!mine && !document.body.classList.contains("chat-open")) pill.classList.add("unread");
   }
   const note = (txt, ms) => { chatNote.textContent = txt || ""; chatNote.classList.toggle("on", !!txt); clearTimeout(note.t); if (txt && ms) note.t = setTimeout(() => note(""), ms); };
   function slow(sec) {
@@ -619,10 +670,10 @@ async function boot() {
     document.body.classList.toggle("chat-disabled", !chatSettings.enabled);
     chatEl.classList.remove("hidden"); applyChatOn();
   }, () => { chatEl.classList.remove("hidden"); applyChatOn(); });
-  const { data: recent } = await sb.from("chat_messages").select("id,user_id,handle,body,hidden,created_at").order("created_at", { ascending: false }).limit(40);
-  (recent || []).reverse().forEach((m) => addChat(m));
+  const { data: recent } = await sb.from("chat_messages").select("id,user_id,handle,body,hidden,created_at,kind,extra").gte("created_at", new Date(Date.now() - 2 * 3600e3).toISOString()).order("created_at", { ascending: false }).limit(40);
+  (recent || []).reverse().forEach((m) => addChat(m)); syncEmpty(); chatLoaded = true;
   sb.channel("chat").on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (p) => addChat(p.new))
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (p) => { if (p.new.hidden) { const el = chatList.querySelector(`li[data-id="${p.new.id}"]`); el && el.remove(); } })
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (p) => { const el = chatList.querySelector(`li[data-id="${p.new.id}"]`); if (p.new.hidden) { el && el.remove(); syncEmpty(); } else if (el && p.new.kind === "queued") el.innerHTML = queuedHtml(p.new); })
     .subscribe();
 
   const CHAT_ERR = { no_links: "Links aren't allowed in chat.", content_not_allowed: "That message isn't allowed here.", muted: "You're muted for a little while.",

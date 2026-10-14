@@ -1236,7 +1236,7 @@ body.chat-open .chat-foot { display: block; padding: 8px 10px 10px; border-top: 
 /* hidden: toggled off, sitewide off, composing an idea, fullscreen, ambient/screensaver, UI hidden, drawer open */
 body.chat-off .chat, body.chat-disabled .chat, body.composing .chat, body.ambient .chat, body.reveal-lock .chat, body.intro .chat,
 :root:fullscreen .chat, body.offline-on .chat, body:has(.drawer.open):not(.chat-open) .chat { opacity: 0 !important; pointer-events: none !important; visibility: hidden; transition: opacity .3s, visibility 0s .3s !important; }
-body.idle:not(.chat-open) .chat { opacity: .55 !important; }
+body.idle:not(.chat-open) .chat { opacity: .8 !important; }   /* soften when idle, never vanish */
 
 /* narrow / portrait (or no room beside the composer): a strip between the band and the dock; tapping opens a full-height sheet */
 @media (max-width: 1199px), (orientation: portrait) {
@@ -1336,3 +1336,28 @@ body.intro #refl { opacity: 0; }
 html.refl-gl #amb-blobs { display: none; }
 
 .cmd.sending #send-btn { opacity: .3; pointer-events: none; }
+
+/* chat system lines ('x queued "y"'): quieter than people talking */
+.chat-list li.sys, body.chat-open .chat-list li.sys { color: var(--muted); font-size: 12px; font-style: normal; }
+body.chat-open .chat-list li.sys { font-size: 12.5px; }
+
+/* Desktop resting chat: one always-visible pill (icon, latest line, unread dot) aligned with the composer row.
+   Narrow / portrait keeps the floating resting lines. */
+.chat-pill { display: none; }
+.chat-list li.empty { color: var(--muted); font-size: 12px; }
+@media (min-width: 1200px) and (orientation: landscape) {
+  body:not(.chat-open) .chat { justify-content: flex-end; }
+  body:not(.chat-open) .chat .chat-list { display: none; }
+  body:not(.chat-open) .chat-pill { display: flex; align-items: center; gap: 9px; height: 40px; max-width: 100%; align-self: flex-start; padding: 0 14px 0 12px;
+    border: 1px solid rgba(var(--ink),.08); border-radius: 12px; background: rgba(var(--ink),.05); color: var(--fg); font: inherit; font-size: 13px; letter-spacing: -.003em;
+    cursor: pointer; -webkit-backdrop-filter: none; transition: background .2s, border-color .2s; }
+  .chat-pill:hover { background: rgba(var(--ink),.09); }
+  .chat-pill:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .cp-ic { flex: none; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; opacity: .75; }
+  .cp-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .cp-text b { color: var(--fg); font-weight: 550; margin-right: 2px; }
+  .cp-text.new { animation: chat-in .45s var(--ease) both; }
+  .cp-quiet { color: var(--muted); }
+  .cp-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); opacity: 0; transform: scale(.4); transition: opacity .3s, transform .3s var(--ease); }
+  .chat-pill.unread .cp-dot { opacity: .9; transform: none; }
+}

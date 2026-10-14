@@ -20,6 +20,7 @@ module.exports = async (req, res) => {
     await rest("PATCH", `ideas?user_id=eq.${id}&status=eq.pending`, { status: "withdrawn" }, { prefer: "return=minimal" });
     await rest("PATCH", `ideas?user_id=eq.${id}&status=neq.pending`, { user_id: null, handle: "viewer" }, { prefer: "return=minimal" });
     await rest("PATCH", `chat_messages?user_id=eq.${id}`, { hidden: true }, { prefer: "return=minimal" });
+    await rest("PATCH", `chat_messages?actor_user=eq.${id}`, { hidden: true }, { prefer: "return=minimal" }).catch(() => {});
     const SB = env("SUPABASE_URL").replace(/\/$/, ""), key = env("SUPABASE_SERVICE_ROLE_KEY");
     const r = await fetch(`${SB}/auth/v1/admin/users/${id}`, { method: "DELETE", headers: { apikey: key, authorization: "Bearer " + key } });
     if (!r.ok) { console.error("account delete auth", r.status); return res.status(502).json({ error: "delete_failed" }); }

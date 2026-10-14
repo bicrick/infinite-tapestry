@@ -74,6 +74,7 @@
 
   <div id="chat" class="chat ui hidden" aria-label="Live chat">
     <div class="chat-head"><span class="chat-title">Chat</span><button id="chat-close" class="chat-x" type="button" aria-label="Close chat"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+    <button id="chat-pill" class="chat-pill" type="button" aria-label="Open chat"><svg class="cp-ic" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 4.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v4.5a2 2 0 0 1-2 2H7l-3 2.5v-2.5h0.5a2 2 0 0 1-2-2z"/></svg><span id="cp-text" class="cp-text"></span><i class="cp-dot" aria-hidden="true"></i></button>
     <ol id="chat-list" class="chat-list" aria-live="polite"></ol>
     <div class="chat-foot">
       <div id="chat-form" class="chat-form hidden" role="group" data-form-type="other"><input id="chat-input" type="text" name="x-c1" data-form-type="other" maxlength="200" placeholder="Say something" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" inputmode="text" data-lpignore="true" data-1p-ignore aria-label="Chat message" /><button id="chat-send" class="chat-send" type="button" data-submit aria-label="Send"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button></div>
