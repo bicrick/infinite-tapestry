@@ -7,6 +7,7 @@
     <a href="#queue" data-view="queue">Queue</a>
     <a href="#reliability" data-view="reliability">Reliability</a>
     <a href="#deploys" data-view="deploys">Deploys</a>
+    <a href="#render" data-view="render">Live render</a>
     <a href="#settings" data-view="settings">Settings</a>
     <a class="back" href="/">← Tapestry</a>
   </nav>
@@ -32,9 +33,18 @@
     </section>
 
     <section class="view view-chat" id="view-auto">
-      <header class="vh"><h1>Talk to Auto</h1><div class="row chat-top"><select id="chat-pick" aria-label="Conversation"></select><button id="chat-new" type="button">New chat</button></div></header>
-      <div id="chat-log" class="chat-log"></div>
-      <form id="chat-form" class="chat-form"><textarea id="chat-in" rows="2" placeholder="Ask Auto, e.g. draft a story about Venice at carnival"></textarea><button type="submit" class="pri">Send</button></form>
+      <div class="tta">
+        <aside class="tta-list" aria-label="Conversations">
+          <div class="tta-list-h"><b>Conversations</b><button id="chat-new" type="button" class="pri" title="New conversation">+ New</button></div>
+          <div id="chat-items" class="tta-items"></div>
+        </aside>
+        <div class="tta-main">
+          <header class="tta-h"><div class="tta-who"><span class="tta-av" aria-hidden="true">A</span><div><b id="chat-title">Auto</b><span class="fine">Plans stories and steers the stream. Changes wait for your OK.</span></div></div>
+            <button id="chat-del" type="button" class="ghost danger" title="Delete this conversation">Delete</button></header>
+          <div id="chat-log" class="chat-log"></div>
+          <form id="chat-form" class="chat-form"><textarea id="chat-in" rows="1" placeholder="Message Auto… (Enter to send, Shift+Enter for a new line)"></textarea><button type="submit" class="pri send" aria-label="Send">Send</button></form>
+        </div>
+      </div>
     </section>
 
     <section class="view" id="view-stories">
@@ -77,6 +87,24 @@
       <div class="card-a"><h2>History</h2><table id="deploys"></table></div>
     </section>
 
+    <section class="view" id="view-render">
+      <header class="vh"><h1>Live render</h1><span class="fine" id="rs-state"></span></header>
+      <div class="card-a rs">
+        <h2>Scene widths</h2>
+        <p class="fine">How many strips a scene occupies before the next begins. Each scene picks a random width in its range.</p>
+        <div class="rs-row"><label>Auto scenes</label><div class="dual" id="rs-auto"><input type="range" min="3" max="30" step="1" data-k="auto_min" aria-label="Auto minimum" /><input type="range" min="3" max="30" step="1" data-k="auto_max" aria-label="Auto maximum" /><div class="dual-fill"></div></div><output id="rs-auto-v"></output></div>
+        <div class="rs-row"><label>Viewer ideas</label><div class="dual" id="rs-user"><input type="range" min="3" max="30" step="1" data-k="user_min" aria-label="Ideas minimum" /><input type="range" min="3" max="30" step="1" data-k="user_max" aria-label="Ideas maximum" /><div class="dual-fill"></div></div><output id="rs-user-v"></output></div>
+        <h2>Scene joins</h2>
+        <div class="rs-row"><label>Join width</label><input type="range" class="single" min="32" max="192" step="8" data-k="seam_px" aria-label="Join width" /><output id="rs-seam-v"></output></div>
+        <div class="rs-row"><label>Repaint strength</label><input type="range" class="single" min="0.3" max="1" step="0.01" data-k="bridge_strength" aria-label="Repaint strength" /><output id="rs-str-v"></output></div>
+        <p class="fine">Join width is the crossfade where a new scene meets the old one. Repaint strength is how much the join zone is repainted: lower keeps more of both sides, higher makes a freer fusion.</p>
+        <h2>Preview</h2>
+        <svg id="rs-prev" class="rs-prev" viewBox="0 0 960 120" preserveAspectRatio="none" role="img" aria-label="Example ribbon"></svg>
+        <p class="fine" id="rs-legend"></p>
+        <div class="row"><button id="rs-save" class="pri">Save · applies in ~15 s</button><button id="rs-reroll">New example</button><button id="rs-reset">Defaults</button></div>
+      </div>
+    </section>
+
     <section class="view" id="view-settings">
       <header class="vh"><h1>Settings</h1></header>
       <div class="card-a"><h2>Steer Auto</h2>
@@ -87,7 +115,7 @@
         <p class="fine" id="auto-note"></p>
         <h3>Steer note</h3>
         <div class="row"><input id="auto-steer" placeholder="A loose hint Auto keeps in mind, e.g. more cozy interiors tonight" maxlength="300" /><button id="auto-steer-set">Save</button><button id="auto-steer-clear">Clear</button></div>
-        <p class="fine">Auto treats this as a nudge, not an order. It applies within ~30 s, no redeploy.</p></div>
+        <p class="fine">Auto treats this as a nudge, not an order. It applies within ~15 s, no redeploy.</p></div>
       <div class="card-a"><h2>What Auto decided</h2><p class="fine">Each time Auto picks a direction: a detour, a drift, or a journey it invented.</p><table id="decisions"></table></div>
       <div class="card-a"><h2>Mood rotation</h2><div id="moods" class="moods"></div><div class="row"><button id="moods-save" class="pri">Save weights</button><button id="moods-reset">Reset</button></div></div>
     </section>

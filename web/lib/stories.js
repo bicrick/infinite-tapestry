@@ -1,4 +1,4 @@
-// Story library + playlist (admin only; callers check the admin first). Stories never get deleted, only archived.
+// Story library + playlist (admin only; callers check the admin first). Archive hides a story; delete (admin, confirmed) removes it.
 const { rest } = require("./common");
 const REP = { prefer: "return=representation" };
 

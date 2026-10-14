@@ -49,6 +49,18 @@ async function viewers() {
 }
 const LIMIT_KEYS = ["guests_enabled", "guest_per_10min", "guest_max_pending", "ip_per_10min", "ip_max_pending", "brake_pending", "turnstile_required", "shadow_after_strikes", "per_minute", "max_pending"];
 
+const RENDER_DEFAULTS = { auto_min: 3, auto_max: 9, user_min: 5, user_max: 7, seam_px: 192, bridge_strength: 0.85 };
+function cleanRender(b) {
+  const n = (v, lo, hi, d) => { const x = Number(v); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
+  const D = RENDER_DEFAULTS, r = {
+    auto_min: Math.round(n(b.auto_min, 3, 30, D.auto_min)), auto_max: Math.round(n(b.auto_max, 3, 30, D.auto_max)),
+    user_min: Math.round(n(b.user_min, 3, 30, D.user_min)), user_max: Math.round(n(b.user_max, 3, 30, D.user_max)),
+    seam_px: Math.round(n(b.seam_px, 32, 192, D.seam_px)), bridge_strength: Math.round(n(b.bridge_strength, 0.3, 1, D.bridge_strength) * 100) / 100 };
+  if (r.auto_max < r.auto_min) r.auto_max = r.auto_min;
+  if (r.user_max < r.user_min) r.user_max = r.user_min;
+  return r;
+}
+
 module.exports = async (req, res) => {
   res.setHeader("cache-control", "private, no-store");
   const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
@@ -76,6 +88,29 @@ module.exports = async (req, res) => {
       return res.status(200).json({ ok: true, gpu: await gpu() });
     }
     if (a === "ops") return res.status(200).json(await rest("POST", "rpc/ops_stats", { hours: Math.min(744, Math.max(1, Number(body.hours) || 24)), bucket: body.bucket === "day" ? "day" : "hour" }));
+    if (a === "render_get") {   // live render settings (sliders); the pod re-reads auto_config every ~15 s
+      const r = await rest("GET", "auto_config?id=eq.1&select=render");
+      return res.status(200).json({ render: (r[0] && r[0].render) || {}, defaults: RENDER_DEFAULTS });
+    }
+    if (a === "render_set") {   // {render: {auto_min, auto_max, user_min, user_max, seam_px, bridge_strength}}
+      const r = cleanRender(body.render || {});
+      await rest("PATCH", "auto_config?id=eq.1", { render: r, updated_at: new Date().toISOString() }, { prefer: "return=minimal" });
+      return res.status(200).json({ render: r });
+    }
+    if (a === "story_delete") {   // {id, confirm: id}: permanent (its playlist history goes too)
+      const id = Number(body.id);
+      if (!id || Number(body.confirm) !== id) return res.status(400).json({ error: "confirm_required" });
+      await rest("DELETE", `story_playlist?story_id=eq.${id}`, undefined, { prefer: "return=minimal" });
+      await rest("DELETE", `stories?id=eq.${id}`, undefined, { prefer: "return=minimal" });
+      return res.status(200).json({ ok: true });
+    }
+    if (a === "chat_delete") {   // {id, confirm: id}: permanent
+      const id = Number(body.id);
+      if (!id || Number(body.confirm) !== id) return res.status(400).json({ error: "confirm_required" });
+      await rest("DELETE", `auto_chat_messages?chat_id=eq.${id}`, undefined, { prefer: "return=minimal" });
+      await rest("DELETE", `auto_chats?id=eq.${id}`, undefined, { prefer: "return=minimal" });
+      return res.status(200).json({ ok: true });
+    }
     if (a === "stories") return res.status(200).json(await stories.library());
     if (a === "story_save") return res.status(200).json({ story: await stories.save(body.story || {}) });
     if (a === "story_archive") { await rest("PATCH", `stories?id=eq.${Number(body.id)}`, { archived: true }, { prefer: "return=minimal" }); return res.status(200).json({ ok: true }); }
