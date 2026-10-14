@@ -156,13 +156,16 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   // full-screen quad at 1/4 res (1/6 on phones) and upscaled by the compositor. Redraws only when the view moves
   // or a strip lands, capped at 30 fps; idle = zero work. No CSS filters, no backdrop-filter.
   const refl = (() => {
-    const VAR = [.75, .35, 1.5, 1.7, 1.25, .35];   // tuned "Medium" strength
+    const VAR = [.55, .25, 1.25, 1.35, 1.12, .18];   // between the first subtle pass and "Medium"
     const cv = document.createElement("canvas"); cv.id = "refl"; cv.setAttribute("aria-hidden", "true");
     const gl = cv.getContext("webgl2", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, powerPreference: "low-power" });
     if (!gl) return null;
     canvas.after(cv);
+    // Source = the band exactly as it was just painted this frame (strips, LOD underlay, crossfades), so the
+    // reflection can never lag or miss what the art shows. Two-step GPU downscale keeps it alias-free.
     const TW = 128, TH = 16, src = document.createElement("canvas"); src.width = TW; src.height = TH;
-    const sctx = src.getContext("2d");
+    const sctx = src.getContext("2d"), mid = document.createElement("canvas"); mid.width = TW * 4; mid.height = TH * 4;
+    const mctx = mid.getContext("2d"); sctx.imageSmoothingQuality = mctx.imageSmoothingQuality = "medium";
     const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) console.warn("refl shader:", gl.getShaderInfoLog(o)); return o; };
     const pr = gl.createProgram();
     gl.attachShader(pr, sh(gl.VERTEX_SHADER, `#version 300 es
@@ -205,23 +208,24 @@ void main(){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     document.documentElement.classList.add("refl-gl");
-    let last = 0, key = "", motion = 0, lastLeft = null, cleared = true;
+    let hasTex = false, key = "", motion = 0, lastLeft = null, cleared = true;
     return {
       frame(V, yOff, bandH, w, h, a) {
         const now = performance.now();
         if (lastLeft !== null) motion = Math.max(motion * 0.96, Math.min(1, Math.abs(V.left - lastLeft) / 40));
         lastLeft = V.left;
-        const k = V.fi + ":" + V.li + ":" + Math.round(V.left) + ":" + Math.round(yOff) + ":" + Math.round(bandH) + ":" + a.toFixed(2) + ":" + w + "x" + h + ":" + SURR + ":" + (window.__reflN || 0);
-        if ((k === key && motion < 0.01) || now - last < 33) return;   // idle: nothing; moving: <=30 fps
-        last = now;
+        const k = (V.left * 8 | 0) + ":" + Math.round(yOff) + ":" + Math.round(bandH) + ":" + a.toFixed(2) + ":" + w + "x" + h + ":" + SURR + ":" + V.cov.toFixed(3) + ":" + V.fading;
+        if (k === key && motion < 0.01) return;   // idle: zero work; any change: same-frame redraw
         const div = COARSE || innerWidth <= 560 ? 6 : 4, W = Math.max(1, Math.round(w / div)), H = Math.max(1, Math.round(h / div));
         if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
         gl.viewport(0, 0, W, H);
         if (k !== key) {
-          key = k; sctx.clearRect(0, 0, TW, TH);
-          for (let i = V.fi; i <= V.li; i++) { const e = strips.get(i); if (!e || !e.bitmap) continue;
-            sctx.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, (i * SW() - V.left) / V.ww * TW, 0, SW() / V.ww * TW, TH); }
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src); gl.generateMipmap(gl.TEXTURE_2D);
+          key = k;
+          if (V.cov > 0 || V.lod || !hasTex) {   // nothing painted at all (cold start): hold the last texture
+            mctx.drawImage(canvas, 0, Math.max(0, yOff), w, Math.min(bandH, h - yOff), 0, 0, mid.width, mid.height);
+            sctx.drawImage(mid, 0, 0, TW, TH);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src); gl.generateMipmap(gl.TEXTURE_2D); hasTex = true;
+          }
         }
         gl.uniform2f(U.band, yOff / h, (yOff + bandH) / h); gl.uniform1f(U.bandH, bandH / h);
         gl.uniform1f(U.t, now / 1000); gl.uniform1f(U.amp, motion); gl.uniform1f(U.alpha, a); const lt = SURR[0] === "2";
@@ -774,7 +778,8 @@ void main(){
     ctx.translate(0, yOff);
     ctx.scale(s, s);
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet.
-    if (!window.__nolod && (zoom < 0.97 || fast || coverage < 1)) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
+    const lodOn = !window.__nolod && (zoom < 0.97 || fast || coverage < 1); let fading = 0;
+    if (lodOn) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
       const stripLayer = zoom > 0.3;
@@ -787,7 +792,7 @@ void main(){
         have++;
         if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) ? performance.now() : -1e9;
         const fa = Math.min(1, (performance.now() - e.seenAt) / 1000);                                      // then crossfade it in over ~1 s
-        if (fa < 1) ctx.globalAlpha = fa * fa * (3 - 2 * fa);
+        if (fa < 1) { ctx.globalAlpha = fa * fa * (3 - 2 * fa); fading = (fa * 20 | 0) + 1; }
         ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);   // no live-edge clip: the old particle-era clip hid the next strip's inpaint band until it popped in
         ctx.globalAlpha = 1;
       }
@@ -807,7 +812,7 @@ void main(){
       }
     }
     ctx.restore();
-    drawSurround.v = { left, ww: w / s, fi: Math.max(0, firstIdx), li: Math.min(lastIdx, maxIndex) };
+    drawSurround.v = { left, ww: w / s, fi: Math.max(0, firstIdx), li: Math.min(lastIdx, maxIndex), cov: coverage, lod: lodOn, fading };
     if (portrait()) drawSurround(w, h, Math.max(0, yOff), config.height * s);
     else if (ribbon < 0.999) {   // desktop ribbon: same reflection/glow as the phone band, fading out as it expands
       const sa = surroundA, k = (1 - ribbon) / (1 - RIBBON); surroundA = sa * k * k * (3 - 2 * k);
