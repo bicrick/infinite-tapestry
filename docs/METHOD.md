@@ -87,7 +87,7 @@ The crossfade gets the colours roughly right. The **bridge repaint** at strength
 
 ![A fresh-anchor join: golden amulet into the Sphinx at night](img/scene_join.jpg)
 
-Both numbers are **live settings**. The admin **Live render** view has sliders for the join width (32–192 px) and the bridge strength (0.30–1.00). It saves them to `auto_config.render`, and the pod applies them within ~15 s (`server.apply_render_settings`).
+Both numbers are **live settings**. The admin **Configuration** tab has sliders for the join width (32–192 px) and the bridge strength (0.30–1.00). It saves them to `auto_config.render`, and the pod applies them within ~15 s (`server.apply_render_settings`).
 
 ### 2.4 Scene length: random widths
 

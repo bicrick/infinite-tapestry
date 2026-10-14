@@ -62,7 +62,7 @@ On a 24 GB GPU, `python -m infinite_tapestry.main --backend sdxl` applies the SD
 
 ## Admin live settings
 
-Scene widths (Auto and ideas, as min–max strip ranges), the join crossfade width and the bridge repaint strength are set with sliders in the admin's **Live render** view. A schematic ribbon previews them. Values are saved to `auto_config.render`, and the pod re-reads them every 15 s, so no restart is needed.
+Scene widths (Auto and ideas, as min–max strip ranges), the join crossfade width and the bridge repaint strength are set with sliders in the admin's **Configuration** tab. A schematic ribbon previews them. Values are saved to `auto_config.render`, and the pod re-reads them every 15 s, so no restart is needed.
 
 ---
 
