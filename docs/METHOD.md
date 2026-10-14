@@ -1,6 +1,6 @@
 # How Infinite Tapestry paints forever
 
-This document explains the method at three zoom levels. **High** is the shape of the system. **Mid** covers how pixels are fused and scenes are chosen. **Low** gives the exact numbers, file layouts and indices. Everything here matches the code in this repo (v1.1). File paths are given so you can check.
+This document explains the method at three zoom levels. **High** is the shape of the system. **Mid** covers how pixels are fused and scenes are chosen. **Low** gives the exact numbers, file layouts and indices. Everything here matches the code in this repo (v1.1). File paths are given so you can check. How ideas and uploaded images are screened is in **[SAFETY.md](SAFETY.md)**.
 
 ![Unedited live output](img/ribbon_egypt.jpg)
 

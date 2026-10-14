@@ -1,4 +1,4 @@
-"""Open-source NSFW image classifier for generated strips.
+"""Open-source NSFW image classifier for uploaded reference images (input only; generated strips are not checked).
 
 Default model: Falconsai/nsfw_image_detection (ViT, Apache-2.0, labels
 normal/nsfw). Loaded lazily on the GPU box; returns P(nsfw) for an image."""

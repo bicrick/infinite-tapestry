@@ -66,4 +66,4 @@ Scene widths (Auto and ideas, as min–max strip ranges), the join crossfade wid
 
 ---
 
-Deeper dive: **[docs/METHOD.md](docs/METHOD.md)** covers fusion, the model, Auto and stories, storage and streaming, and how the Time Machine finds a moment. [docs/research.md](docs/research.md) holds the original feasibility notes (SD1.5 era, kept for history).
+Deeper dive: **[docs/METHOD.md](docs/METHOD.md)** covers fusion, the model, Auto and stories, storage and streaming, and how the Time Machine finds a moment. [docs/SAFETY.md](docs/SAFETY.md) explains how ideas and uploaded images are screened. [docs/research.md](docs/research.md) holds the original feasibility notes (SD1.5 era, kept for history).
