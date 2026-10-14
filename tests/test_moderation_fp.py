@@ -28,7 +28,7 @@ def test_benign_phrases_pass_guard(t):
 
 @pytest.mark.parametrize("t", [h for h in HARD if h not in ("nigger", "f4ggots")])
 def test_hard_lines_still_block_guard(t):
-    assert hard_block_reason(t) in ("sexual", "minor") and is_disallowed(t)
+    assert hard_block_reason(t) == "sexual" and is_disallowed(t)
 
 
 def test_slurs_still_block_guard():
@@ -66,8 +66,8 @@ console.log(JSON.stringify(out));
     assert all(v == "" for v in r["benign"]), r["benign"]
     assert all(v for v in r["hard"]), r["hard"]
     assert all(v == "" for v in r["textok"])
-    assert r["gore"] == "" and r["sexHigh"] == "sexual" and r["hateLow"] == "" and r["hateHigh"] == "hate"
-    assert r["minors"] == "minor_sexual" and r["instr"] == "unsafe"
+    assert r["gore"] == "" and r["sexHigh"] == "sexual" and r["hateLow"] == "" and r["hateHigh"] == ""
+    assert r["minors"] == "minor_sexual" and r["instr"] == ""
 
 
 def test_no_checks_on_live_canvas():

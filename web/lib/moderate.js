@@ -4,7 +4,7 @@
 // historical or satirical scenes are allowed. Benign phrases (ALLOW) are removed before the keyword match.
 const SEXUAL = /\b(sex|sexy|sexual|nude|nudes|naked|nudity|erotic|erotica|porn|porno|nsfw|topless|lingerie|genitals?|penis|vagina|nipples?|orgasm|seductive|sensual|fetish|bdsm|lewd|hentai|undress\w*|stripper|striptease|intercourse|masturbat\w*|boobs?|tits|breasts|xxx|horny|kinky|onlyfans|r34|rule ?34)\b/i;
 const MINOR = /\b(child|children|kids?|minors?|underage|under-age|teens?|teenage|teenager|preteen|pre-teen|toddler|bab(y|ies)|infant|schoolgirl|schoolboy|loli|lolita|shota|jailbait|young (girl|boy)|little (girl|boy)|\d{1,2}\s*(yo|y\/o|years?[- ]old))\b/i;
-// Slurs only. Historical / satirical figures and symbols (hitler, nazis, kkk...) are left to OpenAI hate with a high score.
+// Slurs only. Historical / satirical figures and symbols (hitler, nazis, kkk...) are allowed.
 const HATE = /\b(n[i1]gg(er|a)s?|f[a@]gg?ots?|k[i1]kes?|sp[i1]cs?|ch[i1]nks?|tr[a@]nn(y|ies)|wetbacks?|r[e3]tards?)\b/i;
 const ANIMALS = "animals?|elephants?|goats?|lambs?|sheep|deer|fawns?|bears?|pandas?|seals?|owls?|ducks?|ducklings?|chicks?|birds?|turtles?|dragons?|dinosaurs?|whales?|dolphins?|foxes|fox|wolves|wolf|lions?|tigers?|cats?|kittens?|dogs?|puppies|puppy|bunnies|bunny|rabbits?|penguins?|otters?|giraffes?|horses?|ponies|pony|monkeys?|koalas?|sloths?|octopus(es)?|sharks?|cows?|pigs?|piglets?|yoda|groot|carrots?|spinach|corn|shower|grand|steps?|teeth";
 const ALLOW = new RegExp("\\b(" + [
@@ -21,7 +21,7 @@ const strip = (t) => t.replace(ALLOW, " ");
 const norm = (t) => t.toLowerCase().replace(/[0@]/g, "o").replace(/3/g, "e").replace(/4/g, "a").replace(/[1!|]/g, "i").replace(/\$/g, "s")
   .replace(/\b(\w)[.\-_*](?=\w\b|\w[.\-_*])/g, "$1");
 
-const SEXUAL_SCORE = 0.7, HATE_SCORE = 0.8, SELF_HARM_INSTR_SCORE = 0.9;
+const SEXUAL_SCORE = 0.7;
 
 function keyword(text) {
   const t = strip(String(text || "")), n = strip(norm(String(text || "")));
@@ -37,9 +37,7 @@ function openaiVerdict(res) {
   const c = res.categories || {}, s = res.category_scores || {};
   if (c["sexual/minors"] || (s["sexual/minors"] || 0) >= 0.5) return "minor_sexual";
   if ((s.sexual || 0) >= SEXUAL_SCORE) return "sexual";
-  if ((s.hate || 0) >= HATE_SCORE || (s["hate/threatening"] || 0) >= HATE_SCORE) return "hate";
-  if ((s["self-harm/instructions"] || 0) >= SELF_HARM_INSTR_SCORE) return "unsafe";   // only clearly instructional
-  return "";                         // violence/graphic, gore, horror: allowed
+  return "";   // hard lines only: hate (slurs are the keyword screen), self-harm, violence, gore, horror are not blocked here
 }
 
 async function moderate(text) {

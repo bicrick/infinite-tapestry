@@ -228,13 +228,15 @@ class StripGenerator:
         from .styles import ramp, with_trigger
 
         style_a, style_b = self.director.styles_for(blend_t) if hasattr(self.director, "styles_for") else ("none", None)
-        prompt_a = with_trigger(prompt_a, style_a)
-        if prompt_b:
-            prompt_b = with_trigger(prompt_b, style_b or style_a)
+        user_scene = (scene_meta or {}).get("origin") == "user"
+        if not user_scene:  # user prompts stay verbatim (a LoRA the user named still applies by weight)
+            prompt_a = with_trigger(prompt_a, style_a)
+            if prompt_b:
+                prompt_b = with_trigger(prompt_b, style_b or style_a)
         if hasattr(self.inpainter, "set_styles"):
             self.inpainter.set_styles(ramp(style_a, style_b, blend_t if prompt_b else 0.0))
         seed = cfg.seed + self._strip_index
-        if getattr(cfg, "pan_variations", False) and not cfg.mock:
+        if getattr(cfg, "pan_variations", False) and not cfg.mock and not user_scene:
             cue = PAN_CUES[self._strip_index % len(PAN_CUES)]
             prompt_a = f"{prompt_a}. {cue}"
             if prompt_b:
@@ -244,7 +246,7 @@ class StripGenerator:
 
             rid, rscale = _refs.schedule(*self.director.ref_ids(), blend_t if prompt_b else 0.0)
             self.inpainter.set_ref(rid, _refs.get(rid), rscale)
-            if rid is None and getattr(cfg, "context_ref", False) and not cfg.mock and self._strip_index > 0:
+            if rid is None and getattr(cfg, "context_ref", False) and not cfg.mock and self._strip_index > 0 and not user_scene:
                 # Full-composition awareness: a downscaled view of what's on screen (last ~8 strips)
                 # rides along as a klein reference image; the thin band still pins the seam.
                 cw = min(canvas.width, cfg.strip_width * 8)

@@ -39,15 +39,12 @@ _CONTENT_LINE = (
     "Content line: this is a WILD, irreverent, adults-only-humor art toy. Paint the idea EXACTLY as asked, as literally and vividly as possible: gross, crude, stupid, absurd, scatological (poop, feces, vomit, snot, sewage), cartoonish gore, horror, violence, disturbing, grotesque, edgy and offensive-humor ideas are all welcome. NEVER sanitize, soften, euphemize, tame, swap for a 'tasteful' version, or add disclaimers; 'feces land' means a world literally made of feces. The ONLY things you never depict: (1) nudity or sexual content of any kind (keep only the non-sexual parts of such an idea), (2) children/minors in any form, (3) hateful slurs or symbols targeting a group, (4) a real, identifiable person shown doing something defamatory or degrading."
 )
 
-# User ideas: the user's text is NEVER rewritten. Code builds the prompt as the verbatim text plus an
-# optional suffix of generic quality/composition tokens (validated against an allowlist, see clean_suffix).
-# The model only proposes a title (taken from the user's words) and those suffix tokens.
-SYSTEM = f"""A viewer typed an idea for an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Their text is used VERBATIM as the prompt; you never rewrite, reinterpret or add to its subject.
-Return only:
-- title: a 2-4 word name made ONLY of words from the user's text.
-- suffix: 0-5 short generic rendering tokens to append, chosen ONLY from quality and composition terms such as "highly detailed", "sharp focus", "intricate detail", "high quality", "wide continuous scene", "extends left and right", "seamless panorama", "full height composition". No subjects, objects, places, colors, moods, lighting or styles (never photo, cinematic, painting, anime or camera terms). If unsure, return [].
+# User ideas: the SD prompt is the user's exact text ONLY (trimmed). The model only proposes a title
+# taken from the user's words; nothing it returns is ever added to the prompt.
+SYSTEM = f"""A viewer typed an idea for an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Their text is the prompt exactly as typed; you never rewrite, add to or reinterpret it.
+Return only a title: a 2-4 word name made ONLY of words from the user's text.
 {_CONTENT_LINE}
-Reply with ONLY a JSON object, no prose: {{"title":"...","suffix":["..."]}}"""
+Reply with ONLY a JSON object, no prose: {{"title":"..."}}"""
 
 
 _STYLE_NOTE = (
@@ -204,7 +201,7 @@ class PromptInterpreter:
                     core = intent
                 if not core:
                     raise ValueError("empty idea")
-                plan = assemble_plan(core, data.get("title"), data.get("suffix"))
+                plan = assemble_plan(core, data.get("title"))
                 plan.update({"note": "your words, verbatim", "image_flags": flags, "source": "haiku", "model": model})
                 return plan
             except urllib.error.HTTPError as e:
@@ -231,42 +228,6 @@ def _json_obj(text: str) -> dict:
     return data
 
 
-# Words a suffix token may be built from: generic quality and composition only. Anything else
-# (a subject, place, color, mood, light or style word) drops that token.
-_SUFFIX_VOCAB = frozenset("""
-highly very ultra extremely detailed detail details intricate fine sharp crisp focus clear clean high quality
-resolution res hd 4k 8k masterpiece best rich textured texture well composed composition balanced
-wide wider continuous seamless panorama panoramic scene extends extending extend left right sideways
-horizontal horizontally full height frame filling fills edge to and across endless expansive
-""".split())
-SUFFIX_MAX_TOKENS = 5
-SUFFIX_MAX_CHARS = 90
-
-
-def clean_suffix(suffix: Any, intent: str = "") -> list[str]:
-    """Keep only allowlisted quality/composition tokens; cap count and length. Never adds a subject."""
-    if isinstance(suffix, str):
-        suffix = suffix.split(",")
-    if not isinstance(suffix, list):
-        return []
-    out: list[str] = []
-    for t in suffix:
-        t = " ".join(str(t).lower().split()).strip(" ,.;:")
-        words = re.findall(r"[a-z0-9]+", t)
-        if not t or len(t) > 40 or not words or re.search(r"[^a-z0-9 \-]", t):
-            continue
-        if any(w not in _SUFFIX_VOCAB for w in words):
-            continue
-        if t in out or t in intent.lower():
-            continue
-        if len(", ".join(out + [t])) > SUFFIX_MAX_CHARS:
-            break
-        out.append(t)
-        if len(out) >= SUFFIX_MAX_TOKENS:
-            break
-    return out
-
-
 def clean_title(title: Any, intent: str) -> str:
     """2-4 words, every one of them from the user's text; otherwise the idea's first words."""
     t = " ".join(str(title or "").split()).strip(" ,.;:-\"'")
@@ -277,12 +238,12 @@ def clean_title(title: Any, intent: str) -> str:
     return raw_title(intent)
 
 
-def assemble_plan(core: str, title: Any = None, suffix: Any = None, hold: int = 3) -> dict[str, Any]:
-    """The prompt is the user's text verbatim (+ ', ' + validated suffix). One scene; beats repeat it verbatim."""
-    sfx = clean_suffix(suffix, core)
-    prompt = core + (", " + ", ".join(sfx) if sfx else "")
-    return {"scenes": [{"title": clean_title(title, core), "prompt": prompt, "negative": "", "style": "",
-                        "transition": 2, "hold": hold, "beats": []}], "suffix": sfx}
+def assemble_plan(core: str, title: Any = None, hold: int = 3) -> dict[str, Any]:
+    """The prompt is exactly the user's text: no suffix, quality, style or camera tokens. One scene, no beats."""
+    return {"scenes": [{"title": clean_title(title, core), "prompt": core, "negative": "", "style": "",
+                        "transition": 2, "hold": hold, "beats": []}]}
+
+
 
 _REFUSAL = re.compile(
     r"\b(i can(?:no|')t|i won't|i will not|i'm (?:not able|unable)|i am (?:not able|unable)|cannot (?:help|create|assist)|"
@@ -293,6 +254,7 @@ _REFUSAL = re.compile(
 
 def is_refusal(text: str) -> bool:
     return bool(_REFUSAL.search(text or ""))
+
 
 
 def parse_plan(text: str) -> dict[str, Any]:

@@ -67,6 +67,10 @@ class PromptScheduler:
 
 
 QUALITY_NEGATIVE = ("wallpaper, tiled, empty composition, lifeless, cluttered duplicates")
+# User scenes: no look-steering negatives (no blurry/low quality/ugly/wallpaper/lifeless), only
+# layout artifacts (text, frames, panels) and the anti-nudity terms.
+USER_NEGATIVE = ("text, watermark, frame, border, split screen, diptych, triptych, panel, multi-panel, collage, "
+                 "nsfw, nude, naked, nudity, sexual, nipples, cleavage, erotic")
 MIN_TRANSITION = 1  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
 MAX_TRANSITION = 3
 MAX_HOLD_USER = 4  # klein is coherent: short scenes (~10-15 s)
@@ -436,6 +440,9 @@ class LiveDirector:
         with self._lock:
             scene = self._target if (self._target and t >= 0.5) else self._current
             extra = scene.get("negative") or ""
+            user = scene.get("origin") == "user"
+        if user:
+            return ", ".join(x for x in (USER_NEGATIVE, extra) if x)
         return ", ".join(x for x in (self.negative_prompt, extra, QUALITY_NEGATIVE) if x)
 
     def title_for(self, t: float) -> str:

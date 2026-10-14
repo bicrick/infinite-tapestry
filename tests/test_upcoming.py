@@ -31,7 +31,7 @@ def test_hard_blocks_only():
     assert hard_block_reason("feces land") is None
     assert hard_block_reason("cartoon gore zombie buffet, vomit fountains") is None
     assert hard_block_reason("naked party") == "sexual"
-    assert hard_block_reason("kids on a slide") == "minor"
+    assert hard_block_reason("kids on a slide") is None  # minor alone is not a hard line; minor + sexual is
 
 
 def test_drop_flagged_resumes_auto():

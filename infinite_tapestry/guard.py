@@ -82,12 +82,11 @@ def has_slur(*texts: str) -> bool:
 
 
 def hard_block_reason(*texts: str) -> str | None:
-    """The ONLY idea-level blocks: sexual/nude, minors, hateful slurs. Gross, crude, gory,
+    """The ONLY idea-level blocks: sexual/nude (incl. minors + sexual) and hateful slurs. A minor mentioned
+    without sexual content is not blocked. Gross, crude, gory,
     absurd and offensive-but-not-hateful ideas are painted as written."""
-    if is_sexual(*texts) or is_blocked(*texts):
+    if is_sexual(*texts) or is_blocked(*texts):   # sexual/nudity, and minors + sexual
         return "sexual"
-    if mentions_minor(*texts):
-        return "minor"
     if has_slur(*texts):
         return "slur"
     return None
