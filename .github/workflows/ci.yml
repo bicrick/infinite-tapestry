@@ -63,7 +63,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Resolve live pod WebSocket URL (single source: Supabase pod_state.pod_id)
+      - name: Resolve live pod WebSocket URL from Supabase pod_state.pod_id
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
