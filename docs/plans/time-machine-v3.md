@@ -51,7 +51,7 @@ It is performance-first. It works on throttled browsers (Low Power Mode, Energy 
 │▓▓▓▓▓▓▓▒▒▒▒░░░▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓|▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓●  │  THE LINE (band), playhead at centre, Now pulse at the live edge
 │      ┆ "Ribbed Lake"  ┆ idea: "frogs in rain" ┆ "Woven Pines"         │  scene/idea lane (clusters "+12" when dense)
 ├──────────────────────────────────────────────────────────────────────┤
-│  Tue Oct 14 · 3:42 PM · Ribbed Lake at Dusk          [▶ Replay here] │  playhead readout + action
+│  Tue Oct 14 · 3:42 PM · Ribbed Lake at Dusk          [▶ Play here] │  playhead readout + action
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -61,7 +61,7 @@ It is performance-first. It works on throttled browsers (Low Power Mode, Energy 
 - **Prompt stepping**: ◀/▶ (keys `[` `]`) fly to the previous/next scene start, with an "ideas only" toggle. At low zoom the lane shows clustered chips; tapping a cluster zooms into it.
 - **Date jump**: a native date input (plus "Today", "Yesterday" and recent days) flies to the first strip of that day, at the Day preset.
 - **Calendar**: the existing month grid moves into a slide-over panel opened from ☰ or 📅. Picking a day flies the line there.
-- **Tap or click a moment** to open a small card with a thumbnail, time, scene, "Replay from here" (`/?at=idx&to=idx+12`) and "Copy link". Long-press on mobile does the same.
+- **Tap or click a moment** to open a small card with a thumbnail, time, scene, "Play here" (zooms to strip scale and drifts inside the Time Machine), "Open in live viewer" (`/?at=idx&to=idx+12`) and "Copy link". Long-press on mobile does the same.
 - **Gestures**:
   - drag/flick pans, with momentum shared with the viewer's glide physics;
   - pinch zooms around the pinch centre (touch pointers and Safari `gesturechange`);
