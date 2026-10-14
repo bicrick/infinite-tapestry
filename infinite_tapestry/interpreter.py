@@ -59,7 +59,8 @@ _STYLE_NOTE = (
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide what comes next, forever.
 Be inventive and surprising: fun, strange, beautiful or funny ideas, always different from the recent scenes.
 Each prompt is SHORT and SIMPLE: about 5-20 words of plain language saying what the scene is. No piles of descriptors, no quality words, no camera, lens or film terms (unless that is the idea itself).
-Style: there is NO default style. Invent the look yourself every time and vary it freely (any medium, era, culture or vibe: crayon, mosaic, claymation, woodcut, neon sign, stained glass, ukiyo-e, a photo, an 80s airbrush poster...), and never repeat the look of the recent scenes. Write the look INTO the prompt in a few words at the start (any look you invent; do not reuse the examples above or a look from the recent scenes), because only the prompt is painted; style = that look as a short label. Do not default to soft, luminous, serene oil or watercolor paintings.
+Style: there is NO default style. Invent the look yourself (any medium, era or vibe from anywhere in the world and history), and give each new scene or story a look of its own. Inside a story, every scene keeps the story's one look. Write the look INTO the prompt in a few words at the start, because only the prompt is painted; style = that look as a short label.
+Originality: keep inventing new subjects, places and situations: everyday life, machines, animals, food, sports, history, the future, deserts, cities, kitchens, factories, outer space, tiny worlds. Every planning call is a chance to go somewhere the tapestry has not been yet.
 Functional needs only: one continuous scene that can extend sideways (not one centered object), no text, frames or borders. {_COMPOSITION_NOTE}
 Never: nudity or sexual content, children/minors, hateful slurs or symbols, recognizable real people.
 transition = strips to blend in (2-3), hold = strips to stay (2-4).
@@ -142,13 +143,15 @@ class PromptInterpreter:
         self.tokens_used += int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
-    def autoplan(self, recent: list[dict], vibe: str = "", count: int = 2, brief: str = "") -> dict[str, Any]:
+    def autoplan(self, recent: list[dict], vibe: str = "", count: int = 2, brief: str = "", keep_style: str = "") -> dict[str, Any]:
         """Next autopilot scenes continuing from `recent` (title/prompt dicts).
         Raises on failure so the caller can back off."""
         lines = [f"{i + 1}. {r.get('title', '')}: {r.get('prompt', '')[:200]}" for i, r in enumerate(recent[-8:])]
         user = "Recent scenes, oldest first:\n" + "\n".join(lines)
         looks = [str(r.get("style") or "").strip() for r in recent[-6:] if str(r.get("style") or "").strip() not in ("", "none")]
-        if looks:
+        if keep_style:
+            user += f"\nThese scenes belong to one story: every scene uses exactly this look: {keep_style}."
+        elif looks:
             user += "\nLooks already used recently (use a clearly DIFFERENT medium for every new scene, and different from each other): " + ", ".join(dict.fromkeys(looks))
         if vibe:
             user += f"\nViewer's standing vibe to lean toward (loosely): {vibe[:200]}"
@@ -161,7 +164,9 @@ class PromptInterpreter:
                 plan = parse_plan(self._call(model, user, system=AUTO_SYSTEM, max_tokens=6000))
                 for sc in plan["scenes"]:
                     sc["prompt"] = short_prompt(sc["prompt"])
-                    st = (sc.get("style") or "").strip()
+                    st = (keep_style or sc.get("style") or "").strip()
+                    if keep_style:
+                        sc["style"] = keep_style
                     # Only the prompt is painted: if Auto's chosen look isn't in it, lead with that label.
                     if st and st != "none" and not set(re.findall(r"[a-z]{5,}", st)) & set(re.findall(r"[a-z]{5,}", sc["prompt"].lower())):
                         sc["prompt"] = f"{st}, {sc['prompt']}"
@@ -338,9 +343,14 @@ def _director(d: Any) -> dict[str, Any]:
         except Exception:
             return None
     move = str(d.get("move", "")).strip().lower()[:24]
-    return {"move": move if move in ("detour", "drift", "journey", "continue") else "drift",
-            "journey": str(d.get("journey", "") or "").strip()[:80], "step": num(d.get("step")), "total": num(d.get("total")),
-            "reason": str(d.get("reason", "") or "").strip()[:300]}
+    out = {"move": move if move in ("detour", "drift", "journey", "continue") else "drift",
+           "journey": str(d.get("journey", "") or "").strip()[:80], "step": num(d.get("step")), "total": num(d.get("total")),
+           "reason": str(d.get("reason", "") or "").strip()[:300]}
+    for k, n in (("premise", 240), ("style", 48)):   # story fields (optional)
+        v = str(d.get(k, "") or "").strip()[:n]
+        if v:
+            out[k] = v
+    return out
 
 
 def _salvage_truncated_plan(blob: str) -> dict[str, Any]:

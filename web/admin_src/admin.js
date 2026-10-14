@@ -142,10 +142,11 @@ const storyName = (id) => (LIB.stories.find((s) => s.id === id) || {}).title || 
 function storyCard(st, { saved = false } = {}) {
   const el = document.createElement("div"); el.className = "story";
   el.innerHTML = `<input class="t" value="${esc(st.title)}" aria-label="Story title" />
-    <input class="th" value="${esc(st.theme || "")}" placeholder="Theme" aria-label="Theme" />
+    <input class="th" value="${esc(st.theme || "")}" placeholder="Premise: who or what, where, what happens" aria-label="Premise" />
+    <input class="sty" value="${esc(st.style || "")}" placeholder="One look for every scene, e.g. linocut print" aria-label="Story look" />
     <ol>${(st.scenes || []).map((s) => `<li><input value="${esc(s.title)}" aria-label="Scene title" /><textarea rows="2" aria-label="Scene prompt">${esc(s.prompt)}</textarea></li>`).join("")}</ol>
     <div class="acts"><button data-sa="now">Play now</button><button data-sa="end">Add to playlist</button><button data-sa="save">${saved ? "Save changes" : "Save to library"}</button><span class="fine sa-msg"></span></div>`;
-  const read = () => ({ id: st.id, title: el.querySelector(".t").value, theme: el.querySelector(".th").value,
+  const read = () => ({ id: st.id, title: el.querySelector(".t").value, theme: el.querySelector(".th").value, style: el.querySelector(".sty").value,
     scenes: [...el.querySelectorAll("li")].map((li) => ({ title: li.querySelector("input").value, prompt: li.querySelector("textarea").value })) });
   el.querySelector(".acts").addEventListener("click", async (e) => {
     const k = e.target.dataset.sa; if (!k) return; e.stopPropagation();
@@ -165,7 +166,7 @@ async function stories() {
   $("story-now").textContent = now ? `Playing: ${storyName(now.story_id)} (scene ${now.scene_index + 1})` : LIB.playlist.length ? "Next story starts within ~30 s." : "Nothing queued: Auto is steering on its own.";
   $("playlist").innerHTML = LIB.playlist.map((p, i) => `<tr><td class="m">${i + 1}</td><td>${esc(storyName(p.story_id))}</td><td class="m">${p.status}</td>
     <td><button data-pm="${p.id}" data-dir="up">↑</button><button data-pm="${p.id}" data-dir="down">↓</button><button class="danger" data-pr="${p.id}">remove</button></td></tr>`).join("") || '<tr><td class="m">Nothing queued.</td></tr>';
-  $("library").innerHTML = LIB.stories.map((s) => `<div class="lib"><b>${esc(s.title)}</b><span>${esc(s.theme)} · ${s.scenes.length} scenes</span>
+  $("library").innerHTML = LIB.stories.map((s) => `<div class="lib"><b>${esc(s.title)}</b><span>${esc(s.theme)}${s.style ? " · " + esc(s.style) : ""} · ${s.scenes.length} scenes</span>
     <div class="row"><button data-lq="${s.id}" data-when="now">Play now</button><button data-lq="${s.id}" data-when="end">Queue</button><button data-le="${s.id}">Edit</button><button class="danger" data-ld="${s.id}">Delete</button></div></div>`).join("") || '<p class="fine">No saved stories yet. Draft one in Talk to Auto.</p>';
 }
 document.addEventListener("click", async (e) => {

@@ -2,3 +2,5 @@
 -- Keys (all optional; missing = built-in default): auto_min, auto_max, user_min, user_max (scene widths in strips),
 -- seam_px (bridge crossfade width, 192), bridge_strength (bridge repaint strength, 0.85).
 alter table auto_config add column if not exists render jsonb not null default '{}'::jsonb;
+-- Stories carry ONE look for all their scenes (prepended to scene prompts at play time when missing).
+alter table stories add column if not exists style text not null default '' check (char_length(style) <= 60);

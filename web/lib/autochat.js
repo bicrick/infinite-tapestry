@@ -10,7 +10,7 @@ const KEY = () => env("TAPESTRY_ANTHROPIC_API_KEY") || env("ANTHROPIC_API_KEY");
 const SCENE = { type: "object", properties: { title: { type: "string", description: "2-4 word scene name" }, prompt: { type: "string", description: "image prompt, under 60 words" } }, required: ["title", "prompt"] };
 const TOOLS = [
   { name: "propose_story", description: "Show a storyboard card the owner can edit, play now, add to the playlist or save to the library.",
-    input_schema: { type: "object", properties: { title: { type: "string" }, theme: { type: "string" }, scenes: { type: "array", items: SCENE, minItems: 3, maxItems: 12 } }, required: ["title", "scenes"] } },
+    input_schema: { type: "object", properties: { title: { type: "string" }, theme: { type: "string", description: "one-sentence premise: who or what, where, what happens" }, style: { type: "string", description: "the ONE look for every scene, 2-5 words (e.g. linocut print, 1970s sci-fi paperback cover)" }, scenes: { type: "array", items: SCENE, minItems: 3, maxItems: 12 } }, required: ["title", "scenes"] } },
   { name: "set_theme", description: "Propose a temporary theme Auto leans toward (when no story is playing).",
     input_schema: { type: "object", properties: { theme: { type: "string" }, minutes: { type: "integer", minimum: 5, maximum: 1440 } }, required: ["theme"] } },
   { name: "set_paused", description: "Propose pausing or resuming Auto.", input_schema: { type: "object", properties: { paused: { type: "boolean" } }, required: ["paused"] } },
@@ -19,7 +19,7 @@ const TOOLS = [
 ];
 
 const SYSTEM = `You are Auto, the curator of Infinite Tapestry: an endless, horizontally scrolling image painted live, strip by strip, by an image model. Viewers suggest ideas; between ideas you choose what to paint. You are talking with the owner in the admin panel. Be concise, warm and practical.
-You help plan STORIES: a theme plus an ordered list of about 7 scenes that blend into each other. Mix shots: exteriors and vistas, interiors, close-ups, single objects, creatures or characters (e.g. Egypt: Giza at dawn, temple colonnade, tomb passage, burial chamber, golden death mask close-up, the mummy, a scarab amulet macro). Each scene prompt: under 60 words of comma-separated descriptors (subject, setting, camera/lens, light, palette, look). The renderer is weakest at photoreal people and crowds (keep people small or stylized), and can't do text. No nudity or sexual content.
+You help plan STORIES: a premise (theme), ONE look (style) and an ordered list of about 7 scenes that read like chapters: an arrival, exploring, a discovery, a twist, an ending. Each scene follows from the one before so a viewer can follow the story, and mixes shots (a vista, an interior, a close-up, a creature or character, a single object). Write each scene prompt with the whole story in mind: name the story's recurring subject and world in every scene so it stands on its own, in plain words, under 40 words. The look lives in "style" and is applied to every scene, so scenes describe content, not the medium. The renderer is weakest at photoreal people and crowds (keep people small or stylized), and can't do text. No nudity or sexual content.
 To show a storyboard, call propose_story (the owner sees an editable card). To change anything live, call set_theme, set_paused or queue_story; each is shown to the owner as a card to confirm, so never claim it already happened. Use the LIVE STATE below to answer questions about what's playing.`;
 
 async function liveState() {

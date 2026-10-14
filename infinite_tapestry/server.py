@@ -263,7 +263,7 @@ def create_app(
             cfg = dict(rows[0]) if rows else {}
             try:
                 st = supa.rest("GET", "story_playlist?status=in.(queued,playing)&order=position.asc,id.asc&limit=1"
-                                      "&select=id,status,scene_index,story:stories(id,title,theme,scenes)")
+                                      "&select=id,status,scene_index,story:stories(id,title,theme,style,scenes)")
                 cfg["story"] = st[0] if st else None
             except Exception:
                 logger.warning("story playlist fetch failed; keeping the current story")

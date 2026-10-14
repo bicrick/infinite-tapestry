@@ -11,7 +11,7 @@ class FakeAuto:
     def __init__(self, fail=False):
         self.fail, self.n, self.seen = fail, 0, []
 
-    def autoplan(self, recent, vibe="", count=2, brief=""):
+    def autoplan(self, recent, vibe="", count=2, brief="", keep_style=""):
         if self.fail:
             raise RuntimeError("down")
         self.seen.append([r["title"] for r in recent])

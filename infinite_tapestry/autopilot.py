@@ -55,41 +55,66 @@ def momentum_brief(recent: list[dict]) -> str:
             "stay gross or absurd). Theme momentum overrides the usual repeat rules for this world.")
 
 
+def story_prompt(style: str, prompt: str) -> str:
+    """A story's ONE look leads every scene prompt (unless the scene already names it)."""
+    style = (style or "").strip()
+    if not style or style.lower() in prompt.lower():
+        return prompt
+    return f"{style}, {prompt}"
+
+
 def _daypart(h: int) -> str:
     return ("deep night" if h < 5 else "dawn" if h < 8 else "morning" if h < 12 else "afternoon" if h < 17
             else "golden evening" if h < 20 else "night")
 
 
-def director_brief(recent: list[dict], journey: dict | None, steer: str, flavor: str, flavor_text: str) -> str:
-    """Auto as a playful director: it sees the recent run, its own journey state and the time of day, and freely picks
-    the next move (a surprising detour, a short drift, or an invented multi-scene journey from the outside in)."""
+def director_brief(recent: list[dict], journey: dict | None, steer: str, flavor: str, flavor_text: str,
+                   spark: dict | None = None) -> str:
+    """Auto as a playful director: it sees the recent run, its own journey (a small story with ONE look and a
+    premise), the time of day and a random variety spark, and picks the next move."""
     from datetime import datetime
+    from .variety import motif_run, spark_line
     titles = [str(r.get("title") or "").strip() for r in recent[-20:] if r.get("title")]
     now = datetime.now()
     lines = ["DIRECTOR MODE. You are a playful, intelligent director steering the tapestry with nobody else at the wheel.",
              "Last scenes, oldest first: " + (" | ".join(titles) or "(none)"),
              f"Local time for most viewers: {now.strftime('%A')} {_daypart(now.hour)}."]
-    if journey and journey.get("total") and (journey.get("step") or 0) < journey["total"]:
-        lines.append(f"You are on your journey \"{journey.get('journey','')}\", scene {journey.get('step')} of {journey['total']} "
-                     f"(why: {journey.get('reason','')[:160]}). Usually continue it, moving closer in (outside to inside, wide to "
-                     "detail); you may end it early if it has run its course.")
+    on_journey = bool(journey and journey.get("total") and (journey.get("step") or 0) < journey["total"])
+    if on_journey:
+        done = journey.get("scenes") or []
+        lines.append(f"You are telling your story \"{journey.get('journey','')}\", scene {journey.get('step')} of {journey['total']}.")
+        if journey.get("premise"):
+            lines.append(f"Story premise: {journey['premise'][:240]}")
+        if done:
+            lines.append("Story so far, in order: " + " -> ".join(done[-8:]))
+        if journey.get("style"):
+            lines.append(f"Story look (keep it for every scene of this story): {journey['style']}.")
+        lines.append("Write the NEXT beats of this story: each scene follows from the previous one and moves the story "
+                     "forward (a new place, moment or detail in the same world), so a viewer can follow it. You may end the "
+                     "story early if it has reached a satisfying last scene.")
     else:
-        lines.append("You are free. Look at the recent run and decide the next move yourself: a single surprising detour, "
-                     "a short drift that evolves one element of the last scene, or set off on an invented journey of 4-7 "
-                     "scenes that travels from the outside in (e.g. a city skyline, its streets, a shop, a drawer, an object). "
-                     "Vary your moves over time; do not always pick the same kind. Never repeat a recent subject.")
-    lines.append("Keep continuity: the first new scene should flow out of the last one (shared color, light, shape or material) "
-                 "so the transition is smooth, even when the subject changes.")
-    lines.append("Titles stay artistic: an evocative name of 2 to 4 words (never 5+) like a painting's title (e.g. \"Lantern Tide\", \"The Amber Hour\"), "
-                 "never a literal description, a prompt fragment, or the journey name with a number.")
-    if flavor_text and not (journey and journey.get("total") and (journey.get("step") or 0) < journey["total"]):   # mid-journey: no outside flavor pulling it off course
-        lines.append(f"Optional flavor you may use for a detour or a new journey (ignore if it breaks the flow): {flavor_text}")
+        lines.append("You are free. Decide the next move yourself: a single surprising detour, a short drift that evolves one "
+                     "element of the last scene, or start a new story of 4-7 scenes. A story has a premise (one sentence: who or "
+                     "what, where, what happens), ONE look used for all of its scenes, and scenes that follow each other like "
+                     "chapters (e.g. arrival, exploring, a discovery, a twist, an ending). Vary your moves over time.")
+        lines.append("Head for new territory: a different place, era and subject family from the recent run, somewhere the "
+                     "tapestry has never been. Draw from the whole world, all of history and pure invention.")
+        run = motif_run(titles)
+        if run:
+            lines.append("Motifs that have had a long run lately (their turn is over, pick a fresh family): " + ", ".join(run) + ".")
+        if spark:
+            lines.append(spark_line(spark))
+    lines.append("Keep the hand-off smooth: the first new scene can share one color, light or shape with the last one.")
+    lines.append("Titles: an evocative 2-4 word name, like a painting's title, built from this scene's own subject and place.")
+    if flavor_text and not on_journey:   # mid-story: no outside flavor pulling it off course
+        lines.append(f"Optional flavor for a detour or a new story (ignore if it breaks the flow): {flavor_text}")
     if steer:
         lines.append(f"Hint from the curator (take it as a loose nudge, not an order): {steer[:300]}")
     lines.append("Never name brands, franchises, films or characters in titles or prompts.")
-    lines.append('ALWAYS add to the JSON a "director" object (required, even when continuing): {"move":"detour|drift|journey|continue","journey":"short journey name '
-                 'or empty","step":<this batch\'s last scene number in the journey or null>,"total":<planned journey length or '
-                 'null>,"reason":"one playful sentence on why"}.')
+    lines.append('ALWAYS add to the JSON a "director" object (required, even when continuing): {"move":"detour|drift|journey|continue",'
+                 '"journey":"short story name or empty","premise":"one sentence, for a story","style":"the ONE look of the story '
+                 '(2-5 words), for a story","step":<this batch\'s last scene number in the story or null>,"total":<planned story '
+                 'length or null>,"reason":"one playful sentence on why"}.')
     return "\n".join(lines)
 
 
@@ -168,7 +193,7 @@ class Autopilot:
             return None
         start = row.get("scene_index") if isinstance(row.get("scene_index"), int) else 0
         return {"pid": row["id"], "id": st.get("id"), "title": str(st.get("title") or "")[:80],
-                "theme": str(st.get("theme") or "")[:200], "scenes": scenes, "start": max(0, min(start, len(scenes) - 1))}
+                "theme": str(st.get("theme") or "")[:200], "style": str(st.get("style") or "").strip()[:60], "scenes": scenes, "start": max(0, min(start, len(scenes) - 1))}
 
     def _story_tick(self) -> bool:
         """Queue the next story scenes (no LLM). Returns False when the story is over."""
@@ -187,7 +212,8 @@ class Autopilot:
         while k < n and len(added) < need:
             sc = st["scenes"][k]
             if not is_disallowed(sc["prompt"]) and not mentions_minor(sc["title"] + " " + sc["prompt"]):
-                added.append(make_scene(sc["prompt"], "", sc["title"], None, None, source=f"{tag}{k}", origin="auto"))
+                added.append(make_scene(story_prompt(st.get("style", ""), sc["prompt"]), "", sc["title"], None, None,
+                                        source=f"{tag}{k}", origin="auto", style=st.get("style") or None))
             k += 1
         if added:
             d.add(added)
@@ -285,8 +311,10 @@ class Autopilot:
             else:
                 mood = self.moods.next(2)
                 self.last_mode = "director"
-                text = director_brief(d.recent(20), self.journey, self.steer, mood, self.moods.brief(mood))
-            plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text)
+                from .variety import spark
+                text = director_brief(d.recent(20), self.journey, self.steer, mood, self.moods.brief(mood), spark())
+            keep = (self.journey or {}).get("style", "") if (not mom and self.journey) else ""
+            plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text, keep)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
             from .guard import is_disallowed
@@ -304,7 +332,18 @@ class Autopilot:
                 raise RuntimeError("blocked plan")
             dec = plan.get("director") or {}
             if not mom and dec:
-                self.journey = dec if dec.get("move") in ("journey", "continue") and dec.get("total") else None
+                prev = self.journey or {}
+                if dec.get("move") in ("journey", "continue") and dec.get("total"):
+                    same = prev and (dec.get("move") == "continue" or (dec.get("journey") or "") == prev.get("journey"))
+                    j = dict(dec)
+                    # a story keeps its premise, look and scene list across planning calls
+                    j["premise"] = (prev.get("premise") if same else "") or dec.get("premise", "")
+                    j["style"] = (prev.get("style") if same else "") or dec.get("style", "")
+                    j["journey"] = dec.get("journey") or (prev.get("journey") if same else "")
+                    j["scenes"] = (list(prev.get("scenes") or []) if same else []) + [s.get("title", "") for s in plan["scenes"]]
+                    self.journey = j
+                else:
+                    self.journey = None
                 self.last_mode = dec.get("move") or "director"
                 if dec.get("journey"):
                     self.last_mood = dec["journey"]

@@ -5,18 +5,19 @@ const REP = { prefer: "return=representation" };
 function cleanStory(b) {
   const title = String((b && b.title) || "").trim().slice(0, 80);
   const theme = String((b && b.theme) || "").trim().slice(0, 200);
+  const style = String((b && b.style) || "").trim().slice(0, 60);
   const scenes = (Array.isArray(b && b.scenes) ? b.scenes : []).slice(0, 20)
     .map((s) => ({ title: String((s && s.title) || "").trim().slice(0, 80), prompt: String((s && s.prompt) || "").trim().slice(0, 600) }))
     .filter((s) => s.prompt.length >= 3);
   if (!title) throw new Error("story needs a title");
   if (!scenes.length) throw new Error("story needs at least one scene");
-  return { title, theme, scenes };
+  return { title, theme, style, scenes };
 }
 
 const OPEN = "status=in.(queued,playing)";
 async function library() {
   const [stories, playlist, recent] = await Promise.all([
-    rest("GET", "stories?archived=eq.false&order=id.asc&select=id,title,theme,scenes,updated_at"),
+    rest("GET", "stories?archived=eq.false&order=id.asc&select=id,title,theme,style,scenes,updated_at"),
     rest("GET", `story_playlist?${OPEN}&order=position.asc,id.asc&select=id,story_id,status,scene_index,position,started_at`),
     rest("GET", "story_playlist?status=in.(done,skipped)&order=id.desc&limit=8&select=id,story_id,status,finished_at"),
   ]);
