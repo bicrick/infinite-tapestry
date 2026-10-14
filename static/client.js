@@ -195,7 +195,7 @@ void main(){
   float k = f * (uv.y > bot ? aBelow : aAbove) * alpha;
   float g = glow * exp(-dn * 1.8) * (uv.y > bot ? 1. : .6) * alpha * .35;
   o = vec4(c * k + bloom * g, k + g * light);                            // premultiplied; glow is additive on dark
-}}`));
+}`));
     gl.linkProgram(pr); gl.useProgram(pr);
     if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { console.warn(gl.getProgramInfoLog(pr)); cv.remove(); return null; }
     const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
