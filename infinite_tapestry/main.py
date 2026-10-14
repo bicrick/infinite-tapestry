@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--window-width", type=int, default=512)
     p.add_argument("--strip-width", type=int, default=128)
     p.add_argument("--overlap", type=int, default=96)
-    p.add_argument("--buffer-target", type=int, default=3)
+    p.add_argument("--buffer-target", type=int, default=5)
     p.add_argument("--buffer-min", type=int, default=2)
     p.add_argument("--scroll-speed", type=float, default=30.0, help="px/s")
     p.add_argument("--scroll-speed-min", type=float, default=8.0, help="px/s when low")

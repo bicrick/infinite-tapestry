@@ -614,14 +614,23 @@ void main(){
     clearTimeout(swapT);
     if (first || !cap) apply(); else { cap.classList.add("swap"); swapT = setTimeout(apply, 170); }
   }
+  // One timer, ever. The old version re-armed a 2 s retry while the load-in was up AND kept a 60 s interval, so a tab
+  // that never left the intro (hidden/background tabs don't draw) stacked a new 2 s loop every minute and hammered
+  // /timeline. Now: wait for the load-in, skip hidden tabs, refresh every 60 s, refetch on becoming visible if stale.
+  let tlAt = 0, tlTimer = 0, tlBusy = false;
   async function refreshTimeline() {
-    try { const r = await fetch(httpBase() + "/timeline?points=300"); const j = await r.json(); tlPoints = j.points || []; tlScenes = j.scenes || tlScenes; } catch (_) {}
+    clearTimeout(tlTimer); tlTimer = 0;
+    if (document.body.classList.contains("intro") || document.hidden) { tlTimer = setTimeout(refreshTimeline, document.hidden ? 60000 : 2000); return; }
+    if (tlBusy) return;
+    tlBusy = true;
+    try { const r = await fetch(httpBase() + "/timeline?points=300"); const j = await r.json(); tlPoints = j.points || []; tlScenes = j.scenes || tlScenes; tlAt = Date.now(); } catch (_) {}
+    tlBusy = false;
     // the whole history at 1/16 is small: prefetch it so flights never hit an empty frame
-    // (after the load-in: on slow links it must not compete with the strips the loader is waiting for)
-    if (document.body.classList.contains("intro")) return void setTimeout(refreshTimeline, 2000);
-    for (let c = 0; (c + 1) * LOD_N[2] <= maxIndex && c < 300; c++) lodTile(2, c);
+    for (let c = 0; (c + 1) * LOD_N[2] <= maxIndex && c < 300; c++) lodTile(2, c);   // cached; only new tiles load
+    tlTimer = setTimeout(refreshTimeline, 60000);
   }
-  setTimeout(refreshTimeline, 1500); setInterval(refreshTimeline, 60000);
+  tlTimer = setTimeout(refreshTimeline, 1500);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - tlAt > 60000 && !tlBusy) refreshTimeline(); });
   function timeAt(idx) {
     const P = tlPoints;
     if (!P.length) return null;
@@ -868,9 +877,10 @@ void main(){
       return;
     }
     if (!live) parts.push("history · strip " + Math.floor(viewLeft() / SW()) + "/" + maxIndex);
-    if (gpu && gpu.strip_seconds) parts.push(gpu.strip_seconds.toFixed(1) + "s/strip");
+    // GPU = time to paint one strip; stream = how fast viewers actually move (px/s and the matching s/strip).
+    if (gpu && gpu.strip_seconds) parts.push("GPU " + gpu.strip_seconds.toFixed(1) + " s/strip");
     parts.push(aheadStrips.toFixed(1) + " ahead");
-    parts.push(speed.toFixed(0) + " px/s" + (speedMult > 1 ? " · " + speedMult + "×" : ""));
+    parts.push(speed.toFixed(0) + " px/s" + (speed > 0.5 ? " (" + (SW() / speed).toFixed(1) + " s/strip)" : "") + (speedMult > 1 ? " · " + speedMult + "×" : ""));
     parts.push(viewers + (viewers === 1 ? " viewer" : " viewers"));
     resetWatching(statusText);
     statusText.textContent = parts.join("  ·  ");

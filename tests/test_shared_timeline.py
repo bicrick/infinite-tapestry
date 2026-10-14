@@ -16,9 +16,9 @@ def test_auto_speed_tracks_capacity_smoothly():
     gen_px, cap = 128 * 6.0, 50.0
     speeds = []
     for _ in range(int(120 / 0.05)):
-        gen_px += cap * 0.05  # GPU paints at capacity
+        if tl.pos is None or gen_px - tl.pos < 128 * 5: gen_px += cap * 0.05  # GPU paints at capacity until the buffer is full
         speeds.append(tl.step(0.05, gen_px, cap))
-    assert abs(speeds[-1] - cap) < 6  # converges near GPU rate
+    assert abs(speeds[-1] - cap * tl.headroom) < 2  # holds ~15% below the GPU rate (slack to refill after stalls)
     jumps = max(abs(a - b) for a, b in zip(speeds, speeds[1:]))
     assert jumps < 1.0  # no jitter per 50ms tick
     assert 0 < gen_px - tl.pos < 128 * 6  # never runs off the edge

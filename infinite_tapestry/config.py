@@ -21,7 +21,7 @@ class Config:
     context_width: int = 384  # window_width - strip_width
 
     # Buffer / scroll
-    buffer_target: int = 3  # strips to keep ahead
+    buffer_target: int = 5  # strips the generator keeps unacked (timeline steers ~3 ahead; the extra 2 absorb stalls)
     buffer_min: int = 2  # below this, client should slow down
     blend_strips: int = 2  # strips to interpolate between prompts
     history_limit: int = 600  # strips kept in memory; older ones are read from disk

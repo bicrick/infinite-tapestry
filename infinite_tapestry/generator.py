@@ -155,6 +155,10 @@ class StripGenerator:
         if self._thread:
             self._thread.join(timeout=timeout)
             self._thread = None
+        try:
+            self.flush_persist()   # last strips/state land before a restart
+        except Exception:
+            logger.warning("persist flush on stop timed out")
         logger.info("Generator thread stopped")
 
     def _encode_jpeg(self, image: Image.Image) -> bytes:
@@ -451,6 +455,36 @@ class StripGenerator:
         except Exception:
             logger.exception("Persisting strip %s failed", strip.index)
 
+    def _persist_async(self, strip: Strip) -> None:
+        """Upload/save on one ordered background worker so the next denoise starts immediately.
+        State + canvas are snapshotted now so the saved state matches this strip."""
+        store = getattr(self, "store", None)
+        if store is None:
+            return
+        if getattr(self, "_persist_pool", None) is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._persist_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="persist")
+            self._persist_backlog = 0
+        state, canvas, force = self.snapshot_state(), self.canvas, strip.index % 10 == 0
+        def job() -> None:
+            try:
+                store.save_strip(strip)
+                store.save_state(state, canvas, force=force)
+            except Exception:
+                logger.exception("Persisting strip %s failed", strip.index)
+            finally:
+                self._persist_backlog -= 1
+        self._persist_backlog += 1
+        fut = self._persist_pool.submit(job)
+        if self._persist_backlog > 6:   # uploads badly behind: wait, so memory can't grow unbounded
+            logger.warning("persist backlog %s; waiting for uploads", self._persist_backlog)
+            fut.result()
+
+    def flush_persist(self, timeout: float = 30.0) -> None:
+        pool = getattr(self, "_persist_pool", None)
+        if pool is not None:
+            pool.submit(lambda: None).result(timeout=timeout)
+
     def _record_time(self, dt: float) -> None:
         a = self._ema_alpha
         self.gen_seconds_ema = dt if self.gen_seconds_ema is None else (1 - a) * self.gen_seconds_ema + a * dt
@@ -484,7 +518,7 @@ class StripGenerator:
                     continue
                 ok = self.buffer.put(strip, block=True, timeout=2.0)
                 if ok:
-                    self._persist(strip)
+                    self._persist_async(strip)
                 if not ok:
                     if self.buffer.closed or self._stop.is_set():
                         break

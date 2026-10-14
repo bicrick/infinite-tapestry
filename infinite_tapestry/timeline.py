@@ -24,7 +24,7 @@ class Timeline:
         gain: float = 0.6,
         tau: float = 4.0,
         accel: float = 6.0,
-        headroom: float = 0.9,
+        headroom: float = 0.85,
     ) -> None:
         self.sw = strip_width
         self.default_speed = default_speed
@@ -52,7 +52,9 @@ class Timeline:
         if self.mode == "manual":
             return self.manual_speed * self.multiplier
         target = self.sw * self.target_ahead
-        k = max(0.2, min(1.6, 1 + self.gain * (ahead - target) / target))
+        # Slow down when the runway is short; never run faster than headroom x capacity when it's long,
+        # so the GPU keeps ~15% slack to rebuild the buffer after a stall (the buffer itself holds more than target).
+        k = max(0.2, min(1.0, 1 + self.gain * (ahead - target) / target))
         return (capacity or self.default_speed) * self.headroom * k * self.multiplier
 
     def step(self, dt: float, generated_px: float, capacity: float | None) -> float:
