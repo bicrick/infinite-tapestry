@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Fuel · Infinite Tapestry</title>
-  <meta name="description" content="Infinite Tapestry paints around the clock on a rented GPU. See what painting costs, how much has been donated, and add fuel if you like." />
+  <meta name="description" content="Buy prepaid GPU fuel for Infinite Tapestry — compute time used to generate images on the site. See painting costs and fuel purchased." />
   <link rel="canonical" href="https://infinite-tapestry.vercel.app/fuel" />
   <meta property="og:type" content="website" /><meta property="og:site_name" content="Infinite Tapestry" />
-  <meta property="og:title" content="Fuel · Infinite Tapestry" /><meta property="og:description" content="Infinite Tapestry paints around the clock on a rented GPU. See what painting costs, how much has been donated, and add fuel if you like." />
+  <meta property="og:title" content="Fuel · Infinite Tapestry" /><meta property="og:description" content="Buy prepaid GPU fuel for Infinite Tapestry — compute time used to generate images on the site. See painting costs and fuel purchased." />
   <meta property="og:url" content="https://infinite-tapestry.vercel.app/fuel" /><meta property="og:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
   <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
   <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
@@ -23,15 +23,15 @@
   <!--chrome:header-->
   <main class="doc fuel-page">
     <h1>Fuel</h1>
-    <p class="lede">The tapestry paints nonstop on a rented GPU, with Auto directing between ideas. Here's what that costs and how much the crowd has chipped in.</p>
+    <p class="lede">The tapestry paints nonstop on a rented GPU, with Auto directing between ideas. Fuel is prepaid GPU compute time used to generate images here. Here's what painting costs and how much fuel has been bought.</p>
     <div class="fp-card">
       <div class="fuel-line big"><span id="fuel-fill-big"></span></div>
       <div class="fuel-caption" id="fuel-caption">…</div>
       <p class="fine" id="fuel-sub"></p>
-      <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" role="img" aria-label="Daily painting cost versus donations"></svg>
+      <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" role="img" aria-label="Daily painting cost versus fuel purchased"></svg>
       <p id="fuel-chart-note" class="fine fuel-legend"></p>
     </div>
-    <h2>Add fuel</h2>
+    <h2>Buy fuel</h2>
     <div class="tiers" id="tiers">
       <button data-cents="300">$3<small>&nbsp;</small></button>
       <button data-cents="1000">$10<small>&nbsp;</small></button>
@@ -39,11 +39,11 @@
     </div>
     <input id="donor-note" class="vibe" maxlength="140" placeholder="A note for the wall (optional)" />
     <p class="fine" id="fuel-rate-note"></p>
-    <p class="fine">Totally optional. Payments are handled by Stripe; card fees come out before fuel is counted. Donors are thanked on the <a href="/about">about page</a>.</p>
+    <p class="fine">A paid digital service: prepaid GPU time for image generation on this site. Payments are handled by Stripe; card fees come out before fuel is credited. Buyers are listed in the Hall of Heroes below.</p>
     <p class="fine" id="fuel-msg" role="status"></p>
     <section class="heroes" aria-labelledby="heroes-h">
       <h2 id="heroes-h">Hall of Heroes</h2>
-      <p class="fine">The people whose fuel has kept the brush moving. Thank you.</p>
+      <p class="fine">People who have bought GPU fuel for the tapestry.</p>
       <ol class="hero-list" id="heroes"><li class="hero-skel"></li><li class="hero-skel"></li></ol>
     </section>
   </main>

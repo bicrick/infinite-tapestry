@@ -74,7 +74,7 @@ function renderBanner(d) {
   const b = d.banner, el = $("p-banner");
   const href = b && safeHref(b.url);
   el.classList.toggle("hidden", !d.donor);
-  if (d.donor) el.innerHTML = `<span class="pb-heart" aria-hidden="true">✦</span><span class="pb-kept">Keeps the tapestry alive</span>` +
+  if (d.donor) el.innerHTML = `<span class="pb-heart" aria-hidden="true">✦</span><span class="pb-kept">Bought GPU fuel</span>` +
     (b && b.tagline ? `<span class="pb-tag">“${esc(b.tagline)}”</span>` : "") +
     (href ? `<a class="pb-link" href="${esc(href)}" target="_blank" rel="nofollow ugc noopener noreferrer">${esc(hostOf(href))} ↗</a>` : "");
   const ed = $("p-banner-edit");
@@ -85,7 +85,7 @@ function renderBanner(d) {
     $("pbe-count").textContent = `${$("pbe-tag").value.length}/60`;
   }
 }
-const BANNER_ERR = { content_not_allowed: "That line isn't allowed. Keep it friendly.", bad_url: "That link isn't allowed. Use a plain https website.", donors_only: "Banners are for donors.", login_required: "Sign in first." };
+const BANNER_ERR = { content_not_allowed: "That line isn't allowed. Keep it friendly.", bad_url: "That link isn't allowed. Use a plain https website.", donors_only: "Banners are for people who have bought fuel.", login_required: "Sign in first." };
 $("pbe-tag").addEventListener("input", () => { $("pbe-count").textContent = `${$("pbe-tag").value.length}/60`; });
 $("p-banner-edit").addEventListener("submit", async (e) => {
   e.preventDefault();

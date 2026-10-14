@@ -149,7 +149,7 @@ async function fuelBalance() {
   return { balance: Number(rows[0] ? rows[0].balance_cents : 0), pod: rows[0] && rows[0].pod_status };
 }
 
-// Reconcile the GPU pod. Fuel (donations) is display-only: the pod runs 24/7. The only automatic stop is the
+// Reconcile the GPU pod. Fuel (prepaid purchases) is display-only: the pod runs 24/7. The only automatic stop is the
 // RunPod credit guard (account balance <= RUNPOD_MIN_BALANCE, default $0.50), plus an explicit desired=off.
 // Starting is gated by CONTROLLER_ENABLE_START=1.
 const MIN_BALANCE = () => Number(env("RUNPOD_MIN_BALANCE", "0.5"));

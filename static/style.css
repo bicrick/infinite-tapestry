@@ -576,7 +576,7 @@ body.offline-on #intro, body.offline-on .ui, body.offline-on .amb { opacity: 0 !
 @keyframes drop-in { from { transform: translateY(4px); opacity: 0 } to { transform: none; opacity: 1 } }
 .ref-chip img { width: 30px; height: 30px; }
 
-/* ---------- donors: kept-alive ticker, shout-outs ---------- */
+/* ---------- fuel buyers: kept-alive ticker, shout-outs ---------- */
 .kept { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 30; font-size: 11.5px; letter-spacing: .02em;
   color: var(--muted); white-space: nowrap; pointer-events: auto; transition: opacity .6s ease; }
 .kept-l { opacity: .7; }
@@ -1126,7 +1126,7 @@ body.saver .toast.nudge, body.ambient .toast.nudge { display: none; }
 .theme-toggle button { all:unset; cursor:pointer; padding:4px 10px; border-radius:999px; font-size:12px; color:rgba(var(--ink),.55); }
 .theme-toggle button[aria-pressed="true"] { background:rgba(var(--ink),.08); color:var(--fg); }
 
-/* Fuel: donations vs. cost */
+/* Fuel: prepaid purchases vs. cost */
 .fuel-chart { height: auto !important; aspect-ratio: 600 / 160; }
 #fuel-sub { margin: 6px 0 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 .fuel-legend { display: flex; align-items: center; gap: 6px; color: var(--muted); }
