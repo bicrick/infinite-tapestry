@@ -74,8 +74,8 @@
     let rows = "", gap = null;   // consecutive empty hours collapse into one quiet row
     const flush = () => {
       if (gap === null) return;
-      const label = gap.a === gap.b ? fmtH(gap.a) : `${fmtH(gap.a)}–${fmtH(gap.b + 1 === 24 ? 0 : gap.b + 1)}`;
-      rows += `<li><span class="hr gap"><span class="hl">${label}</span><em>${gap.future ? "Not yet" : "Nothing painted"}</em></span></li>`;
+      const label = gap.a === gap.b ? fmtH(gap.a) : `${fmtH(gap.a)} – ${gap.b + 1 === 24 ? "midnight" : fmtH(gap.b + 1)}`;
+      rows += `<li><span class="hr gap"><span class="hl">${label}</span><em>${gap.future ? "Still to come today" : "Nothing painted"}</em></span></li>`;
       gap = null;
     };
     const nowMs = Date.now();
@@ -85,8 +85,8 @@
       if (!live) { const fut = t0 > nowMs; if (gap && gap.future === fut) gap.b = h; else { flush(); gap = { a: h, b: h, future: fut }; } continue; }
       flush();
       const hi = ideas.filter((x) => { const t = +timeAt(d, x.a); return t >= t0 && t < t0 + 36e5; });
-      const chipsHtml = hi.length ? `<div class="hchips">${hi.slice(0, 3).map(chip).join("")}${hi.length > 3 ? `<button class="chip more" type="button">+${hi.length - 3}</button><span class="rest">${hi.slice(3).map(chip).join("")}</span>` : ""}</div>` : "";
-      rows += `<li><a class="hr on" href="/?at=${ia}" aria-label="Replay ${fmtH(h)}"><span class="hl">${fmtH(h)}</span><i data-src="${thumb(Math.round((ia + Math.max(ia, ib)) / 2))}"></i></a>${chipsHtml}</li>`;
+      const chipsHtml = hi.length ? `<div class="hchips">${hi.slice(0, 3).map(chip).join("")}${hi.length > 3 ? `<button class="chip more" type="button" aria-label="Show ${hi.length - 3} more ideas">+${hi.length - 3} more ideas</button><span class="rest">${hi.slice(3).map(chip).join("")}</span>` : ""}</div>` : "";
+      rows += `<li><a class="hr on" href="/?at=${ia}" aria-label="Replay ${fmtH(h)}" title="Replay from ${fmtH(h)}"><span class="hl">${fmtH(h)}</span><i data-src="${thumb(Math.round((ia + Math.max(ia, ib)) / 2))}"></i></a>${chipsHtml}</li>`;
     }
     flush();
     $("d-hours").innerHTML = rows;

@@ -31,3 +31,6 @@ html.signed #acct-in { display:none; }
 @media (max-width: 380px) { .it-brand { font-size:13px; } .it-links { gap:12px; font-size:13px; } }
 body.page { --it-page: var(--bg-deep); }
 .it-nav { background:linear-gradient(var(--it-page, var(--it-bg)) 45%, transparent); }
+
+/* Footer lives below the fold: page content fills at least one full viewport, so the footer only shows on scrolling to the very bottom. */
+body:has(> .it-foot) > main { min-height:100vh; min-height:100dvh; }
