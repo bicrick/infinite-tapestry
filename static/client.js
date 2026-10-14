@@ -715,7 +715,7 @@ void main(){
       const zt = 1;   // no zoom-out while scrubbing anywhere (blur + wheel label instead)
       // Desktop ribbon: while the chrome is up the band eases down to a ribbon; idle -> full bleed.
       const b = document.body.classList;
-      const rt = !portrait() && !b.contains("immersive") ? RIBBON : 1;   // ribbon always; full only via the fullscreen button
+      const rt = !portrait() && !document.fullscreenElement && !b.contains("immersive") ? RIBBON : 1;   // ribbon in a window; full bleed in fullscreen
       ribbon += (rt - ribbon) * (1 - Math.exp(-dt * 4.2));
       if (Math.abs(ribbon - rt) < 0.0008) ribbon = rt;
       ribbonAnchor += ((panMode === "live" || panMode === "return" ? 1 : 0) - ribbonAnchor) * Math.min(1, dt * 5);
