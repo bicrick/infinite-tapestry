@@ -69,7 +69,7 @@ class PromptScheduler:
 QUALITY_NEGATIVE = ""   # no look-steering negatives for any scene
 # User scenes: no look-steering negatives (no blurry/low quality/ugly/wallpaper/lifeless), only
 # layout artifacts (text, frames, panels) and the anti-nudity terms.
-USER_NEGATIVE = ("text, watermark, frame, border, split screen, diptych, triptych, panel, multi-panel, collage, "
+USER_NEGATIVE = ("text, letters, words, watermark, signage, frame, border, split screen, diptych, triptych, panel, multi-panel, collage, "
                  "nsfw, nude, naked, nudity, sexual, nipples, cleavage, erotic")
 MIN_TRANSITION = 1  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
 MAX_TRANSITION = 3

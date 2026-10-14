@@ -251,7 +251,7 @@ class Crowd:
                 await asyncio.to_thread(self.supa.audit, "ref_block", rid, {"flags": plan.get("image_flags"), "source": plan.get("source")})
                 continue
             body = r.get("body") or ""
-            scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
+            scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), 1,   # 1-strip takeover
                                  BUSY_HOLD if self.busy else 4, source=body[:200], origin="user",
                                  style=s.get("style"), beats=s.get("beats"), lora=explicit_lora(body))
                       for s in (plan.get("scenes") or [])[:1]

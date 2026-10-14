@@ -252,7 +252,7 @@ def clean_title(title: Any, intent: str) -> str:
 def assemble_plan(core: str, title: Any = None, hold: int = 3) -> dict[str, Any]:
     """The prompt is exactly the user's text: no suffix, quality, style or camera tokens. One scene, no beats."""
     return {"scenes": [{"title": clean_title(title, core), "prompt": core, "negative": "", "style": "",
-                        "transition": 2, "hold": hold, "beats": []}]}
+                        "transition": 1, "hold": hold, "beats": []}]}
 
 
 
@@ -436,7 +436,7 @@ def fallback_plan(intent: str, reason: str = "") -> dict[str, Any]:
                 "title": raw_title(intent),
                 "prompt": sanitize_raw(intent) or intent,
                 "negative": "",
-                "transition": 2,
+                "transition": 1,
                 "hold": 4,
             }
         ],

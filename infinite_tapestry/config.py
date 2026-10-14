@@ -46,6 +46,9 @@ class Config:
     sdxl_fallback_model: str = "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
     ip_adapter: bool = True  # SDXL only: image ideas steer strips via IP-Adapter (refs.py); face mode not shipped
     style_loras: bool = True  # SDXL only: load style LoRAs (styles.py) and ramp them across transitions
+    takeover_strips: int = 2       # first strips of a new user idea repaint nearly all context
+    takeover_seam_px: int = 96     # ...keeping only this much of the old scene as the seam
+    takeover_cfg_boost: float = 3.0  # extra CFG during a user takeover (CFG models)
     scene_change_repaint: float = 0.7  # fraction of context repainted while blending into a new scene
     user_cfg_boost: float = 1.5  # extra CFG for user ideas
     dup_check: bool = False  # reject strips that clone visible context (klein preset turns it on)
@@ -85,6 +88,7 @@ class Config:
     nsfw_log_min: float = 0.5     # reference-image scores in [nsfw_log_min, nsfw_threshold) go to ops_events
     negative_prompt: str = (
         "watermark, text, frame, border, "
+        "text, letters, words, signage, "
         "collage, split screen, diptych, panel, seam, "
         "multiple horizons, stacked landscapes, layered strata, split levels, "
         "horizontal bands, stripes, panorama panels, comic strip panels, "

@@ -190,10 +190,23 @@ class StripGenerator:
         except Exception:
             scene_meta = None
         band = min(cfg.repaint_band, ctx_w // 2) if self._strip_index > 0 else 0
+        # Strips since the scene on stage changed (user ideas take over decisively for the first few).
+        sk = ((scene_meta or {}).get("title"), (scene_meta or {}).get("by"), (scene_meta or {}).get("origin"))
+        if sk != getattr(self, "_scene_key", None):
+            self._scene_key, self._scene_strips = sk, 0
+        else:
+            self._scene_strips = getattr(self, "_scene_strips", 0) + 1
+        user_takeover = (scene_meta or {}).get("origin") == "user" and \
+            self._scene_strips < int(getattr(cfg, "takeover_strips", 2))
+        self.last_takeover = bool(user_takeover)
         # Scene change: repaint most of the visible context (keep only a narrow seam
         # band) so the new idea isn't trapped inside the old composition.
         if band and prompt_b and not cfg.mock:
             band = max(band, int(ctx_w * getattr(cfg, "scene_change_repaint", 0.7)))
+        # User idea taking over: repaint nearly all visible context for its first strips (only a thin seam
+        # of the old scene stays), so the old composition can't re-propagate into the new idea.
+        if band and user_takeover and not cfg.mock:
+            band = max(band, ctx_w - int(getattr(cfg, "takeover_seam_px", 96)))
         self.last_band = band
         hide = int(getattr(cfg, "context_mask_px", 0) or 0)
         if hide and self._strip_index > 0 and not cfg.mock:
@@ -214,7 +227,10 @@ class StripGenerator:
         # User ideas steer harder than Auto filler.
         if hasattr(self.inpainter, "guidance"):
             user_scene = (scene_meta or {}).get("origin") == "user"
-            self.inpainter.guidance = cfg.guidance_scale + (getattr(cfg, "user_cfg_boost", 1.5) if user_scene else 0.0)
+            boost = getattr(cfg, "user_cfg_boost", 1.5) if user_scene else 0.0
+            if user_takeover and cfg.guidance_scale > 1.5:   # CFG models only (klein is distilled, guidance 1.0)
+                boost = max(boost, getattr(cfg, "takeover_cfg_boost", 3.0))
+            self.inpainter.guidance = cfg.guidance_scale + boost
         from .guard import is_disallowed
 
         # Last-line prompt guard for Auto/LLM-written prompts only. User ideas are the user's own words,

@@ -227,11 +227,14 @@ class Autopilot:
         d = self.director
         if d.upcoming_count() > 0:
             return
-        cur = d.recent(1)[-1]
+        # Vary the last AUTO scene (never re-run a user's idea as filler), and keep it short so it can't
+        # sit on screen for a minute (was transition 20 + hold 16 strips).
+        autos = [r for r in d.recent(12) if r.get("origin") != "user" and r.get("source") != "variation"]
+        cur = autos[-1] if autos else {"prompt": "a quiet endless meadow under drifting clouds", "title": "Drifting Meadow"}
         base = cur["prompt"].split(", seen through")[0]
         mod = random.choice(VARIATIONS)
-        d.add([make_scene(f"{base}, {mod}", cur.get("negative", ""), soft_title(f"{cur['title']}, {mod.split()[-1]}"),
-                          20, 16, source="variation", origin="auto", style=cur.get("style"))])
+        d.add([make_scene(f"{base}, {mod}", cur.get("negative", ""), soft_title(cur["title"]),
+                          2, 3, source="variation", origin="auto", style=cur.get("style"))])
         self.on_change()
 
     async def tick(self) -> None:
