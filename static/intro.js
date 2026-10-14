@@ -5,7 +5,18 @@
 // Cost: one WebGL draw call per frame; colours come from a 256x64 band sample refreshed ~10 Hz during the resolve.
 (() => {
   const body = document.body;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches || /[?&]nointro/.test(location.search)) { body.classList.remove("intro"); body.classList.add("loaded"); return; }
+  if (/[?&]nointro/.test(location.search)) { body.classList.remove("intro"); body.classList.add("loaded"); return; }
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    // Calm fallback: no particles or motion; the band simply fades in once its pixels are drawn (opacity only).
+    const vw = document.getElementById("view"); vw.style.opacity = "0";
+    const t1 = performance.now();
+    const go = () => { body.classList.remove("intro"); body.classList.add("loaded"); vw.style.transition = "opacity .9s ease"; vw.style.opacity = "";
+      setTimeout(() => { vw.style.transition = ""; body.classList.add("settled"); }, 1000); };
+    const tick = (now) => { const v = window.TapestryView, cov = v && v.ready() ? v.coverage() : 0;
+      if (cov >= 0.999 || (cov >= 0.85 && now - t1 > 6000) || now - t1 > 15000) go(); else requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    return;
+  }
   body.classList.add("intro");
   const view = document.getElementById("view");
   const V = () => window.TapestryView;
@@ -121,7 +132,7 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
   const CARD = LIGHT ? [1, 1, 1] : [0, 0, 0];
 
   const t0 = performance.now();
-  let synth = 0, lastT = t0, offsetFix = null, resolveAt = 0, readyAt = null, revealed = false, fN = 0, fullN = 0;
+  let synth = 0, lastT = t0, offsetFix = null, resolveAt = 0, readyAt = null, revealed = false, sampleAt = 0, fullN = 0;
   const RESOLVE = 3200;
   function worldLeft(now) {
     const v = V(); const real = v && v.ready() ? v.left() : null;
@@ -133,7 +144,7 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
     return real + offsetFix;
   }
   function introFrame(now) {
-    const dt = Math.min(0.05, (now - lastT) / 1000);
+    const dt = Math.min(0.1, (now - lastT) / 1000);   // all motion is elapsed-time based (throttled rAF at ~30 fps or lower stays smooth)
     synth += dt * 30;
     const W = view.width || innerWidth, H = view.height || innerHeight;
     const cw = Math.round(W * KR), ch = Math.round(H * KR);
@@ -150,9 +161,9 @@ void main(){ vec2 d = gl_PointCoord - .5; float a = exp(-dot(d, d) * 9.) * vA; g
       // Resolve only once the strips in view are decoded AND drawn (coverage is counted inside draw()), held for a few
       // frames. A partial band is accepted only late, when the LOD underlay fills the gaps. Never a time-only fallback.
       if (cov >= 0.999) fullN++; else fullN = 0;
-      if (!resolveAt && now - t0 > 500 && (fullN >= 3 || (cov >= 0.85 && now - readyAt > 6000))) resolveAt = now;
+      if (!resolveAt && now - t0 > 500 && (fullN >= 2 || (cov >= 0.85 && now - readyAt > 6000))) resolveAt = now;
       // band colour sample → texture, ~10 Hz while the dots are still visible
-      if (resolveAt && (fN++ % 6 === 0)) { pg.drawImage(view, 0, Math.max(0, band.top), W, Math.max(1, band.height), 0, 0, 256, 64); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, probe); }
+      if (resolveAt && now - sampleAt >= 100) { sampleAt = now; pg.drawImage(view, 0, Math.max(0, band.top), W, Math.max(1, band.height), 0, 0, 256, 64); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, probe); }
     }
     const p = resolveAt ? Math.min(1, (now - resolveAt) / RESOLVE) : 0;
     const hand = Math.max(0, (p - 0.8) / 0.2), he = hand * hand * (3 - 2 * hand);   // splats have covered the band: hand over

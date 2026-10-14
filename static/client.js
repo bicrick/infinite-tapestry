@@ -680,7 +680,9 @@ void main(){
   window.TapestryJump = jumpTo;
 
   function frame(ts) {
-    if (saver.on && lastTs && ts - lastTs < 30) { requestAnimationFrame(frame); return; }   // ~30fps cap
+    // ~30fps cap on 60 Hz+ displays. Threshold 24 ms (not 30): when the browser itself already throttles rAF to ~30 fps
+    // (macOS Low Power Mode / Chrome Energy Saver) frames land at 28-36 ms, and a 30 ms gate dropped every other one (≈15 fps).
+    if (saver.on && lastTs && ts - lastTs < 24) { requestAnimationFrame(frame); return; }
     if (!lastTs) lastTs = ts;
     const dt = Math.min(0.1, (ts - lastTs) / 1000);
     lastTs = ts;
@@ -725,7 +727,8 @@ void main(){
       if (Math.abs(zoom - 1) < 0.001 && Math.abs(zoomVel) < 0.01) { zoom = 1; zoomVel = 0; }
     }
     // During the load-in the view is hidden behind the loader (opacity 0 until it resolves): paint it every other frame.
-    if (!(document.body.classList.contains("intro") && canvas.style.opacity === "" && (frame.k = (frame.k || 0) + 1) % 2)) draw();
+    // (only halve it on fast displays: at a throttled ~30 fps every frame is needed or the hand-over stutters)
+    if (!(document.body.classList.contains("intro") && canvas.style.opacity === "" && dt < 0.02 && (frame.k = (frame.k || 0) + 1) % 2)) draw();
     updateTimeline();
     hudTimer += dt;
     if (hudTimer > 0.5) { hudTimer = 0; updateHud(srvSpeed, livePos === null ? 0 : panoramaWidth() - livePos); }
