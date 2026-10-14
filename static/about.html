@@ -76,10 +76,51 @@
             <h3><span class="n">03</span>&nbsp; Watch it land</h3><p>Your idea scrolls in for everyone watching, titled, with its own page you can share.</p>
           </div>
         </div>
+
+        <div id="fuel" class="how-fuel reveal">
+          <div class="how-fuel-copy">
+            <p class="eyebrow">04 · Fuel</p>
+            <h3>People buy fuel. Fuel pays GPU inference costs. The tapestry keeps generating.</h3>
+            <p>Every strip is painted by a rented GPU. Fuel is prepaid GPU time you purchase for that inference — the same compute that turns ideas into the live scroll.</p>
+          </div>
+          <div class="fuel-stage">
+            <div class="fuel-gauge" role="img" aria-labelledby="fg-hours fg-caption">
+              <div class="fg-ring" aria-hidden="true">
+                <svg viewBox="0 0 120 120">
+                  <circle class="fg-track" cx="60" cy="60" r="52" />
+                  <circle class="fg-fill" id="fg-fill" cx="60" cy="60" r="52" pathLength="100" />
+                </svg>
+                <div class="fg-core">
+                  <b id="fg-hours">—</b>
+                  <span id="fg-unit">GPU time left</span>
+                </div>
+              </div>
+              <p class="fg-caption" id="fg-caption">Loading live fuel…</p>
+              <div class="fg-stats">
+                <div class="fg-stat"><b id="fg-rate">—</b><span>inference / hr</span></div>
+                <div class="fg-stat"><b id="t-state">—</b><span id="t-state-l">right now</span></div>
+                <div class="fg-stat"><b id="fg-bought">—</b><span>fuel bought</span></div>
+              </div>
+            </div>
+            <div class="fuel-side">
+              <div class="fuel-heroes">
+                <div class="fh-head">
+                  <h3>Latest Hall of Heroes</h3>
+                  <p>Recent buyers of prepaid GPU fuel.</p>
+                </div>
+                <ol class="fh-list" id="about-heroes" aria-live="polite">
+                  <li class="fh-skel"></li><li class="fh-skel"></li><li class="fh-skel"></li><li class="fh-skel"></li>
+                </ol>
+              </div>
+              <a class="cta fuel-cta" href="/fuel">Buy GPU fuel <span>→</span></a>
+              <p class="fuel-fine">Costs, the full Hall of Heroes, and checkout are on the <a href="/fuel">Fuel page</a>.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section style="padding-top:0">
+    <section id="explore" style="padding-top:0">
       <div class="wrap">
         <p class="eyebrow reveal">More to explore</p>
         <h2 class="reveal">Almost nothing on screen. The painting is the point.</h2>
@@ -112,25 +153,6 @@
             <h2>Every scene gets its own page.</h2>
             <p style="max-width:42ch">Hover a title to see who suggested it, and click it to open the scene's page with its strips, prompt and a link to replay it. Send it to anyone.</p>
             <p style="margin-top:22px"><a class="cta ghost" href="/s/173">See an example <span>→</span></a></p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="fuel" style="padding-top:0">
-      <div class="wrap">
-        <div class="alive">
-          <div>
-            <p class="eyebrow reveal">Fuel</p>
-            <h2 class="reveal">One GPU, painting around the clock.</h2>
-            <p class="reveal" style="max-width:46ch">The tapestry runs on a single GPU that costs about $0.90 an hour. Fuel is prepaid GPU compute time you can buy for image generation on the site. The fuel meter shows how much has been purchased versus what painting has cost. The painting doesn't stop when it runs low.</p>
-          </div>
-          <div class="reveal">
-            <div class="stats">
-              <div class="stat"><b>$0.90</b><span>GPU per hour</span></div>
-              <div class="stat"><b>24/7</b><span>painting</span></div>
-              <div class="stat"><b id="t-state">—</b><span id="t-state-l">right now</span></div>
-            </div>
           </div>
         </div>
       </div>
