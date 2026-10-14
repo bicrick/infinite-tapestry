@@ -33,7 +33,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   "use strict";
   // Who suggested a scene: '@handle', 'a guest' or 'Auto'. The owner is never credited (shown as Auto).
   // Owner/system handles are never shown: they read as "Someone" (a user idea is never labelled Auto).
-  const HIDDEN = new Set(["bicrick", "claude", "auto"]);
+  const HIDDEN = new Set(["bicrick", "auto"]);
   function credit(by, origin, opts) {
     if (origin === "auto") return "Auto";
     const all = String(by || "").split(",").map((h) => h.trim().replace(/^@/, "")).filter(Boolean);
