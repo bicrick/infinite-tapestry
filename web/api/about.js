@@ -4,6 +4,8 @@ const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
 // person chose to be credited — idea authors and donor wall, never ids/emails/ip).
 //   ?kind=transparency  fuel series, burn rate, streak, donor wall (recent + all-time)
 //   ?kind=history       one entry per day of the SDXL timeline: strip range, times, highlight scenes
+//   ?kind=count         live strip total + measured rate (homepage counter)
+//   ?kind=heroes        Hall of Heroes (live donations, chosen handle or 'Someone', no owner)
 //   ?kind=tile&l=2|3&c=N  low-res LOD tile (1/16 or 1/64), proxied from private storage, CDN cached
 const OWNER = new Set(["bicrick"]);
 const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
@@ -32,6 +34,26 @@ async function transparency() {
   ]);
   const bal = Number(t.balance_cents) || 0, burn = Number(t.burn_cents_per_hour) || 0;
   return { ...t, hours_left: burn > 0 ? +(bal / burn).toFixed(1) : null, fuel: fuelSummary(t.series || []), donors: { recent: Array.isArray(recent) ? recent : [], top: Array.isArray(top) ? top : [] } };
+}
+
+// Hall of Heroes: live Stripe donations only, owner/admins excluded, chosen handle or "Someone" (view donors_heroes).
+async function heroes() {
+  const rows = await rest("GET", "donors_heroes?select=name,gifts,last_at&order=last_at.desc&limit=200").catch(() => []);
+  return { heroes: (Array.isArray(rows) ? rows : []).map((r) => ({ name: OWNER.has(String(r.name).toLowerCase()) ? "Someone" : r.name, gifts: r.gifts, at: r.last_at })) };
+}
+
+// Live counter: total strips painted (current session) + measured rate over the last ~10 min.
+async function count() {
+  const h = { headers: svc() }, since = new Date(Date.now() - 10 * 60e3).toISOString();
+  const [last, early] = await Promise.all([
+    fetch(`${SB()}/rest/v1/strips?select=idx,created_at&session=eq.${SESSION()}&order=idx.desc&limit=1`, h).then((r) => r.json()),
+    fetch(`${SB()}/rest/v1/strips?select=idx,created_at&session=eq.${SESSION()}&created_at=gte.${since}&order=idx.asc&limit=1`, h).then((r) => r.json()),
+  ]);
+  const L = last && last[0], E = early && early[0];
+  if (!L) return { total: 0, rate: 0, at: new Date().toISOString() };
+  const dt = E ? (new Date(L.created_at) - new Date(E.created_at)) / 1000 : 0;
+  const rate = E && dt > 30 ? (L.idx - E.idx) / dt : 0;
+  return { total: L.idx + 1, rate: +Math.min(2, Math.max(0, rate)).toFixed(4), at: L.created_at, now: new Date().toISOString() };
 }
 
 async function allStrips() {
@@ -123,6 +145,14 @@ module.exports = async (req, res) => {
     if (kind === "transparency") {
       res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=300");
       return res.status(200).json(await transparency());
+    }
+    if (kind === "count") {
+      res.setHeader("cache-control", "public, s-maxage=20, stale-while-revalidate=60");
+      return res.status(200).json(await count());
+    }
+    if (kind === "heroes") {
+      res.setHeader("cache-control", "public, s-maxage=120, stale-while-revalidate=600");
+      return res.status(200).json(await heroes());
     }
     if (kind === "history") {
       const tz = /^[A-Za-z_]+\/[A-Za-z_]+$/.test(q.get("tz") || "") ? q.get("tz") : "America/Chicago";

@@ -118,3 +118,7 @@ section { padding:120px 0; }
 @media (prefers-color-scheme: light) { .band .glow { opacity:.38; } }
 @media (prefers-reduced-motion: reduce) { .band .glow i, .band .lights i, .band .sheen::before { animation:none; } .band .lights i { opacity:.35; } }
 @media (max-width: 860px) { .hero { --bh:clamp(300px, 52svh, 520px); } .band .glow { height:90px; } }
+
+/* Live band counter under the CTA */
+.tcount { margin-top:18px; font-size:13.5px; color:var(--muted); }
+.tcount b { color:var(--fg); font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
