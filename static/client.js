@@ -1230,7 +1230,7 @@ void main(){
     document.querySelectorAll(".seg[role=group] button").forEach((x) => x.classList.toggle("on", x === b));
     $("cmd-input").focus();
   }));
-  let reqId = 0;
+  let reqId = 0, ideaBusy = false, ideaKey = {};
   const pending = new Set();
   $("cmd").addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -1239,7 +1239,18 @@ void main(){
     const S = window.TapestrySocial;
     if (!text && !(S && S.hasRef && S.hasRef())) return;
     if (S && S.enabled && !S.isAdmin()) {  // production: ideas go to the shared pool
-      S.submitIdea(text).then((ok) => { if (ok) input.value = ""; });
+      // Feels instant: clear + collapse now (the submit listener below collapses), show "Sending…", one send at a time.
+      if (ideaBusy) return;
+      ideaBusy = true;
+      if (ideaKey.text !== text) ideaKey = { text, key: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)) };
+      input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true }));
+      $("cmd").classList.add("sending");
+      toast(`Sending <span class="muted">“${esc(text.length > 60 ? text.slice(0, 57) + "…" : text)}”</span>`, 20000);
+      Promise.resolve(S.submitIdea(text, ideaKey.key)).catch(() => false).then((ok) => {
+        ideaBusy = false; $("cmd").classList.remove("sending");
+        if (ok) { ideaKey = {}; return; }
+        if (!input.value) { input.value = text; input.dispatchEvent(new Event("input", { bubbles: true })); }   // failed: give the text back to retry
+      });
       return;
     }
     const req = ++reqId;
@@ -1734,6 +1745,7 @@ void main(){
   let tapping = false, tapTimer = 0;
   cmd.addEventListener("pointerdown", () => { tapping = true; clearTimeout(tapTimer); tapTimer = setTimeout(() => { tapping = false; }, 700); });
   input.addEventListener("focus", () => { setMore(false); if (!tapping) setCompose(true); });
+  input.addEventListener("focus", () => { const S = window.TapestrySocial; if (S && S.warmSend) S.warmSend(); });
   // Tap on the compact pill: focus inside the click gesture (iOS raises the keyboard) and expand, every time.
   cmd.addEventListener("click", (e) => {
     tapping = false; clearTimeout(tapTimer);

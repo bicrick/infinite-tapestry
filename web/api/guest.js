@@ -6,8 +6,10 @@ module.exports = async (req, res) => {
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const g = await guestSession(req, res, body.fp || req.query.fp);
-    const lim = (await rest("GET", "idea_limits?id=eq.1&select=guests_enabled,turnstile_required"))[0] || {};
+    const [lims, gs] = await Promise.all([rest("GET", "idea_limits?id=eq.1&select=guests_enabled,turnstile_required"),
+      rest("GET", `guest_sessions?id=eq.${g.id}&select=human_ok`).catch(() => null)]);
+    const lim = lims[0] || {};
     res.status(200).json({ handle: g.handle, banned: !!g.banned, guestsEnabled: lim.guests_enabled !== false,
-      turnstile: !!(lim.turnstile_required && process.env.TURNSTILE_SECRET_KEY && process.env.TURNSTILE_SITE_KEY) });
+      human: !!(gs && gs[0] && gs[0].human_ok), turnstile: !!(lim.turnstile_required && process.env.TURNSTILE_SECRET_KEY && process.env.TURNSTILE_SITE_KEY) });
   } catch (e) { console.error("guest", e.message); res.status(500).json({ error: "server" }); }
 };

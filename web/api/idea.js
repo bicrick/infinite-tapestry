@@ -21,10 +21,14 @@ module.exports = async (req, res) => {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const text = String(body.text || "").replace(/\s+/g, " ").trim().slice(0, 300);
     if (text.length < 2) return res.status(400).json({ error: "bad_length" });
-    const g = await guestSession(req, res, body.fp);
+    // Independent checks run in parallel (was serial: session → Turnstile → moderation).
+    const [g, human, flagged] = await Promise.all([guestSession(req, res, body.fp),
+      body.turnstile ? turnstileOk(body.turnstile) : false, moderate(text)]);
     if (g.banned) return res.status(403).json({ error: "not_allowed" });
-    const human = body.turnstile ? await turnstileOk(body.turnstile, g.ip) : false;
-    const flagged = await moderate(text);
+    // Idempotent: a double tap / retry of the same text from the same guest within 2 min returns the first idea.
+    const since = new Date(Date.now() - 120e3).toISOString();
+    const dup = await rest("GET", `ideas?guest_id=eq.${g.id}&body=eq.${encodeURIComponent(text)}&created_at=gt.${since}&select=id&limit=1`).catch(() => null);
+    if (dup && dup[0]) return res.status(200).json({ ok: true, handle: g.handle, id: dup[0].id, dup: true });
     let out;
     try {
       out = await rest("POST", "rpc/guest_submit_idea", { p_guest: g.id, p_ip: g.ip, p_fp: g.fp, p_body: text, p_flagged: flagged, p_human: human });

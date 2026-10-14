@@ -34,7 +34,7 @@ function friendly(e) {
   const rl = m.match(/rate_limited:?(\d+)?/);
   if (rl) return "That's a lot of ideas at once. Give it a few seconds.";
   if (m.includes("cooldown")) return "One moment, then send it again.";
-  return "Something went wrong. Try again.";
+  return "That didn't send. Your text is back in the box, tap send to retry.";
 }
 const toast = (h, ms) => W().toast(h, ms);
 
@@ -54,11 +54,17 @@ async function loadGuest() {
   try {
     const r = await fetch("/api/guest", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fp: await fingerprint() }), credentials: "same-origin" });
     if (!r.ok) return;
-    const d = await r.json(); guest.handle = d.handle; guest.enabled = d.guestsEnabled; guest.turnstile = d.turnstile;
+    const d = await r.json(); guest.handle = d.handle; guest.enabled = d.guestsEnabled; guest.turnstile = d.turnstile; if (d.human) guest.human = true;
   } catch (_) {}
 }
-let tsReady = null;
-function turnstileToken() {   // invisible Cloudflare Turnstile, only when configured server-side
+let tsReady = null, tsWarm = null;
+// Pre-warm: start the (usually invisible) check as soon as someone starts typing, so send never waits on it.
+function warmTurnstile() { if (!tsWarm) { const p = rawTurnstile(); tsWarm = { p, t: Date.now() }; p.then((t) => { if (!t) tsWarm = null; }); } }
+function turnstileToken() {
+  if (tsWarm && Date.now() - tsWarm.t < 240e3) { const p = tsWarm.p; tsWarm = null; return p; }   // tokens are single-use, valid ~5 min
+  tsWarm = null; return rawTurnstile();
+}
+function rawTurnstile() {   // invisible Cloudflare Turnstile, only when configured server-side
   if (!guest.turnstile || !CFG.turnstileSiteKey || guest.human) return Promise.resolve(null);
   tsReady = tsReady || new Promise((ok) => { const sc = document.createElement("script"); sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; sc.onload = ok; sc.onerror = ok; document.head.appendChild(sc); });
   return tsReady.then(() => new Promise((ok) => {
@@ -68,14 +74,14 @@ function turnstileToken() {   // invisible Cloudflare Turnstile, only when confi
     let done = false; const fin = (t) => { if (done) return; done = true; clearTimeout(to); setTimeout(() => box.remove(), 0); ok(t); };
     const to = setTimeout(() => fin(null), 30000);
     window.turnstile.render(box, { sitekey: CFG.turnstileSiteKey, appearance: "interaction-only", callback: fin,
-      "before-interactive-callback": () => { clearTimeout(to); box.style.opacity = "1"; box.style.pointerEvents = "auto"; },
+      "before-interactive-callback": () => { clearTimeout(to); toast("One quick check: tap the box to confirm you're human.", 8000); box.style.opacity = "1"; box.style.pointerEvents = "auto"; },
       "error-callback": () => fin(null), "expired-callback": () => fin(null), "timeout-callback": () => fin(null) });
   }));
 }
-async function submitAsGuest(text) {
+async function submitAsGuest(text, key) {
   const token = await turnstileToken();
   const r = await fetch("/api/idea", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text, fp: await fingerprint(), turnstile: token }) });
+    body: JSON.stringify({ text, key, fp: await fingerprint(), turnstile: token }) });
   const d = await r.json().catch(() => ({}));
   if (r.ok) { if (token) guest.human = true; if (d.handle) guest.handle = d.handle; return { ok: true, id: d.id || null }; }
   const map = { rate_limited: "guest_rate", too_many_pending: "guest_pending" };
@@ -309,13 +315,18 @@ async function boot() {
 
   loadGuest();
   S.guest = guest;
-  S.submitIdea = async (text) => {
+  S.warmSend = () => { if (!S.session && guest.turnstile && !guest.human) warmTurnstile(); };
+  S.submitIdea = async (text, key) => {
+    try { return await submitIdeaInner(text, key); }
+    catch (_) { toast("That didn't send. Your text is back in the box, tap send to retry.", 5000); return false; }
+  };
+  const submitIdeaInner = async (text, key) => {
     if (!S.session || !(S.profile && S.profile.handle)) {
       if (refFile) { needLogin(); return false; }          // reference images need an account
       if (!guest.enabled) { toast(ERR.signin_required); openAuth(); return false; }
-      const res = await submitAsGuest(text);
+      const res = await submitAsGuest(text, key);
       if (!res.ok && (res.err === "guest_rate" || res.err === "guest_pending") && S.nudge()) return false;
-      if (!res.ok) { toast(ERR[res.err] || "Something went wrong. Try again."); if (res.err === "signin_required") openAuth(); return false; }
+      if (!res.ok) { toast(ERR[res.err] || "That didn't send. Your text is back in the box, tap send to retry."); if (res.err === "signin_required") openAuth(); return false; }
       addLocal(text, guest.handle, res.id); addMine(res.id);
       try { window.va && window.va("event", { name: "idea_submitted", data: { who: "guest" } }); } catch (_) {}
             window.dispatchEvent(new CustomEvent("tapestry:submitted"));
@@ -616,6 +627,7 @@ async function boot() {
 
   const CHAT_ERR = { no_links: "Links aren't allowed in chat.", content_not_allowed: "That message isn't allowed here.", muted: "You're muted for a little while.",
     chat_off: "Chat is paused for now.", bad_length: "Messages are up to 200 characters.", handle_required: "Pick a name first.", signin_required: "Sign in to chat." };
+  let chatBusy = false, chatKey = {};
   $("chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const body = chatInput.value.replace(/\s+/g, " ").trim();
@@ -623,14 +635,18 @@ async function boot() {
     if (!canChat()) return openAuth();
     if (Date.now() < slowUntil) return;
     if (/(https?:\/\/|www\.)/i.test(body)) return note(CHAT_ERR.no_links, 4000);
-    $("chat-form").classList.add("sending");
+    if (chatBusy) return;
+    chatBusy = true; chatInput.value = ""; chatInput.dispatchEvent(new Event("input", { bubbles: true }));   // instant: clear now, restore on failure
+    $("chat-form").classList.add("sending"); note("Sending…", 15000);
+    if (chatKey.body !== body) chatKey = { body, key: Date.now().toString(36) + Math.random().toString(36).slice(2) };
     const r = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + S.token() },
-      body: JSON.stringify({ text: body }) }).catch(() => null);
-    $("chat-form").classList.remove("sending");
+      body: JSON.stringify({ text: body, key: chatKey.key }) }).catch(() => null);
+    $("chat-form").classList.remove("sending"); chatBusy = false;
     const d = r ? await r.json().catch(() => ({})) : {};
-    if (d.error === "slow_mode") return slow(Number(d.wait) || chatSettings.slow);
-    if (!r || !r.ok || d.error) return note(CHAT_ERR[d.error] || "That didn't send. Try again.", 4500);
-    chatInput.value = "";
+    const restore = () => { if (!chatInput.value) { chatInput.value = body; chatInput.dispatchEvent(new Event("input", { bubbles: true })); } };
+    if (d.error === "slow_mode") { restore(); note("", 1); return slow(Number(d.wait) || chatSettings.slow); }
+    if (!r || !r.ok || d.error) { restore(); return note((CHAT_ERR[d.error] || "That didn't send.") + " Tap send to retry.", 5000); }
+    note("", 1); chatKey = {};
     addChat({ id: d.id, user_id: S.session.user.id, handle: d.handle || S.profile.handle, body, created_at: new Date().toISOString() }, true);
     slow(chatSettings.slow);
   });
