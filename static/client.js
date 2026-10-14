@@ -192,7 +192,7 @@ void main(){
   c = c * gain / (1. + L * (gain - 1.) * .85);
   c = clamp(mix(vec3(dot(c, vec3(.2126, .7152, .0722))), c, sat), 0., 1.);
   vec3 bloom = tap(vec2(x, .5), 6.5); bloom = mix(vec3(dot(bloom, vec3(.33))), bloom, sat) * gain;
-  float f = exp(-dn * 3.) * smoothstep(0., .03, d + .005);
+  float f = exp(-dn * 3.) * smoothstep(0., .012, d + .006);   // starts right at the band edge
   float k = f * (uv.y > bot ? aBelow : aAbove) * alpha;
   float g = glow * exp(-dn * 1.8) * (uv.y > bot ? 1. : .6) * alpha * .35;
   o = vec4(c * k + bloom * g, k + g * light);                            // premultiplied; glow is additive on dark
@@ -218,6 +218,11 @@ void main(){
         if (k === key && motion < 0.01) return;   // idle: zero work; any change: same-frame redraw
         const div = COARSE || innerWidth <= 560 ? 6 : 4, W = Math.max(1, Math.round(w / div)), H = Math.max(1, Math.round(h / div));
         if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+        // Lay the mirror canvas over exactly the box the band canvas occupies. #view is 100vh, which on iOS is the
+        // large viewport (URL bar hidden); a 100%-tall overlay was ~80px shorter, so band-relative uvs drifted
+        // (gap above the band, overlap at the bottom edge).
+        const cw = canvas.clientWidth + "px", ch = canvas.clientHeight + "px";
+        if (cv.style.height !== ch || cv.style.width !== cw) { cv.style.width = cw; cv.style.height = ch; }
         gl.viewport(0, 0, W, H);
         if (k !== key) {
           key = k;
