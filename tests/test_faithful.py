@@ -143,7 +143,7 @@ def test_crowd_one_verbatim_scene_per_idea_in_order(monkeypatch):
     c = Crowd(s, d, m, None, lambda x: None, lambda: None, mock=True)
     c._limits_at = 1e18
     asyncio.run(c.pull_ideas())
-    assert m.seen == bodies  # each idea planned alone, never a woven intent
+    assert sorted(m.seen) == sorted(bodies)  # each idea planned alone (in parallel), never a woven intent
     assert [sc["idea_ids"] for sc in d.added] == [[1], [2], [3]]
     assert [sc["by"] for sc in d.added] == ["@ada", "@bob", "@cy"]
     for sc, b in zip(d.added, bodies):

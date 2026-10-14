@@ -56,12 +56,14 @@ _STYLE_NOTE = (
     "style = a short label for the look, e.g. \"photo\", \"oil painting\", \"anime\"."
 )
 
-AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide where the journey drifts next, forever.
-CORE GOAL (above everything else): be INVENTIVE. Come up with fun, visually intriguing scenes: surprising concepts, striking visuals, playful ideas, rich textures and saturated, gorgeous color, always within what the renderer paints well (see Renderer strengths below).
-Given the recent scenes (oldest first), invent the NEXT scenes (as many as asked). Favor themed journeys: 2-4 scenes exploring one theme (e.g. a run of fractal worlds, then reefs, then cloth and textiles), then switch to something clearly different; the request says whether to start or continue a journey. The TONE comes entirely from the MOOD in the request: for beautiful moods (serene, landscape, golden hour, cosmic, underwater, botanical, weather, architectural, abstract, still life) make sincere, awe-inspiring beauty with NO jokes, gags, mashups of unrelated things or absurd twists; only quirky, funky, bubbly, surreal or wildcard moods may use humor, visual gags or absurd combinations. Follow the THEME, JOURNEY and MOOD given in the request; do not default to quirky. Never reuse an exact recent title. No recognizable real people, nothing sexual, nothing involving minors.
-Each prompt: a concrete Stable Diffusion prompt (under 60 words) of comma-separated descriptors covering subject, setting, style, lighting and palette, describing a continuous space or pattern that can extend sideways (not one centered object). {_COMPOSITION_NOTE} No text, frames, borders or split images. Never include nudity or sexual content.
-transition = strips to blend in (2-3), hold = strips to stay (2-4). Each scene lasts ~10-15 seconds.
-Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":2,"hold":3,"style":"photo","beats":["first beat prompt","second beat prompt"]}}],"note":"one short sentence"}}"""
+AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide what comes next, forever.
+Be inventive and surprising: fun, strange, beautiful or funny ideas, always different from the recent scenes.
+Each prompt is SHORT and SIMPLE: about 5-20 words of plain language saying what the scene is. No piles of descriptors, no quality words, no camera, lens or film terms (unless that is the idea itself).
+Style: there is NO default style. Invent the look yourself every time and vary it freely (any medium, era, culture or vibe: crayon, mosaic, claymation, woodcut, neon sign, stained glass, ukiyo-e, a photo, an 80s airbrush poster...), and never repeat the look of the recent scenes. Write the look INTO the prompt in a few words at the start (any look you invent; do not reuse the examples above or a look from the recent scenes), because only the prompt is painted; style = that look as a short label. Do not default to soft, luminous, serene oil or watercolor paintings.
+Functional needs only: one continuous scene that can extend sideways (not one centered object), no text, frames or borders. {_COMPOSITION_NOTE}
+Never: nudity or sexual content, children/minors, hateful slurs or symbols, recognizable real people.
+transition = strips to blend in (2-3), hold = strips to stay (2-4).
+Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":2,"hold":3,"style":"the look in 2-4 words"}}],"note":"one short sentence"}}"""
 _IMMERSIVE_NOTE = (
     "\nSubject and framing are OPEN: any subject at any scale and any framing is welcome: vast places, interiors, "
     "close-ups, macro details, single objects, materials and textures, patterns, abstract art. Take the idea LITERALLY: "
@@ -91,7 +93,6 @@ _AUTO_CINEMA_NOTE = (
     "(foreground / midground / background). Give each scene \"beats\": 1-2 full prompts that play in order across its "
     "strips (same subject, different framing or moment). \"prompt\" = the first beat."
 )
-AUTO_SYSTEM += _AUTO_RENDER_NOTE + _IMMERSIVE_NOTE + _AUTO_CINEMA_NOTE
 
 
 
@@ -146,6 +147,9 @@ class PromptInterpreter:
         Raises on failure so the caller can back off."""
         lines = [f"{i + 1}. {r.get('title', '')}: {r.get('prompt', '')[:200]}" for i, r in enumerate(recent[-8:])]
         user = "Recent scenes, oldest first:\n" + "\n".join(lines)
+        looks = [str(r.get("style") or "").strip() for r in recent[-6:] if str(r.get("style") or "").strip() not in ("", "none")]
+        if looks:
+            user += "\nLooks already used recently (use a clearly DIFFERENT medium for every new scene, and different from each other): " + ", ".join(dict.fromkeys(looks))
         if vibe:
             user += f"\nViewer's standing vibe to lean toward (loosely): {vibe[:200]}"
         if brief:
@@ -155,6 +159,13 @@ class PromptInterpreter:
         for model in dict.fromkeys([self.model, FALLBACK_MODEL]):
             try:
                 plan = parse_plan(self._call(model, user, system=AUTO_SYSTEM, max_tokens=6000))
+                for sc in plan["scenes"]:
+                    sc["prompt"] = short_prompt(sc["prompt"])
+                    st = (sc.get("style") or "").strip()
+                    # Only the prompt is painted: if Auto's chosen look isn't in it, lead with that label.
+                    if st and st != "none" and not set(re.findall(r"[a-z]{5,}", st)) & set(re.findall(r"[a-z]{5,}", sc["prompt"].lower())):
+                        sc["prompt"] = f"{st}, {sc['prompt']}"
+                    sc["beats"] = []
                 plan["source"], plan["model"] = "haiku", model
                 return plan
             except urllib.error.HTTPError as e:
@@ -252,6 +263,19 @@ _REFUSAL = re.compile(
 )
 
 
+def short_prompt(p: str, max_words: int = 20) -> str:
+    """Auto prompts stay short: keep whole comma clauses up to max_words (hard word cut only if the first is longer)."""
+    parts = [c.strip() for c in str(p or "").split(",") if c.strip()]
+    out: list[str] = []
+    for c in parts:
+        if len(" ".join(out + [c]).split()) > max_words:
+            break
+        out.append(c)
+    if not out:
+        return " ".join(str(p or "").split()[:max_words]).rstrip(" ,.;")
+    return ", ".join(out).rstrip(" .;")
+
+
 def is_refusal(text: str) -> bool:
     return bool(_REFUSAL.search(text or ""))
 
@@ -280,7 +304,7 @@ def parse_plan(text: str) -> dict[str, Any]:
                 "title": str(s.get("title", ""))[:80],
                 "prompt": prompt[:600],
                 "negative": str(s.get("negative", "") or "")[:400],
-                "style": str(s.get("style") or "").strip().lower()[:24],
+                "style": _style_label(s.get("style")),
                 "transition": _clamp(s.get("transition"), 1, 3, 2),
                 "hold": _clamp(s.get("hold"), 2, 4, 3),
                 "beats": [str(b).strip()[:600] for b in (s.get("beats") or []) if str(b).strip()][:2] if isinstance(s.get("beats"), list) else [],
@@ -294,6 +318,13 @@ def parse_plan(text: str) -> dict[str, Any]:
     return {"scenes": scenes, "note": str(data.get("note", ""))[:200],
             "image_flags": [str(f).lower()[:20] for f in flags][:5] if isinstance(flags, list) else [],
             "director": _director(data.get("director"))}
+
+
+def _style_label(v: Any) -> str:
+    ws = str(v or "").strip().lower().replace(",", " ").split()[:4]
+    while ws and ws[-1] in ("with", "and", "of", "on", "a", "the", "in", "a", "an", "-like"):
+        ws.pop()
+    return " ".join(ws)[:48]
 
 
 def _director(d: Any) -> dict[str, Any]:

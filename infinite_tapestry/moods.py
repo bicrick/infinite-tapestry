@@ -8,25 +8,24 @@ import random
 
 # (key, weight, beautiful, relax_cliche, brief)
 MOODS = [
-    ("serene beauty", 9, True, True, "SERENE AND BEAUTIFUL: a calm, breathtaking place with soft light and harmony; pure beauty, no jokes."),
-    ("sweeping landscape", 9, True, True, "SWEEPING NATURE/LANDSCAPE: a vast, specific real-world landscape (named region, terrain, weather) shot ultra-wide; awe and scale."),
-    ("golden-hour cinematic", 8, True, True, "GOLDEN-HOUR CINEMATIC: a specific place at golden hour or blue hour, long shadows, warm rim light, film-still beauty."),
-    ("cosmic", 6, True, True, "COSMIC: awe-inspiring space or sky phenomena seen from a specific vantage (planet surface, observatory, orbit), or vast fractal structures (Mandelbulb canyons, infinite spiral nebula-like fractals); grand and quiet. Fractals are welcome here."),
-    ("underwater", 6, True, True, "UNDERWATER: immersive, specific underwater world (kelp cathedral, shipwreck, deep trench, sunbeams through swells); luminous and beautiful."),
-    ("botanical macro", 5, True, True, "BOTANICAL MACRO: the camera tiny among giant leaves, petals, dew and pollen, a whole world at insect scale; lush and delicate."),
-    ("epic weather", 6, True, True, "EPIC WEATHER: dramatic weather over a specific place (supercell, sea fog rolling in, snow squall, monsoon); powerful and gorgeous."),
-    ("architectural", 6, True, False, "ARCHITECTURAL: a stunning real or imagined interior/exterior (cathedral, brutalist atrium, temple, grand station); symmetry, light shafts, scale."),
-    ("abstract color field", 4, True, True, "ABSTRACT COLOR FIELDS: an immersive space of flowing color, light and texture (ink in water, silk, pigment clouds, luminous fractals: Mandelbrot spirals, Julia-set filigree, Mandelbulb depths); painterly and beautiful. Fractals are welcome here."),
-    ("fractal", 8, True, True, "FRACTAL: an immersive fractal world (Mandelbulb canyons, Julia-set filigree, recursive spirals, infinite crystalline branching) with rich color and depth."),
-    ("textiles", 6, True, True, "TEXTILES/CLOTH: a vast world of fabric (billowing silk dunes, woven tapestry valleys, embroidered landscapes, knitted hills, velvet folds); tactile and rich."),
-    ("cozy", 4, False, False, "COZY: a warm, inviting place with nobody in focus (rainy-night cafe interior, cabin, bookshop aisles, lantern-lit alley) with glowing lamps and comfort."),
-    ("still life", 4, True, False, "STILL LIFE, IMMERSIVE: a vast painterly Dutch-master style still life you stand inside (towering fruit, drapery, candlelight, chiaroscuro)."),
-    ("funky", 5, False, False, "FUNKY: groovy, retro, colorful energy (disco, 70s funk, roller rink, psychedelic patterns); rhythm and swagger."),
-    ("bubbly/playful", 5, False, False, "BUBBLY/PLAYFUL: light, joyful, bouncy (bubbles, balloons, candy colors, soft shapes); delight without sarcasm."),
-    ("surreal", 5, False, False, "SURREAL: a dreamlike, uncanny but beautiful world (Magritte/Dali logic, impossible geometry), eerie calm."),
-    ("quirky gag", 3, False, False, "QUIRKY/ABSURD: an ordinary place with one ridiculous twist, deadpan documentary framing."),
-    ("topical", 2, False, False, "TOPICAL: riff visually on a current event or season (no real people, no slogans, no sides)."),
-    ("wildcard", 4, False, False, "WILDCARD: pick a genre, era, art movement or culture you have NOT used recently (e.g. ukiyo-e, art deco, Soviet mosaic, Persian miniature, vaporwave) and go all in."),
+    ("serene", 6, True, True, "SERENE: a calm, peaceful scene."),
+    ("landscape", 6, True, True, "LANDSCAPE: some kind of land, sea or sky, anywhere real or imagined."),
+    ("cosmic", 5, True, True, "COSMIC: space, sky phenomena or fractal structures."),
+    ("underwater", 5, True, True, "UNDERWATER: something under water."),
+    ("tiny world", 5, True, True, "TINY WORLD: a world at insect scale or smaller."),
+    ("weather", 5, True, True, "WEATHER: weather as the main event."),
+    ("architecture", 5, True, False, "ARCHITECTURE: buildings, rooms or structures, real or impossible."),
+    ("abstract", 5, True, True, "ABSTRACT: shapes, color, pattern, texture or fractals."),
+    ("fractal", 4, True, True, "FRACTAL: a fractal or recursive world."),
+    ("materials", 5, True, True, "MATERIALS: a world made of one unexpected material (cloth, candy, glass, rust...)."),
+    ("cozy", 5, False, False, "COZY: a warm, inviting place."),
+    ("still life", 4, True, False, "STILL LIFE: objects arranged into a whole world."),
+    ("funky", 5, False, False, "FUNKY: groovy, retro, colorful energy."),
+    ("playful", 5, False, False, "PLAYFUL: light, joyful, bouncy."),
+    ("surreal", 5, False, False, "SURREAL: dream logic, impossible things."),
+    ("quirky gag", 5, False, False, "QUIRKY: an ordinary place with one ridiculous twist."),
+    ("topical", 2, False, False, "TOPICAL: riff on a current event or season (no real people, no slogans, no sides)."),
+    ("wildcard", 6, False, False, "WILDCARD: anything at all, in a medium, era or culture you have not used recently."),
 ]
 _BY_KEY = {m[0]: m for m in MOODS}
 
@@ -46,7 +45,7 @@ class MoodRotator:
         wt = lambda m: float(self.weights.get(m[0], m[1]))
         cands = [m for m in MOODS if m[0] not in self.recent and wt(m) > 0] or [m for m in MOODS if wt(m) > 0] or MOODS
         # nudge toward beauty if the last two picks were both non-beautiful
-        boost = 1.6 if sum(1 for k in list(self.recent)[-2:] if not _BY_KEY[k][2]) >= 2 else 1.0
+        boost = 1.0   # no lean toward any mood or look
         w = [max(wt(m), 1e-6) * (boost if m[2] else 1.0) for m in cands]
         return self.rng.choices([m[0] for m in cands], w)[0]
 

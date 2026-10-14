@@ -74,7 +74,7 @@ class Config:
     # One generic seed scene; Claude's autopilot takes it from there.
     prompts: list[tuple[int, str]] = field(
         default_factory=lambda: [
-            (0, "a strange softly lit dreamlike place, drifting shapes and quiet colors, highly detailed painting"),
+            (0, "a strange softly lit dreamlike place, drifting shapes and quiet colors, painting"),
         ]
     )
     autopilot: bool = True
@@ -84,8 +84,8 @@ class Config:
     nsfw_threshold: float = 0.8   # reference images (was 0.6)
     nsfw_log_min: float = 0.5     # reference-image scores in [nsfw_log_min, nsfw_threshold) go to ops_events
     negative_prompt: str = (
-        "blurry, low quality, distorted, watermark, text, frame, border, "
-        "ugly, duplicate, collage, split screen, diptych, panel, seam, "
+        "watermark, text, frame, border, "
+        "collage, split screen, diptych, panel, seam, "
         "multiple horizons, stacked landscapes, layered strata, split levels, "
         "horizontal bands, stripes, panorama panels, comic strip panels, "
         "triptych, multi-panel, stacked scenes, cutaway layers, "

@@ -66,7 +66,7 @@ class PromptScheduler:
         )
 
 
-QUALITY_NEGATIVE = ("wallpaper, tiled, empty composition, lifeless, cluttered duplicates")
+QUALITY_NEGATIVE = ""   # no look-steering negatives for any scene
 # User scenes: no look-steering negatives (no blurry/low quality/ugly/wallpaper/lifeless), only
 # layout artifacts (text, frames, panels) and the anti-nudity terms.
 USER_NEGATIVE = ("text, watermark, frame, border, split screen, diptych, triptych, panel, multi-panel, collage, "
@@ -503,7 +503,7 @@ class LiveDirector:
             for s in reversed(self.history + self._queue):
                 if s.get("origin") == "auto" and s.get("prompt"):
                     return s["prompt"]
-        return "cinematic photo, wide empty desert highway at dusk, 24mm"
+        return "a wide empty desert highway at dusk"
 
     def caption(self) -> dict:
         """Scene the most recent strip mostly shows (target once past halfway through a blend)."""

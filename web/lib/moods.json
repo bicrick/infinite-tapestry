@@ -1,99 +1,94 @@
 {
-"MOODS": [
-{
-"key": "serene beauty",
-"weight": 9,
-"beautiful": true
-},
-{
-"key": "sweeping landscape",
-"weight": 9,
-"beautiful": true
-},
-{
-"key": "golden-hour cinematic",
-"weight": 8,
-"beautiful": true
-},
-{
-"key": "cosmic",
-"weight": 6,
-"beautiful": true
-},
-{
-"key": "underwater",
-"weight": 6,
-"beautiful": true
-},
-{
-"key": "botanical macro",
-"weight": 5,
-"beautiful": true
-},
-{
-"key": "epic weather",
-"weight": 6,
-"beautiful": true
-},
-{
-"key": "architectural",
-"weight": 6,
-"beautiful": true
-},
-{
-"key": "abstract color field",
-"weight": 4,
-"beautiful": true
-},
-{
-"key": "fractal",
-"weight": 8,
-"beautiful": true
-},
-{
-"key": "textiles",
-"weight": 6,
-"beautiful": true
-},
-{
-"key": "cozy",
-"weight": 4,
-"beautiful": false
-},
-{
-"key": "still life",
-"weight": 4,
-"beautiful": true
-},
-{
-"key": "funky",
-"weight": 5,
-"beautiful": false
-},
-{
-"key": "bubbly/playful",
-"weight": 5,
-"beautiful": false
-},
-{
-"key": "surreal",
-"weight": 5,
-"beautiful": false
-},
-{
-"key": "quirky gag",
-"weight": 3,
-"beautiful": false
-},
-{
-"key": "topical",
-"weight": 2,
-"beautiful": false
-},
-{
-"key": "wildcard",
-"weight": 4,
-"beautiful": false
-}
-]
+  "MOODS": [
+    {
+      "key": "serene",
+      "weight": 6,
+      "beautiful": true
+    },
+    {
+      "key": "landscape",
+      "weight": 6,
+      "beautiful": true
+    },
+    {
+      "key": "cosmic",
+      "weight": 5,
+      "beautiful": true
+    },
+    {
+      "key": "underwater",
+      "weight": 5,
+      "beautiful": true
+    },
+    {
+      "key": "tiny world",
+      "weight": 5,
+      "beautiful": true
+    },
+    {
+      "key": "weather",
+      "weight": 5,
+      "beautiful": true
+    },
+    {
+      "key": "architecture",
+      "weight": 5,
+      "beautiful": true
+    },
+    {
+      "key": "abstract",
+      "weight": 5,
+      "beautiful": true
+    },
+    {
+      "key": "fractal",
+      "weight": 4,
+      "beautiful": true
+    },
+    {
+      "key": "materials",
+      "weight": 5,
+      "beautiful": true
+    },
+    {
+      "key": "cozy",
+      "weight": 5,
+      "beautiful": false
+    },
+    {
+      "key": "still life",
+      "weight": 4,
+      "beautiful": true
+    },
+    {
+      "key": "funky",
+      "weight": 5,
+      "beautiful": false
+    },
+    {
+      "key": "playful",
+      "weight": 5,
+      "beautiful": false
+    },
+    {
+      "key": "surreal",
+      "weight": 5,
+      "beautiful": false
+    },
+    {
+      "key": "quirky gag",
+      "weight": 5,
+      "beautiful": false
+    },
+    {
+      "key": "topical",
+      "weight": 2,
+      "beautiful": false
+    },
+    {
+      "key": "wildcard",
+      "weight": 6,
+      "beautiful": false
+    }
+  ]
 }

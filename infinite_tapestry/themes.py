@@ -47,8 +47,7 @@ MODE_BRIEF = {
     "funny": ("FUNNY/ABSURD: a visual gag that reads instantly without text: an ordinary real-world place with one "
               "ridiculous twist carried by objects, scale, materials or animals (not close-up people). Deadpan framing makes it funnier. Avoid the overused 'animals "
               "doing office jobs' trope unless it's truly fresh."),
-    "cinematic": ("CINEMATIC: a striking, specific, non-cliche real place or moment a cinematographer would kill for, "
-                  "with distinctive light and a precise location. Specific beats generic."),
+    "cinematic": ("SPECIFIC PLACE: a striking, specific, non-cliche place or moment, in whatever look you like."),
 }
 
 

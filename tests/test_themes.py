@@ -49,4 +49,4 @@ def test_journeys_2_to_4():
 def test_fractals_welcome_in_cosmic_and_abstract():
     from infinite_tapestry.moods import MOODS
     d = {m[0]: m[4] for m in MOODS}
-    assert "fractal" in d["cosmic"].lower() and "fractal" in d["abstract color field"].lower() and "fractal" in d
+    assert "fractal" in d["cosmic"].lower() and "fractal" in d["abstract"].lower() and "fractal" in d

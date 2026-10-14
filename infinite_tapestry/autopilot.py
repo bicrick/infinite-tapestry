@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from .prompts import make_scene, soft_title
 from .moods import MoodRotator
+from .styles import explicit_lora
 from .themes import HeadlineCache, ThemeMemory, brief, clean_title, mentions_minor, pick_mode
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def momentum_brief(recent: list[dict]) -> str:
     for n in range(k + 1, k + 3):
         if n <= 2:
             steps.append(f"scene {n} after the idea: STAY IN THE SAME WORLD as the idea (same theme, materials and tone), "
-                         "a neighboring place or different part of it, new camera angle and moment")
+                         "a neighboring place or different part of it, a new moment")
         elif n <= MOMENTUM_STEPS:
             away = {3: "the idea's world is now only a minority of the scene; a NEW main subject/place takes over",
                     4: "the idea's material/theme is GONE; keep only one small element (color, creature, prop or joke) from scene 3",
@@ -311,7 +312,8 @@ class Autopilot:
             for s in plan["scenes"]:
                 self.memory.add(s.get("title", ""))
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
-                              s.get("hold"), source="", origin="auto", style=s.get("style"), beats=s.get("beats")) for s in plan["scenes"]])
+                              s.get("hold"), source="", origin="auto", style=s.get("style"), beats=s.get("beats"),
+                              lora=explicit_lora(s["prompt"])) for s in plan["scenes"]])   # LoRA only if the prompt names it
             self._failures = 0
             self.last_error = ""
             self._next_allowed = time.monotonic() + self.min_interval
