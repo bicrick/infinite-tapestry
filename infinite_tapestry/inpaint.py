@@ -450,9 +450,10 @@ def prefill_masked(image: Image.Image, mask: Image.Image, seed: int = 0, mode: s
     ROOT CAUSE of the 'stuck in horizontal bands' look (overnight 2026-10-14): the old fill repeated each row's
     seam colour across the whole masked area -- literal horizontal stripes -- so every strip (and a takeover
     repainting ~670 px) started from stripes and painted banners, strata and rows of people into them.
-    'ramp' (default) = 'meannoise' plus a short per-row gradient from the real edge (prefill_ramp_px) for the seam.
+    'ramp' (experimental, not shipped) = 'meannoise' plus a short per-row gradient from the real edge (prefill_ramp_px) for the seam.
     'gray' fills with mid-gray plus isotropic noise: no row structure and no palette inheritance.
-    'meannoise' uses the context's mean colour instead (no stripes, but the palette locks in for many scenes).
+    'meannoise' (default, v1.0) uses the context's mean colour + N(0,40) noise: no stripes; fresh anchors at scene
+    changes stop the palette locking in.
     'rowmean' keeps the old behaviour (test only)."""
     import numpy as np
 
