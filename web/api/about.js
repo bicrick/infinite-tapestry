@@ -1,4 +1,5 @@
 const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
+const tmi = require("../lib/tmindex");
 
 // Public, read-only, aggregated data for /about and /time-machine (no PII: handles only where the
 // person chose to be credited — idea authors and fuel buyers, never ids/emails/ip).
@@ -66,7 +67,44 @@ async function allStrips() {
   return out;
 }
 
+// Fast path: precomputed hour index (scripts/tm/build_index.js) + a live tail of strips newer than its
+// checkpoint, so the result is as fresh as the full scan without reading every row.
+const monthCache = new Map(); // past months are immutable
+async function idxJSON(name) {
+  const r = await fetch(`${SB()}/storage/v1/object/tapestry/tm/idx/${name}`, { headers: svc() });
+  if (!r.ok) throw new Error("tm index " + name + " " + r.status);
+  return r.json();
+}
+async function indexedHistory(tz) {
+  const state = await idxJSON("state.json");
+  const era = state.eras.find((e) => e.session === SESSION());
+  if (!era || state.last[SESSION()] == null) throw new Error("tm index: no era");
+  const cur = new Date().toISOString().slice(0, 7), lastM = state.months[state.months.length - 1];
+  const after = state.last[SESSION()];
+  const [months, tail, ideas, reacts] = await Promise.all([
+    Promise.all(state.months.map(async (m) => {
+      if (m !== cur && m !== lastM && monthCache.has(m)) return monthCache.get(m);
+      const j = await idxJSON(m + ".json"); if (m !== cur && m !== lastM) monthCache.set(m, j); return j;
+    })),
+    (async () => {
+      const out = [];
+      for (let from = 0; from < 5000; from += 1000) {
+        const r = await fetch(`${SB()}/rest/v1/strips?select=idx,created_at,scene&session=eq.${SESSION()}&idx=gt.${after}&order=idx.asc`, { headers: { ...svc(), range: `${from}-${from + 999}` } });
+        const rows = await r.json(); if (!Array.isArray(rows)) throw new Error("tail");
+        out.push(...rows); if (rows.length < 1000) return out;
+      }
+      throw new Error("tm index too stale");
+    })(),
+    rest("GET", "ideas?select=id,handle,body,created_at,start_strip,end_strip,image_path&status=eq.played&start_strip=not.is.null&order=start_strip.asc&limit=1000").catch(() => []),
+    rest("GET", "strip_reactions?select=strip,lol,fire,mind,love,dead&order=strip.desc&limit=2000").catch(() => []),
+  ]);
+  const hours = months.flatMap((m) => m.hours).filter((h) => h.era === era.id).map((h) => ({ ...h, times: h.times.slice(), runs: h.runs.map((r) => r.slice()) }));
+  tmi.fold(hours, era.id, tail);
+  return tmi.historyFrom(hours, { tz, session: SESSION(), eraT0: era.t0, ideas, reacts });
+}
+
 async function history(tz) {
+  try { return await indexedHistory(tz); } catch (e) { console.warn("history: index unavailable, full scan:", e.message); }
   const [strips, ideas, reacts] = await Promise.all([
     allStrips(),
     rest("GET", "ideas?select=id,handle,body,created_at,start_strip,end_strip,image_path&status=eq.played&start_strip=not.is.null&order=start_strip.asc&limit=1000").catch(() => []),
@@ -156,8 +194,13 @@ module.exports = async (req, res) => {
     }
     if (kind === "history") {
       const tz = /^[A-Za-z_]+\/[A-Za-z_]+$/.test(q.get("tz") || "") ? q.get("tz") : "America/Chicago";
-      res.setHeader("cache-control", "public, s-maxage=300, stale-while-revalidate=900");
+      res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=900");
       return res.status(200).json(await history(tz));
+    }
+    if (kind === "tm") { // Time Machine v3: eras + global unit offsets (every strip one equal-width unit)
+      res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=300");
+      const st = await idxJSON("state.json");
+      return res.status(200).json({ eras: st.eras, months: st.months, updated: st.updated });
     }
     return res.status(400).json({ error: "kind" });
   } catch (e) { return res.status(500).json({ error: "unavailable" }); }
