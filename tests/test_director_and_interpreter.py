@@ -101,9 +101,11 @@ def test_style_note_defaults_photoreal():
     assert "photoreal" in note and "60%" in note and "40%" in note
     assert "more than 2 stylized" in note and "hyperreal" in note
     # Both system prompts carry the note and mention SDXL without dropping SD 1.5.
-    assert _STYLE_NOTE in SYSTEM and _STYLE_NOTE not in AUTO_SYSTEM  # Auto: no photoreal quota
+    # User ideas: faithful cleanup, no photoreal quota; Auto keeps its own look notes.
+    assert _STYLE_NOTE not in SYSTEM and _STYLE_NOTE not in AUTO_SYSTEM
     assert "CORE GOAL" in AUTO_SYSTEM and "WEAKEST" in AUTO_SYSTEM
-    for sys in (SYSTEM, AUTO_SYSTEM):
+    assert "SDXL" in SYSTEM and "SD 1.5" in SYSTEM
+    for sys in (AUTO_SYSTEM,):  # user ideas are verbatim text; composition notes only steer Auto
         assert "SDXL" in sys and "SD 1.5" in sys
         low = sys.lower()
         assert "full height" in low

@@ -52,7 +52,7 @@ def test_busy_queue_uses_atomic_fair_pick_and_short_holds():
     asyncio.run(c.pull_ideas())
     assert c.busy
     assert ("POST", "rpc/pick_ideas", {"p_n": 3}) in s.calls
-    assert [sc["idea_ids"] for sc in d.added] == [[3, 9], [3, 9]]
+    assert [sc["idea_ids"] for sc in d.added] == [[3], [9]]  # one scene per idea, in order, never woven
     assert all(sc["hold"] == BUSY_HOLD for sc in d.added)
     assert 2 <= BUSY_HOLD <= 3
 

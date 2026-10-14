@@ -1,8 +1,8 @@
 """Crowd director + fuel meter, backed by Supabase (service role, server only).
 
 - Pulls the top pending ideas (boost, votes, age) from the shared pool when the
-  director has no audience scenes queued, asks Claude to weave them into one
-  continuous journey, and queues the result attributed to the idea authors.
+  director has no audience scenes queued, has Claude tidy each idea into its own
+  scene (faithful cleanup, never blended), and queues them in order, attributed.
 - Burns fuel (GPU $/hr + Claude tokens) into the ledger once a minute and, at
   zero, broadcasts "out of fuel" and asks RunPod to stop this pod.
 """
@@ -212,8 +212,7 @@ class Crowd:
         if not rows:
             return
         rows = self._pick(rows, want, busy, knobs["ratio"])
-        images: list[tuple[bytes, str]] = []
-        kept = []
+        kept: list[tuple[dict, tuple[bytes, str] | None]] = []
         from .guard import hard_block_reason
         for r in rows:
             why = hard_block_reason(r.get("body") or "")
@@ -221,73 +220,63 @@ class Crowd:
                 await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}", {"status": "rejected"}, "return=minimal")
                 await asyncio.to_thread(self.supa.audit, "idea_hard_block", str(r["id"]), {"reason": why})
                 continue
+            img = None
             if r.get("image_path"):
                 img = await asyncio.to_thread(self._load_ref, r["image_path"])
                 if img is None:
                     await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}", {"status": "rejected"}, "return=minimal")
                     await asyncio.to_thread(self.supa.audit, "nsfw_ref_block", str(r["id"]), {"path": r["image_path"]})
                     continue
-                images.append(img)
-            kept.append(r)
-        rows = kept
-        if not rows:
+            kept.append((r, img))
+        if not kept:
             return
-        ids = ",".join(str(r["id"]) for r in rows)
+        ids = ",".join(str(r["id"]) for r, _ in kept)
         await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})&status=eq.pending",
                                 {"status": "playing", "picked_at": datetime.now(timezone.utc).isoformat()}, "return=minimal")
-        if len(rows) == 1:
-            intent = rows[0]["body"]
-            if intent.strip().lower() == "inspired by this image" and images:
-                intent = ("Take the journey into the attached reference image: describe and match its subject, setting, "
-                          "palette, light and mood as one continuous scene.")
-        else:
-            intent = "Weave these audience ideas into one continuous journey, in this order: " + \
-                     " ; ".join(f"{i + 1}) {r['body']}" for i, r in enumerate(rows))
         st = self.director.state()
-        if images:  # image ideas still need vision moderation + description
-            plan = await asyncio.to_thread(self.interpreter.plan, intent, st["target"] or st["current"], None, images or None)
-        else:
-            # Text ideas go straight to the screen: one prompt per idea, no LLM planning, beats or bridges.
-            plan = direct_plan([r["body"] for r in rows], hold=BUSY_HOLD if self.busy else 4)
-        if self.busy:
-            for s_ in plan.get("scenes") or []:
-                s_["hold"] = min(int(s_.get("hold") or BUSY_HOLD), BUSY_HOLD + 1)
+        cur = st["target"] or st["current"]
+        # Each idea is its own scene, planned independently (never woven together), queued in order.
+        plans = await asyncio.gather(*[
+            asyncio.to_thread(self.interpreter.plan, r.get("body") or "", cur, None, [img] if img else None)
+            for r, img in kept])
         from . import refs as _refs
-
-        if images and (_refs.blocked(plan.get("image_flags")) or plan.get("source") != "haiku"):
-            # Vision moderation flagged (or couldn't check) the reference image: reject, never render it.
-            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})", {"status": "rejected"}, "return=minimal")
-            await asyncio.to_thread(self.supa.audit, "ref_block", ids, {"flags": plan.get("image_flags"), "source": plan.get("source")})
-            return
-        by = ", ".join(dict.fromkeys("@" + r["handle"] for r in rows))
         from .guard import is_disallowed
-
-        scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"), s.get("hold"),
-                             source=" · ".join(r["body"] for r in rows)[:200], origin="user", style=s.get("style"), beats=s.get("beats"),
-                             lora=__import__("infinite_tapestry.styles", fromlist=["x"]).explicit_lora(" ".join(r["body"] for r in rows)))
-                  for s in plan["scenes"] if not is_disallowed(s["prompt"])]
-        if not scenes:
-            # Nothing survived the guard — don't leave ideas stuck as playing.
-            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})",
-                                    {"status": "rejected"}, "return=minimal")
-            await asyncio.to_thread(self.supa.audit, "director_reject", ids, {"reason": "all_scenes_disallowed"})
-            return
-        for sc in scenes:
-            sc["by"] = by
-            sc["idea_ids"] = [r["id"] for r in rows]
-        if images:
-            # Steer the idea's own scene(s) with the (first) reference image via IP-Adapter.
-            for sc in scenes[-2:]:
-                _refs.put(sc["id"], images[0][0])
+        from .styles import explicit_lora
+        queued: list = []
+        for (r, img), plan in zip(kept, plans):
+            rid = str(r["id"])
+            if img and (_refs.blocked(plan.get("image_flags")) or plan.get("source") != "haiku"):
+                # Vision moderation flagged (or couldn't check) the reference image: reject, never render it.
+                await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{rid}", {"status": "rejected"}, "return=minimal")
+                await asyncio.to_thread(self.supa.audit, "ref_block", rid, {"flags": plan.get("image_flags"), "source": plan.get("source")})
+                continue
+            body = r.get("body") or ""
+            scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
+                                 BUSY_HOLD if self.busy else 4, source=body[:200], origin="user",
+                                 style=s.get("style"), beats=s.get("beats"), lora=explicit_lora(body))
+                      for s in (plan.get("scenes") or [])[:1] if not is_disallowed(s["prompt"])]
+            if not scenes:
+                # Nothing survived the guard: don't leave the idea stuck as playing.
+                await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{rid}", {"status": "rejected"}, "return=minimal")
+                await asyncio.to_thread(self.supa.audit, "director_reject", rid, {"reason": "all_scenes_disallowed"})
+                continue
+            sc = scenes[0]
+            sc["by"] = "@" + str(r.get("handle") or "someone")
+            sc["idea_ids"] = [r["id"]]
+            if img:
+                _refs.put(sc["id"], img[0])  # steer this idea's scene with its own reference image
                 sc["ref"] = "style"
-        self.director.add_user(scenes)
-        # Stay `playing` until track_landing sees the idea leave the stage; only
-        # store the plan here so a restart before landing can recover (see recover_interrupted).
-        await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})",
-                                {"plan": {"titles": [s["title"] for s in scenes], "source": plan.get("source")}},
-                                "return=minimal")
-        await asyncio.to_thread(self.supa.audit, "director_merge", ids, {"titles": [s["title"] for s in scenes], "by": by})
-        self.broadcast({"type": "activity", "text": intent[:200], "titles": [s["title"] for s in scenes], "by": by})
+            queued.append((r, sc, plan))
+        if not queued:
+            return
+        self.director.add_user([sc for _, sc, _ in queued])
+        for r, sc, plan in queued:
+            # Stay `playing` until track_landing sees the idea leave the stage; store the plan so a
+            # restart before landing can recover (see recover_interrupted).
+            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
+                                    {"plan": {"titles": [sc["title"]], "source": plan.get("source")}}, "return=minimal")
+            await asyncio.to_thread(self.supa.audit, "director_merge", str(r["id"]), {"titles": [sc["title"]], "by": sc["by"]})
+            self.broadcast({"type": "activity", "text": (r.get("body") or "")[:200], "titles": [sc["title"]], "by": sc["by"]})
         self.on_change()
 
     async def meter(self) -> None:
