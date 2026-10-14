@@ -72,6 +72,9 @@
     }
   }
 
+  // Same Hall of Heroes source as /fuel (static/heroes.js): GET /api/about?kind=heroes →
+  // web/api/about.js heroes(), which reads the donors_heroes view (live fuel buyers only) and
+  // anonymizes the site owner to "Someone". Do not invent a separate paid-fuel query here.
   async function loadHeroes() {
     const ol = $("about-heroes");
     if (!ol) return;
