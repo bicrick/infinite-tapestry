@@ -31,10 +31,12 @@ const handler = async (req, res) => {
     "line_items[0][quantity]": 1,
     "line_items[0][price_data][currency]": "usd",
     "line_items[0][price_data][unit_amount]": cents,
-    "line_items[0][price_data][product_data][name]": ideaId ? "Boost an idea · Infinite Tapestry" : "Fuel · Infinite Tapestry",
+    "line_items[0][price_data][product_data][name]": ideaId ? "Boost an idea · Infinite Tapestry" : "Prepaid GPU fuel · Infinite Tapestry",
     "line_items[0][price_data][product_data][tax_code]": env("STRIPE_TAX_CODE", "txcd_10000000"),
-    "line_items[0][price_data][product_data][description]": "Keeps the GPU painting. Thank you.",
-    submit_type: "donate",
+    "line_items[0][price_data][product_data][description]": ideaId
+      ? "Boosts an idea in the Infinite Tapestry queue."
+      : "Prepaid GPU compute time used to generate images on Infinite Tapestry.",
+    submit_type: "pay",
     // Receipts: Stripe emails one for live payments when the customer email is known (signed-in users), or
     // asks for it on the Checkout page otherwise. Enable "Successful payments" emails in the Stripe dashboard.
     customer_email: user && user.email ? user.email : undefined,

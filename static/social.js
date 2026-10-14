@@ -1,4 +1,4 @@
-// Social layer: accounts, idea pool, votes, chat, fuel, donations, admin.
+// Social layer: accounts, idea pool, votes, chat, fuel purchases, admin.
 // Loaded as a module; stays dormant when no Supabase config is present (local/dev).
 const CFG = window.TAPESTRY_CONFIG || {};
 let queueMode = "fifo";   // hoisted: refreshIdeas can run before the queue UI block
@@ -704,8 +704,8 @@ async function boot() {
     slow(chatSettings.slow);
   });
 
-  // ---------- fuel & donations ----------
-  // Fuel = donations received vs. what painting has cost so far. Never a negative "tank".
+  // ---------- fuel (prepaid GPU compute purchases) ----------
+  // Fuel = prepaid GPU time purchased vs. what painting has cost so far. Never a negative "tank".
   let fuel = { balance_cents: null, pod_status: null }, FS = null, fuelAt = 0;
   const usd = (c) => "$" + (c / 100).toFixed(c >= 10000 ? 0 : 2);
   const dur = (h) => h >= 48 ? `${Math.round(h / 24)} days` : h >= 20 ? `${(h / 24).toFixed(1).replace(/\.0$/, "")} day${h >= 36 ? "s" : ""}` : h >= 1 ? `${Math.round(h)} h` : `${Math.max(1, Math.round(h * 60))} min`;
@@ -721,8 +721,8 @@ async function boot() {
     $("fuel-caption").innerHTML = covered > 0
       ? `Fuel covered ${esc(dur(covered))}<span class="muted"> of ${esc(dur(painted))} painted</span>`
       : `Running on the creator's dime<span class="muted"> · ${esc(dur(painted || 0))} painted</span>`;
-    $("fuel-sub").textContent = `${usd(FS.donated_cents)} donated · ${usd(FS.cost_cents)} spent painting${FS.since ? " since " + new Date(FS.since).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}`;
-    $("fuel-rate-note").textContent = `Painting costs about ${usd(rate)} an hour (GPU ${usd(FS.gpu_cents_per_hour)}${FS.director_cents_per_hour ? ` + Auto ${usd(FS.director_cents_per_hour)}` : ""}). Fuel helps cover it; the tapestry keeps painting around the clock either way.`;
+    $("fuel-sub").textContent = `${usd(FS.donated_cents)} fuel bought · ${usd(FS.cost_cents)} spent painting${FS.since ? " since " + new Date(FS.since).toLocaleDateString([], { month: "short", day: "numeric" }) : ""}`;
+    $("fuel-rate-note").textContent = `Painting costs about ${usd(rate)} an hour (GPU ${usd(FS.gpu_cents_per_hour)}${FS.director_cents_per_hour ? ` + Auto ${usd(FS.director_cents_per_hour)}` : ""}). Fuel is prepaid GPU time for generating images; the tapestry keeps painting around the clock either way.`;
     document.querySelectorAll("#tiers button").forEach((b) => { const sm = b.querySelector("small"); if (sm) sm.textContent = "~" + dur(net(Number(b.dataset.cents)) / rate); });
   }
   async function refreshFuel(force) {
@@ -735,7 +735,7 @@ async function boot() {
   });
   refreshFuel(true);
   setInterval(() => refreshFuel(), 300000);
-  // Chart: daily painting cost (bars) vs. donations (accent bars), last 14 days.
+  // Chart: daily painting cost (bars) vs. fuel purchased (accent bars), last 14 days.
   async function fuelChart() {
     await refreshFuel(true);
     const svg = $("fuel-chart"); if (!svg || !FS) return;
@@ -753,17 +753,14 @@ async function boot() {
     list.forEach((d, i) => {
       const cx = slot * (i + 0.5);
       out.push(`<rect x="${cx - bw - 1}" y="${base - h(d.cost)}" width="${bw}" height="${h(d.cost)}" rx="2" fill="currentColor" opacity=".22"><title>${d.k}: ${usd(d.cost)} cost</title></rect>`);
-      out.push(`<rect x="${cx + 1}" y="${base - h(d.don)}" width="${bw}" height="${Math.max(d.don ? 2 : 0, h(d.don))}" rx="2" fill="#e0a84a"><title>${d.k}: ${usd(d.don)} donated</title></rect>`);
+      out.push(`<rect x="${cx + 1}" y="${base - h(d.don)}" width="${bw}" height="${Math.max(d.don ? 2 : 0, h(d.don))}" rx="2" fill="#e0a84a"><title>${d.k}: ${usd(d.don)} fuel</title></rect>`);
       if (list.length <= 7 || i % 2 === list.length % 2 - 1 || i === list.length - 1) out.push(`<text x="${cx}" y="${H - 6}" text-anchor="middle" font-size="11" fill="currentColor" opacity=".5">${new Date(d.k + "T12:00").toLocaleDateString([], { month: "short", day: "numeric" })}</text>`);
     });
     svg.innerHTML = out.join("");
-    $("fuel-chart-note").innerHTML = `<span class="lg cost"></span>Daily cost <span class="lg don"></span>Donations`;
+    $("fuel-chart-note").innerHTML = `<span class="lg cost"></span>Daily cost <span class="lg don"></span>Fuel purchased`;
   }
 
-  const refreshDonors = () => {};   // donor wall lives only on /about
-
-
-  async function donate(cents, { ideaId } = {}) {
+  async function buyFuel(cents, { ideaId } = {}) {
     try {
       const r = await fetch("/api/checkout", {
         method: "POST", headers: { "content-type": "application/json", ...(S.token() ? { authorization: "Bearer " + S.token() } : {}) },
@@ -774,15 +771,15 @@ async function boot() {
       location.href = j.url;
     } catch (e) { toast("Couldn't open checkout. " + esc(e.message || "")); }
   }
-  S.donate = donate;
-  document.querySelectorAll("#tiers button, #sleep-tiers button").forEach((b) => b.addEventListener("click", () => donate(Number(b.dataset.cents))));
+  S.buyFuel = buyFuel;
+  document.querySelectorAll("#tiers button, #sleep-tiers button").forEach((b) => b.addEventListener("click", () => buyFuel(Number(b.dataset.cents))));
   $("fuel-chip").addEventListener("click", () => openTab("fuel"));
   const qs = new URLSearchParams(location.search);
   if (qs.get("fuel")) { openTab("fuel"); history.replaceState(null, "", location.pathname); }
   if (qs.get("thanks")) {
-    toast("Thank you. The tapestry has more fuel.", 6000);
+    toast("Purchase complete. Your prepaid GPU fuel has been added.", 6000);
     history.replaceState(null, "", location.pathname);
-    setTimeout(() => { refreshFuel(true); refreshDonors(); refreshIdeas(); }, 2500);
+    setTimeout(() => { refreshFuel(true); refreshIdeas(); }, 2500);
   }
 
   // ---------- sleep state ----------
@@ -808,7 +805,7 @@ async function boot() {
     if (name === "next" && window.TapestryWS) window.TapestryWS.send({ type: "upcoming_request" });
     document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("hidden", p.id !== "panel-" + name));
-    if (name === "fuel") { fuelChart(); refreshDonors(); }
+    if (name === "fuel") fuelChart();
     if (name === "next") refreshIdeas();
     if (name === "audit") refreshAudit();
     if (name === "you") { renderYou(); loadYou(); }
@@ -855,7 +852,7 @@ async function boot() {
           return `<li><p class="you-it">${esc(i.body)}</p>${title}<div class="you-it-meta"><span class="you-st s-${i.status}">${st}</span>
             ${i.status === "pending" ? `<button type="button" class="linkish" data-you="cancel" data-id="${i.id}">Cancel</button>` : ""}
             ${landed ? `<a href="/?at=${i.start_strip}&to=${to}">View where it landed</a>` : ""}</div></li>`; }).join("")}</ol>`;
-    const thanks = d && d.donated_cents > 0 ? `<div class="you-sec"><h3 class="you-h">Fuel</h3><p class="you-fine">Thank you. You've given ${usd2(d.donated_cents)} toward keeping it painting.</p></div>` : "";
+    const thanks = d && d.donated_cents > 0 ? `<div class="you-sec"><h3 class="you-h">Fuel</h3><p class="you-fine">You've bought ${usd2(d.donated_cents)} of prepaid GPU fuel.</p></div>` : "";
     hub.innerHTML = `<div class="you-sec">${name}${email ? `<p class="you-email">${esc(email)} · only you see this</p>` : ""}
         ${h ? `<a class="you-link" href="/u/${encodeURIComponent(h)}">View public profile</a>` : ""}</div>
       <div class="you-sec"><h3 class="you-h">Your ideas</h3>${list}</div>

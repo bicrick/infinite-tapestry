@@ -1,5 +1,5 @@
-// Hall of Heroes on /fuel: real live-mode donations only (server view excludes test payments and the owner).
-// Name = the supporter's own handle, or "Someone". Most recent first.
+// Hall of Heroes on /fuel: real live-mode fuel purchases only (server view excludes test payments and the owner).
+// Name = the buyer's own handle, or "Someone". Most recent first.
 (() => {
   const ol = document.getElementById("heroes"); if (!ol) return;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);

@@ -1,18 +1,18 @@
 const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
 
 // Public, read-only, aggregated data for /about and /time-machine (no PII: handles only where the
-// person chose to be credited — idea authors and donor wall, never ids/emails/ip).
-//   ?kind=transparency  fuel series, burn rate, streak, donor wall (recent + all-time)
+// person chose to be credited — idea authors and fuel buyers, never ids/emails/ip).
+//   ?kind=transparency  fuel series, burn rate, streak, buyer wall (recent + all-time)
 //   ?kind=history       one entry per day of the SDXL timeline: strip range, times, highlight scenes
 //   ?kind=count         live strip total + measured rate (homepage counter)
-//   ?kind=heroes        Hall of Heroes (live donations, chosen handle or 'Someone', no owner)
+//   ?kind=heroes        Hall of Heroes (live fuel purchases, chosen handle or 'Someone', no owner)
 //   ?kind=tile&l=2|3&c=N  low-res LOD tile (1/16 or 1/64), proxied from private storage, CDN cached
 const OWNER = new Set(["bicrick"]);
 const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svc = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
 const SESSION = () => env("TAPESTRY_STORAGE_PREFIX", "live-sdxl");
 
-// Honest fuel summary: donations received vs. what painting has cost (GPU + Auto director), no "tank".
+// Honest fuel summary: prepaid fuel purchased vs. what painting has cost (GPU + Auto director), no "tank".
 // Rate = GPU price from config (TAPESTRY_GPU_CENTS_PER_HOUR, default 89c = the RTX 4090 pod) + measured director cost.
 function fuelSummary(series) {
   const gpu = Number(env("TAPESTRY_GPU_CENTS_PER_HOUR", "89")) || 89;
@@ -36,7 +36,7 @@ async function transparency() {
   return { ...t, hours_left: burn > 0 ? +(bal / burn).toFixed(1) : null, fuel: fuelSummary(t.series || []), donors: { recent: Array.isArray(recent) ? recent : [], top: Array.isArray(top) ? top : [] } };
 }
 
-// Hall of Heroes: live Stripe donations only, owner/admins excluded, chosen handle or "Someone" (view donors_heroes).
+// Hall of Heroes: live Stripe fuel purchases only, owner/admins excluded, chosen handle or "Someone" (view donors_heroes).
 async function heroes() {
   const rows = await rest("GET", "donors_heroes?select=name,gifts,last_at&order=last_at.desc&limit=200").catch(() => []);
   return { heroes: (Array.isArray(rows) ? rows : []).map((r) => ({ name: OWNER.has(String(r.name).toLowerCase()) ? "Someone" : r.name, gifts: r.gifts, at: r.last_at })) };
