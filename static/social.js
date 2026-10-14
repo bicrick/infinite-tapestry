@@ -426,11 +426,12 @@ async function boot() {
   const etaLabel = (s) => (s == null ? "" : s < 60 ? "soon" : s < 3600 ? `~${Math.round(s / 60)} min` : `~${Math.round(s / 360) / 10} h`);
   S.etaLabel = etaLabel;
   function ideaRow(it) {
-    const by = window.TapestryCredit ? window.TapestryCredit(it.handle, "user") : "@" + it.handle;
+    const by = window.TapestryCredit ? window.TapestryCredit(it.handle, "user", { guestNames: true }) : "@" + it.handle;
+    const title = window.TapestryIdeaTitle ? window.TapestryIdeaTitle(it.body, it.handle, it.image_path) : it.body;
     const mine = S.isMine(it);
     return `<li class="item idea user" data-id="i${it.id}"><span class="n">${it.place ?? ""}</span><div class="body">` +
-      `<div class="t" data-tip="${esc(by === "Auto" ? "Auto" : "Suggested by " + by)}">${esc(it.body)}</div>` +
-      `<div class="meta">${esc(by)}${it.eta_s != null ? " · " + etaLabel(it.eta_s) : ""}${mine ? " · yours" : ""}</div>` +
+      `<div class="t" data-tip="${esc("Suggested by " + by)}">${esc(title)}</div>` +
+      `<div class="meta">${esc(by)} · Waiting${it.eta_s != null ? " · " + etaLabel(it.eta_s) : ""}${mine ? " · yours" : ""}</div>` +
       `<div class="p"><a class="open-s" href="/s/${it.id}" target="_blank" rel="noopener">Open ↗</a><button class="linkish" type="button" data-report="${it.id}">Report</button>` +
       (mine ? ` <button class="linkish" type="button" data-act="withdraw_idea" data-iid="${it.id}">Withdraw</button>` : "") +
       (S.isAdmin() ? ` <button class="linkish" type="button" data-act="admin_reject_idea" data-iid="${it.id}">Reject</button>` : "") + `</div></div>` +

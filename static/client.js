@@ -32,11 +32,15 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
 (function () {
   "use strict";
   // Who suggested a scene: '@handle', 'a guest' or 'Auto'. The owner is never credited (shown as Auto).
-  function credit(by, origin) {
-    const hs = String(by || "").split(",").map((h) => h.trim().replace(/^@/, "")).filter(Boolean)
-      .filter((h) => h.toLowerCase() !== "bicrick");
-    if (origin === "auto" || !hs.length) return origin === "user" && !by ? "a guest" : "Auto";
-    return hs.map((h) => (/^[a-z]+-\d{4}$/.test(h) ? "a guest" : "@" + h)).filter((v, i, a) => a.indexOf(v) === i).join(", ");
+  // Owner/system handles are never shown: they read as "Someone" (a user idea is never labelled Auto).
+  const HIDDEN = new Set(["bicrick", "claude", "auto"]);
+  function credit(by, origin, opts) {
+    if (origin === "auto") return "Auto";
+    const all = String(by || "").split(",").map((h) => h.trim().replace(/^@/, "")).filter(Boolean);
+    const hs = all.filter((h) => !HIDDEN.has(h.toLowerCase()));
+    if (!hs.length) return all.length ? "Someone" : (origin === "user" ? "a guest" : "Auto");
+    const guestNames = opts && opts.guestNames;
+    return hs.map((h) => (/^[a-z]+-\d{4}$/.test(h) ? (guestNames ? h : "a guest") : "@" + h)).filter((v, i, a) => a.indexOf(v) === i).join(", ");
   }
   window.TapestryCredit = credit;
 
@@ -1376,17 +1380,20 @@ void main(){
       upSeq = d.upcoming_seq;
     }
     list.classList.remove("skeleton");
-    const items = d.upcoming || d.items || [];
+    // Public queue = user ideas only (planned user scenes, then every waiting idea in pick order). Never Auto.
+    const items = (d.upcoming || d.items || []).filter((x) => x.origin !== "auto");
     window.dispatchEvent(new CustomEvent("tapestry:pool", { detail: items.filter((x) => x.kind === "idea").length }));
     $("queue-count").textContent = items.length || "";
     $("queue-empty").classList.toggle("hidden", items.length > 0);
     $("queue-empty").innerHTML = d.autopilot && d.autopilot.enabled ? '<span class="spark">✦</span>No ideas waiting. Auto is improvising.' : "Nothing queued. Type a destination below.";
     const cur = d.current_scene || { title: d.current, prompt: d.current };
     const tgt = d.target_scene;
-    $("current-card").innerHTML =
-      `<div class="k">${tgt ? "Up now" : "Now"}<span class="src">${srcName(tgt || cur)}</span></div>` +
-      `<div class="t">${esc(cur.title)}${tgt ? ' <span class="muted">→ ' + esc(tgt.title) + "</span>" : ""}</div>` +
-      `<div class="p">${esc((tgt || cur).prompt)}</div>`;
+    // Now playing: only a user idea is shown (Auto never appears in the queue).
+    const now = [tgt, cur].find((x) => x && x.origin === "user");
+    const cc = $("current-card");
+    cc.classList.toggle("hidden", !now);
+    cc.innerHTML = now ? `<div class="k">${now === tgt ? "Up now" : "Now"}<span class="src">${esc(credit(now.by, "user", { guestNames: true }))}</span></div>` +
+      `<div class="t">${esc(ideaTitle(now.source || now.title, now.by, now.image))}</div>` : "";
     // Keyed in-place diff: reuse unchanged rows so the sheet never flashes.
     const old = new Map([...list.children].map((li) => [li.dataset.id, li]));
     let prev = null;
@@ -1409,23 +1416,31 @@ void main(){
       li.className = "item " + (s.origin === "auto" ? "auto" : "user") + (s.kind === "idea" ? " idea" : "");
       li.dataset.id = key;
       if (s.kind === "idea") {
-        const c = credit(s.by, "user"), eta = s.eta != null && window.TapestrySocial && window.TapestrySocial.etaLabel ? window.TapestrySocial.etaLabel(s.eta) : "soon";
-        li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc(c === "Auto" ? "Auto" : "Suggested by " + c)}">${esc(s.title)}</div>` +
-          `<div class="meta">${esc(c)} · ${esc(eta)}</div><div class="p"><a class="open-s" href="/s/${s.idea_id}" target="_blank" rel="noopener">Open ↗</a><button class="linkish" type="button" data-report="${s.idea_id}">Report</button></div></div>` +
+        const c = credit(s.by, "user", { guestNames: true }), eta = s.eta != null && window.TapestrySocial && window.TapestrySocial.etaLabel ? window.TapestrySocial.etaLabel(s.eta) : "soon";
+        li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc("Suggested by " + c)}">${esc(ideaTitle(s.prompt || s.title, s.by, s.image))}</div>` +
+          `<div class="meta">${esc(c)} · Waiting · ${esc(eta)}</div><div class="p"><a class="open-s" href="/s/${s.idea_id}" target="_blank" rel="noopener">Open ↗</a><button class="linkish" type="button" data-report="${s.idea_id}">Report</button></div></div>` +
           (window.TapestrySocial && window.TapestrySocial.heart ? window.TapestrySocial.heart(s.idea_id, s.votes) : "");
         list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
         prev = li;
         return;
       }
-      // View-only queue: no reorder, drag, edit or remove controls.
-      li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc(credit(s.by, s.origin) === "Auto" ? "Auto" : "Suggested by " + credit(s.by, s.origin))}">${esc(s.title)}</div>` +
-        `<div class="meta">${esc(credit(s.by, s.origin))}</div>${s.prompt && s.prompt !== s.title ? `<div class="p">${esc(s.prompt)}</div>` : ""}</div>`;
+      // View-only queue: no reorder, drag, edit or remove controls. Planned user scene (already picked, plays next).
+      const cs = credit(s.by, "user", { guestNames: true });
+      li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc("Suggested by " + cs)}">${esc(ideaTitle(s.source || s.title, s.by, s.ref))}</div>` +
+        `<div class="meta">${esc(cs)} · ${i === 0 ? "Up next" : "Planned"}</div></div>`;
       list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
       prev = li;
     });
     old.forEach((li) => li.remove());
   }
 
+  // Image-only ideas read "an image from X"; text ideas show the user's own words.
+  function ideaTitle(text, by, image) {
+    const t = String(text || "").trim();
+    if (!t || /^inspired by this image$/i.test(t)) return "an image from " + credit(by, "user", { guestNames: true });
+    return t.length > 120 ? t.slice(0, 119) + "…" : t;
+  }
+  window.TapestryIdeaTitle = ideaTitle;
   function srcName(sc) {
     const o = sc && sc.origin;
     return o === "auto" ? "Auto" : o === "user" ? (sc.by ? esc(sc.by) : "You") : "";
