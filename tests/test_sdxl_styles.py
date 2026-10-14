@@ -67,7 +67,7 @@ def test_prefill_masked_is_not_black():
     mask = Image.new("L", (64, 32), 0)
     mask.paste(255, (40, 0, 64, 32))
     out = np.asarray(prefill_masked(img, mask)).astype(float)
-    assert out[:, 40:].mean(axis=(0, 1))[2] > 150 and (out[:, :40] == np.asarray(img)[:, :40]).all()
+    assert out[:, 40:].mean() > 90 and (out[:, :40] == np.asarray(img)[:, :40]).all()
 
 
 def test_loras_only_on_explicit_user_request():
@@ -86,3 +86,19 @@ def test_loras_only_on_explicit_user_request():
     d2.frame_for(0)
     assert "pixel art" in ramp(*d2.styles_for(0.5), 0.5)
     assert ramp("pixel art", "none", 1.0) == {}
+
+
+def test_prefill_has_no_row_structure():
+    """Regression for the overnight banding bug: beyond the short seam ramp, the masked fill must not copy
+    per-row colours (stripes) across the strip."""
+    from infinite_tapestry.inpaint import prefill_masked
+    a = np.zeros((64, 300, 3), np.uint8)
+    a[::2, :40] = 255                      # strongly striped context
+    img = Image.fromarray(a)
+    mask = Image.new("L", (300, 64), 0)
+    mask.paste(255, (40, 0, 300, 64))
+    for mode in ("ramp", "meannoise", "gray"):
+        out = np.asarray(prefill_masked(img, mask, mode=mode, ramp_px=96)).astype(float)[:, 40 + 96:].mean(axis=(1, 2))
+        assert np.abs(out[::2] - out[1::2]).mean() < 10, mode
+    old = np.asarray(prefill_masked(img, mask, mode="rowmean")).astype(float)[:, 40 + 96:].mean(axis=(1, 2))
+    assert np.abs(old[::2] - old[1::2]).mean() > 100   # the old fill really was striped

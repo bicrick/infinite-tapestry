@@ -169,6 +169,9 @@ class StripGenerator:
     def generate_one(self) -> Strip:
         """Generate a single strip (also used by tests)."""
         cfg = self.config
+        pending = getattr(self, "_anchor_pending", None)
+        if pending:
+            return self._emit_pending()
         with self._lock:
             canvas = self._canvas
 
@@ -270,6 +273,16 @@ class StripGenerator:
                 view = view.resize((max(64, cw * 384 // canvas.height // 16 * 16), 384), Image.Resampling.BILINEAR)
                 self.inpainter.set_ref("ctx", view, 1.0)
 
+        # Fresh anchor on a scene change: paint the new scene from scratch (no tapestry context, so the
+        # old horizon / bands / rows can't carry over), then join it to the tapestry with a bridge inpaint
+        # over the seam only. The next strips are already painted and are emitted without GPU work.
+        if (getattr(cfg, "fresh_anchor", False) and not cfg.mock and self._strip_index > 0
+                and getattr(self, "_scene_strips", 1) == 0):
+            try:
+                return self._anchor(prompt_b or prompt_a, self.director.negative_for(1.0), seed, shown_prompt, scene_meta)
+            except Exception:
+                logger.exception("fresh anchor failed; continuing by outpainting")
+
         # SD sometimes paints a hard vertical "panel" edge instead of growing
         # out of the context (most often mid-transition). Score each attempt by
         # its worst column discontinuity in the repainted region and retry with
@@ -366,6 +379,83 @@ class StripGenerator:
             self._canvas = new_canvas
             self._strip_index += 1
 
+        return strip
+
+    # ---- fresh-anchor scene changes ----
+    def _anchor(self, prompt, negative, seed, shown_prompt, scene_meta) -> Strip:
+        """Scene change by fresh anchor (see docs/BANDING.md):
+        1) paint the new scene alone (fully masked inpaint == txt2img): the old horizon/bands/rows can't leak in;
+        2) bridge: lay the new scene's left edge over the old right edge (crossfade over `overlap` px, the part
+           clients already hold), then a partial-strength inpaint of the zone around it fuses the two;
+        3) emit the result as normal strips (no extra GPU work for them); outpainting continues from the new scene."""
+        import numpy as np
+
+        cfg = self.config
+        H, Wn, S, ov = cfg.height, cfg.window_width, cfg.strip_width, cfg.overlap
+        with self._lock:
+            old = self._canvas
+        new = self.inpainter.generate(image=Image.new("RGB", (Wn, H), (128, 128, 128)), mask=Image.new("L", (Wn, H), 255),
+                                      prompt=prompt, negative_prompt=negative, seed=seed + 4242)
+        if new.size != (Wn, H):
+            new = new.resize((Wn, H), Image.Resampling.LANCZOS)
+        L = Wn - S * 3 // 2                       # old px in the bridge window (640 at 1024/256)
+        win = np.zeros((H, Wn, 3), np.float32)
+        win[:, :L] = np.asarray(old.crop((old.width - L, 0, old.width, H))).astype(np.float32)
+        nw = np.asarray(new).astype(np.float32)
+        w = np.linspace(0, 1, ov, dtype=np.float32)
+        w = (w * w * (3 - 2 * w))[None, :, None]
+        win[:, L - ov:L] = win[:, L - ov:L] * (1 - w) + nw[:, :ov] * w
+        win[:, L:] = nw[:, ov:ov + Wn - L]
+        z0, z1 = L - ov, min(Wn, L + int(getattr(cfg, "anchor_bridge_px", 128)))
+        m = np.zeros((H, Wn), np.float32)
+        m[:, z0:z1] = 1.0
+        f = 24                                    # soft mask edges
+        m[:, z0:z0 + f] *= np.linspace(0, 1, f)[None, :]
+        m[:, z1 - f:z1] *= np.linspace(1, 0, f)[None, :]
+        strength = float(getattr(cfg, "anchor_bridge_strength", 0.85))
+        bridged = self.inpainter.generate(image=Image.fromarray(win.clip(0, 255).astype(np.uint8)),
+                                          mask=Image.fromarray((m * 255).astype(np.uint8), mode="L"),
+                                          prompt=prompt, negative_prompt=negative, seed=seed + 4243, strength=strength)
+        if bridged.size != (Wn, H):
+            bridged = bridged.resize((Wn, H), Image.Resampling.LANCZOS)
+        bw = np.asarray(bridged).astype(np.float32)
+        # keep the unmasked context pixels exact (the model round-trips them through the VAE)
+        out = win * (1 - m[..., None]) + bw * m[..., None]
+        added = S * 3                             # 3 strips: bridge window tail + more of the new scene
+        tail = added - (Wn - L) - 0
+        full = Image.new("RGB", (old.width + added, H))
+        full.paste(old, (0, 0))
+        full.paste(Image.fromarray(out[:, L - ov:].clip(0, 255).astype(np.uint8)), (old.width - ov, 0))
+        x = old.width + (Wn - L)
+        full.paste(new.crop((ov + Wn - L, 0, ov + Wn - L + tail, H)), (x, 0))
+        n = added // S
+        self._anchor_pending = [(full, old.width + S * (j + 1)) for j in range(n)]
+        self._anchor_meta = (shown_prompt, scene_meta)
+        self.last_band = 0
+        return self._emit_pending()
+
+    def _emit_pending(self) -> Strip:
+        cfg = self.config
+        full, right = self._anchor_pending.pop(0)
+        shown_prompt, scene_meta = getattr(self, "_anchor_meta", (None, None))
+        if self._strip_index > 0 and self._anchor_pending is not None:
+            # keep the director's clock moving (holds/transitions count strips)
+            try:
+                self.director.frame_for(self._strip_index)
+            except Exception:
+                pass
+        S, ov = cfg.strip_width, cfg.overlap
+        emitted = full.crop((right - S - ov, 0, right, cfg.height))
+        canvas = full.crop((0, 0, right, cfg.height))
+        max_keep = cfg.window_width * 4
+        if canvas.width > max_keep:
+            canvas = canvas.crop((canvas.width - max_keep, 0, canvas.width, canvas.height))
+        strip = Strip(index=self._strip_index, width=emitted.width, height=emitted.height, overlap=ov,
+                      jpeg=self._encode_jpeg(emitted), prompt=shown_prompt, scene=scene_meta)
+        with self._lock:
+            self._canvas = canvas
+            self._strip_index += 1
+        self._scene_strips = getattr(self, "_scene_strips", 0) + 1
         return strip
 
     # ---- persistence ----

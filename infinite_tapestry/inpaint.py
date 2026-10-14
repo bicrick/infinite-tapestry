@@ -301,7 +301,7 @@ class SDXLInpainter(Inpainter):
         self._pipe.enable_lora()
         self._pipe.set_adapters([self._adapter(k) for k in self._weights], list(self._weights.values()))
 
-    def generate(self, image, mask, prompt, negative_prompt="", seed=None, prompt_b=None, t=0.0):
+    def generate(self, image, mask, prompt, negative_prompt="", seed=None, prompt_b=None, t=0.0, strength=None):
         torch = self._torch
         gen = torch.Generator(device=self.config.device).manual_seed(seed) if seed is not None else None
         self._apply_styles()
@@ -316,7 +316,9 @@ class SDXLInpainter(Inpainter):
                 tt = tt * tt * (3 - 2 * tt)          # smoothstep: gentle start and landing
                 pe = pe * (1 - tt) + pe_b * tt
                 pp = pp * (1 - tt) + pp_b * tt
-        image = prefill_masked(image, mask)
+        if strength is None or strength >= 0.95:   # partial-strength passes keep the given pixels as the start
+            image = prefill_masked(image, mask, mode=getattr(self.config, "prefill_mode", "ramp"),
+                                   ramp_px=int(getattr(self.config, "prefill_ramp_px", 96)))
         ip_kw = {}
         if self._ip:
             self._pipe.set_ip_adapter_scale(self._ref_scale)
@@ -325,7 +327,7 @@ class SDXLInpainter(Inpainter):
             prompt_embeds=pe, negative_prompt_embeds=ne, pooled_prompt_embeds=pp, negative_pooled_prompt_embeds=npp,
             image=image.convert("RGB"), mask_image=mask.convert("L"),
             num_inference_steps=self.config.steps, guidance_scale=self.guidance,
-            width=image.width, height=image.height, generator=gen, strength=0.999,
+            width=image.width, height=image.height, generator=gen, strength=0.999 if strength is None else float(strength),
             **ip_kw,
         )
         return out.images[0]
@@ -442,20 +444,44 @@ def feather_composite(orig: Image.Image, gen: Image.Image, mask: Image.Image, fe
     return Image.fromarray(np.clip(o * (1 - a) + g * a, 0, 255).astype(np.uint8), mode="RGB")
 
 
-def prefill_masked(image: Image.Image, mask: Image.Image, seed: int = 0) -> Image.Image:
-    """SDXL-inpaint keeps some of what's under the mask (strength < 1), so a black hole paints dark.
-    Fill the masked area with the context's per-row colour plus soft noise instead."""
+def prefill_masked(image: Image.Image, mask: Image.Image, seed: int = 0, mode: str = "ramp", ramp_px: int = 96) -> Image.Image:
+    """SDXL-inpaint keeps some of what's under the mask (strength 0.999), so the fill seeds the composition.
+
+    ROOT CAUSE of the 'stuck in horizontal bands' look (overnight 2026-10-14): the old fill repeated each row's
+    seam colour across the whole masked area -- literal horizontal stripes -- so every strip (and a takeover
+    repainting ~670 px) started from stripes and painted banners, strata and rows of people into them.
+    'ramp' (default) = 'meannoise' plus a short per-row gradient from the real edge (prefill_ramp_px) for the seam.
+    'gray' fills with mid-gray plus isotropic noise: no row structure and no palette inheritance.
+    'meannoise' uses the context's mean colour instead (no stripes, but the palette locks in for many scenes).
+    'rowmean' keeps the old behaviour (test only)."""
     import numpy as np
 
     a = np.asarray(image.convert("RGB")).astype(np.float32)
     m = np.asarray(mask.convert("L")) > 127
     cols = np.where(~m.all(axis=0))[0]
-    if not m.any() or cols.size == 0:
+    if not m.any():
         return image
-    x_edge = int(cols.max()) + 1                       # first fully-masked column (masks are right-side)
-    ref = a[:, max(0, x_edge - 48):x_edge].mean(axis=1, keepdims=True)  # per-row colour
     rng = np.random.default_rng(seed)
-    noise = rng.normal(0, 28, a.shape).astype(np.float32)
-    fill = np.repeat(ref, a.shape[1], axis=1) + noise
+    if cols.size == 0:   # fully masked (fresh anchor = txt2img): noise, not a flat gray card (flat gray patches)
+        out = 128.0 + rng.normal(0, 50, a.shape).astype(np.float32)
+        return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")
+    if mode == "rowmean":
+        x_edge = int(cols.max()) + 1
+        ref = a[:, max(0, x_edge - 48):x_edge].mean(axis=1, keepdims=True)
+        fill = np.repeat(ref, a.shape[1], axis=1) + rng.normal(0, 28, a.shape).astype(np.float32)
+    elif mode in ("ramp", "meannoise"):
+        ref = a[~m].reshape(-1, 3).mean(axis=0)
+        fill = ref[None, None, :] + rng.normal(0, 40, a.shape).astype(np.float32)
+        if mode == "ramp" and ramp_px > 0:
+            # Seam blend: a SHORT per-row gradient from the real edge colours into the noise (ramp_px only),
+            # so the new strip grows out of the context without a row pattern spanning the strip.
+            xe = int(cols.max()) + 1
+            n = min(ramp_px, a.shape[1] - xe)
+            if n > 0:
+                edge = a[:, max(0, xe - 8):xe].mean(axis=1)
+                w = ((1 - np.linspace(0, 1, n, dtype=np.float32)) ** 1.5)[None, :, None]
+                fill[:, xe:xe + n] = edge[:, None, :] * w + fill[:, xe:xe + n] * (1 - w)
+    else:  # "gray": context-independent mid-gray + isotropic noise (no row structure, no palette lock-in)
+        fill = 128.0 + rng.normal(0, 50, a.shape).astype(np.float32)
     out = np.where(m[..., None], fill, a)
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")

@@ -60,6 +60,11 @@ class Config:
     klein_blend: str = "snap"  # klein prompt change: "snap" at t>=0.5 or "slerp" embeddings across the blend
     context_mask_px: int = 0  # mask (repaint) this many px of far-left context so the model can't copy it
     seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
+    fresh_anchor: bool = False  # scene change = fresh txt2img window + seam bridge (no old layout carry-over)
+    anchor_bridge_px: int = 128  # px of the new scene (past the crossfade) the bridge pass may repaint
+    anchor_bridge_strength: float = 0.85  # bridge pass denoise (1.0 = repaint the zone from noise)
+    prefill_ramp_px: int = 96  # ramp mode: px of edge-colour gradient into the noise fill (seam blend)
+    prefill_mode: str = "meannoise"  # masked-area init for SDXL inpaint; "rowmean" = old striped fill (caused banding)
     harmonize_seams: bool = True  # remove colour steps at the mask edge
     taesd_model: str = ""
     dtype: str = "float16"
@@ -175,14 +180,14 @@ def config_from_args(args: Any) -> Config:
 # 1024-class geometry for SDXL: same proportions as SD1.5 (window 1:1, strip 1/4, overlap 3/4 strip).
 SDXL_PRESET: dict[str, Any] = {
     "height": 1024, "window_width": 1024, "strip_width": 256, "overlap": 192, "repaint_band": 128,
-    "steps": 18, "guidance_scale": 6.0, "seam_retries": 1, "scroll_speed": 60.0, "scroll_speed_min": 16.0,
+    "steps": 18, "guidance_scale": 6.0, "seam_retries": 1, "fresh_anchor": True, "scroll_speed": 60.0, "scroll_speed_min": 16.0,
 }
 
 
 # FLUX.2 [klein] 4B (Apache-2.0): SDXL geometry, 4 distilled steps, no CFG.
 # Narrow repaint band + no 70% scene-change repaint: a wide repainted band got cross-faded over
 # the old pixels (ghosting) and let klein redraw whole compositions each strip. Bakeoff: tapestry-samples/blend.
-KLEIN_PRESET: dict[str, Any] = {"steps": 3, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 48,
+KLEIN_PRESET: dict[str, Any] = {"steps": 3, "fresh_anchor": False, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 48,
                                 "scene_change_repaint": 0.0, "dup_check": True,
                                 "seam_retries": 1, "pan_variations": False,
                                 "vision_transitions": True}
