@@ -581,7 +581,8 @@ async function boot() {
     const left = FADE_MS - (Date.now() - t);
     if (left <= 0) li.classList.add("aged"); else setTimeout(() => li.classList.add("aged"), left);
   }
-  const queuedHtml = (m) => `<span class="msg">${esc(hideHandle(m.handle) ? "Someone" : m.handle)} queued “${esc(m.body)}”${m.extra > 0 ? ` and ${m.extra} more` : ""}</span>`;
+  const queuedHtml = (m) => { const b = String(m.body || "").trim(), img = !b || b === IMAGE_ONLY;
+    return `<span class="msg">${esc(hideHandle(m.handle) ? "Someone" : m.handle)} queued ${img ? "an image" : `“${esc(b)}”`}${m.extra > 0 ? ` and ${m.extra} more` : ""}</span>`; };
   // Only the last 2 hours: filtered in the query and aged out live (nothing is deleted).
   const CHAT_WINDOW_MS = 2 * 3600e3;
   // Desktop resting state: one always-visible pill with the latest line + an unread dot (CSS shows it on wide screens only).

@@ -58,18 +58,13 @@
     </div>
   </header>
 
-  <button id="live-btn" class="pill ui hidden" type="button">Back to live <span aria-hidden="true">→</span></button>
+  <button id="live-btn" class="pill ui hidden" type="button"><span class="ago"></span>Back to live <span aria-hidden="true">→</span></button>
   <div id="amb" class="amb" aria-hidden="true">
     
     <div id="amb-title" class="amb-title"></div>
     <div id="amb-time" class="amb-time"></div>
   </div>
-  <div id="timeline" class="timeline ui" aria-label="Timeline: drag to fly through time">
-    <div class="tl-line"></div>
-    <div id="tl-head" class="tl-head"></div>
-    <div id="tl-tip" class="tl-tip"></div>
-    <span id="tl-start" class="tl-label left"></span><span class="tl-label right">Live</span>
-  </div>
+
   <div id="toast" class="toast"></div>
 
   <div id="chat" class="chat ui hidden" aria-label="Live chat">
@@ -264,7 +259,6 @@
   <script src="offline.js"></script>
   <script type="module" src="social.js"></script>
   <script type="module" src="fun.js"></script>
-  <script src="wheel.js" defer></script>
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
 <script defer src="/_vercel/insights/script.js"></script>
 <script defer src="/_vercel/speed-insights/script.js"></script>

@@ -359,7 +359,7 @@ a.who-link { color: inherit; text-decoration: none; } a.who-link:hover { color: 
   .now #now-title { overflow: hidden; text-overflow: clip; letter-spacing: -.005em; text-shadow: 0 1px 10px rgba(var(--shade),.55); }
 
   /* dock: a single slim pill — input, overflow, up-next */
-  .dock { width: calc(100vw - 2 * var(--pad)); bottom: calc(26px + var(--sb)); transition: transform .6s var(--ease), opacity .6s var(--ease); }
+  .dock { width: calc(100vw - 2 * var(--pad)); bottom: calc(14px + var(--sb)); transition: transform .6s var(--ease), opacity .6s var(--ease); }
   .cmd { position: relative; height: 52px; padding: 4px 4px 4px 20px; border-radius: 26px; gap: 2px; flex-wrap: nowrap; }
   #cmd-input { font-size: 16px; min-width: 0; }   /* 16px: no iOS zoom on focus */
   .cmd .icon { width: 44px; height: 44px; border-radius: 22px; }
@@ -660,14 +660,8 @@ body.idle .kept { opacity: .45; }
 .odo-d.leave { opacity: 0; transform: translateY(-40%); }
 @media (prefers-reduced-motion: reduce) { .odo, .odo-d { transition: none !important; } .odo-d.rolling .odo-s { filter: none; } }
 
-/* ---------- haptic wheel (phones) ---------- */
-.hwheel { display: none; }
+/* ---------- phones-first chrome (the old bottom wheel is gone: native scroll + swipe) ---------- */
 @media all {
-  .hwheel { display: block; position: fixed; left: 0; right: 0; bottom: max(0px, calc(var(--sb) - 6px)); height: 40px; z-index: 22; touch-action: none;
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent); }
-  .hwheel canvas { width: 100%; height: 100%; display: block; }
-  .timeline { display: none !important; }
-  body.composing .hwheel { opacity: 0; pointer-events: none; }
   #more-btn { display: none !important; }            /* desktop controls stay off phones */
   body.more-open .cmd .sec { display: none !important; }
 }
@@ -694,34 +688,17 @@ body.react-open .dock .now { visibility: hidden; }
   body.composing #react-btn { display: none !important; }
   .react-layer { width: 120px; bottom: calc(160px + var(--sb, 0px)); height: 50vh; }
 }
-@media all {
-  .hwheel { transition: opacity .6s var(--ease); }
-  body.idle .hwheel { opacity: .35; }              /* stays grabbable while the chrome rests */
-  body.intro .hwheel { opacity: 0; pointer-events: none; }
-}
 body.react-open .cmd-terms { display: none !important; }
 @media all {
   /* floats live in the quiet space between the pill and the caption, never over it */
   .react-layer { right: 0; width: 110px; bottom: calc(150px + var(--sb, 0px)); height: 130px; --rise: -120px; }
-}
-.wheel-label { display: none; }
-@media all {
-  .wheel-label { display: block; position: fixed; left: 50%; bottom: calc(44px + max(0px, var(--sb, 0px) - 6px)); z-index: 23; pointer-events: none;
-    transform: translate(-50%, 4px); opacity: 0; transition: opacity .25s var(--ease), transform .3s var(--ease);
-    padding: 5px 11px; border-radius: 999px; font-size: 12px; letter-spacing: -.005em; white-space: nowrap; max-width: 78vw; overflow: hidden; text-overflow: ellipsis;
-    color: var(--fg); background: var(--glass-strong); border: 1px solid var(--line); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    font-variant-numeric: tabular-nums; }
-  .wheel-label.on { opacity: 1; transform: translate(-50%, 0); }
-  body:has(.wheel-label.on) .dock { opacity: 0; pointer-events: none; transition: opacity .2s var(--ease); }
 }
 
 
 
 /* wide screens: same phone UI, centred and sized sensibly */
 @media (min-width: 700px) {
-  .dock { width: min(560px, calc(100vw - 32px)); bottom: calc(40px + var(--sb)); }   /* same clearance above the wheel as touch */
-  .hwheel { left: 50%; right: auto; width: min(560px, calc(100vw - 32px)); transform: translateX(-50%); }
-  .wheel-label { max-width: 50vw; }
+  .dock { width: min(560px, calc(100vw - 32px)); bottom: calc(24px + var(--sb)); }
 }
 .fs-btn { display: none; }
 @media (pointer: fine) {
@@ -787,7 +764,7 @@ body.intro #amb-blobs { opacity: 0; }
 .dock { view-transition-name: dock; }
 ::view-transition-group(dock) { animation-duration: .38s; animation-timing-function: cubic-bezier(.22, .8, .24, 1); }
 ::view-transition-old(dock), ::view-transition-new(dock) { height: 100%; width: 100%; object-fit: fill; animation-duration: .26s; }
-.hwheel, .timeline, .veil, #react-btn, .amb-title, .amb-time { transition: opacity .32s var(--ease); }
+.veil, #react-btn, .amb-title, .amb-time { transition: opacity .32s var(--ease); }
 
 .build-id { position: absolute; left: 18px; bottom: 14px; font-size: 10px; letter-spacing: .02em; color: var(--muted); opacity: .45; font-variant-numeric: tabular-nums; pointer-events: none; }
 
@@ -835,15 +812,12 @@ body.away .dock .cmd-terms, body.intro .dock .cmd-terms { opacity: 0; pointer-ev
 /* terms only while composing; hidden when closed */
 .dock .cmd-terms, .dock:focus-within .cmd-terms { opacity: 0 !important; visibility: hidden; pointer-events: none; }
 body.composing:not(.away) .dock .cmd-terms { opacity: .6 !important; visibility: visible; pointer-events: auto; }
-/* Layout v3 (mobile = desktop): closed pill / return pill centred between ribbon and wheel; open sheet sits low with terms beneath, wheel hidden */
-.dock, body.composing .dock, body.composing.away .dock { bottom: calc(28px + var(--sb, 0px)) !important;
-  --wheel-h: calc(40px + max(0px, var(--sb, 0px) - 6px));
-  --centre: max(0px, calc((100dvh - var(--band-bot, 70dvh) + var(--wheel-h)) / 2 - 26px - 28px - var(--sb, 0px)));
-  translate: 0 calc(-1 * var(--centre));
+/* Layout v4 (mobile = desktop): no bottom wheel. The composer sits on the bottom edge with the same safe-area
+   padding everywhere; the space between the band and the composer belongs to chat. */
+.dock, body.composing .dock, body.composing.away .dock { bottom: calc(20px + var(--sb, 0px)) !important;
+  translate: 0 0;
   transition: translate .5s cubic-bezier(.22,1,.36,1), opacity .4s var(--ease), transform .4s var(--ease) !important; }
-body.composing:not(.away) .dock { translate: 0 calc(-1 * max(0px, var(--kb, 0px) - 28px - var(--sb, 0px))); }
-body.composing:not(.away) .hwheel { opacity: 0; pointer-events: none; transition: opacity .3s var(--ease); }
-.hwheel { transition: opacity .4s var(--ease); }
+body.composing:not(.away) .dock { translate: 0 calc(-1 * max(0px, var(--kb, 0px) - 20px - var(--sb, 0px))); }
 body.composing:not(.away) .dock .cmd-terms { margin-top: 10px; font-size: 10px; letter-spacing: .01em; }
 body.composing:not(.away) .dock .cmd-terms { white-space: normal; text-wrap: balance; overflow: visible; }
 body.composing:not(.away) .dock { translate: 0 calc(-1 * max(14px, var(--kb, 0px) - 14px - var(--sb, 0px))); }
@@ -862,12 +836,12 @@ body.composing:not(.away) .dock .cmd-terms { max-height: none !important; line-h
 body.idle .top.ui, body.ambient .top.ui { opacity: 1 !important; pointer-events: none; }
 body.idle .top .brand-link, body.idle .top .snd-btn.on { pointer-events: auto; }
 body.idle .top .top-right, body.idle #account-btn, body.idle .top .fuel-chip, body.idle .top .fs-btn,
-body.idle .hwheel, body.idle .dock, body.idle #live-btn, body.idle .amb-time,
+body.idle .dock, body.idle #live-btn, body.idle .amb-time,
 body.idle .snd-btn:not(.on) { opacity: 0 !important; pointer-events: none !important; translate: 0 4px; }
-body.idle .dock { translate: 0 calc(4px - var(--centre, 0px)); }
-.top .top-right, #account-btn, .hwheel, .amb-title, .amb-time, .snd-btn { transition: opacity .5s var(--ease), translate .5s var(--ease); }
+body.idle .dock { translate: 0 4px; }
+.top .top-right, #account-btn, .amb-title, .amb-time, .snd-btn { transition: opacity .5s var(--ease), translate .5s var(--ease); }
 body:not(.idle) .top .top-right { transition-delay: .06s; } body:not(.idle) .amb-title, body:not(.idle) .amb-time { transition-delay: .12s; }
-body:not(.idle) .dock { transition-delay: .18s; } body:not(.idle) .hwheel { transition-delay: .24s; }
+body:not(.idle) .dock { transition-delay: .18s; }
 /* speaker: quiet grey when on */
 .snd-btn.on { color: var(--muted); opacity: .55; }
 .snd-btn.on:hover { opacity: .85; }
@@ -1048,7 +1022,7 @@ body.idle .panel-btn, body.ambient .panel-btn, body.idle .top .status, body.ambi
 .fuel-big { padding: var(--s4) var(--s4) 0 !important; }
 
 /* ===== screensaver: body.saver (fullscreen) — only a soft clock + title, centred at the top, above the ribbon ===== */
-body.saver .top .brand-link, body.saver .snd-btn:not(.on), body.saver .hwheel, body.saver .top-right, body.saver .dock, body.saver .amb-time,
+body.saver .top .brand-link, body.saver .snd-btn:not(.on), body.saver .top-right, body.saver .dock, body.saver .amb-time,
 body.saver .toast, body.saver .share-toast, body.saver #live-btn { opacity: 0 !important; pointer-events: none !important; }
 body.saver .snd-btn.on { opacity: .3 !important; }
 body.saver { cursor: none; }
@@ -1059,7 +1033,6 @@ body.saver .amb-title { opacity: 1 !important; color: rgba(var(--ink),.38); font
 .drawer .build-id { bottom: calc(52px + env(safe-area-inset-bottom)) !important; left: var(--s4) !important; }
 .sheet { z-index: 90 !important; }
 @media (min-width: 561px) { .sheet { place-items: center !important; } }
-body:has(.drawer.open) .hwheel { opacity: 0 !important; pointer-events: none !important; }
 
 /* ===== drawer v3 ===== */
 .top-fs { display: inline-grid !important; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer;
@@ -1361,3 +1334,22 @@ body.chat-open .chat-list li.sys { font-size: 12.5px; }
   .cp-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--fg); opacity: 0; transform: scale(.4); transition: opacity .3s, transform .3s var(--ease); }
   .chat-pill.unread .cp-dot { opacity: .9; transform: none; }
 }
+
+#live-btn .ago { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- HUD icon buttons: one component ----------
+   Fixed 32px square hit area, icon centred by flex, SVG as a block (no baseline offset), circular hover fill centred
+   on the icon, no size change on hover. Applies to sound, chat on/off, full screen and panel. */
+.top .snd-btn, .top .chat-toggle, .top .fs-btn, .top .panel-btn {
+  box-sizing: border-box; width: 32px !important; height: 32px !important; min-width: 32px; min-height: 32px !important; padding: 0 !important;
+  align-items: center; justify-content: center; place-items: center; flex: none; border: 0; border-radius: 50% !important;
+  background: transparent; color: var(--muted); line-height: 0; vertical-align: middle; cursor: pointer; position: relative;
+  transition: background-color .15s var(--ease), color .15s var(--ease), opacity .5s var(--ease); }
+.top .snd-btn:not(.hidden), .top .chat-toggle:not(.hidden), .top .panel-btn { display: inline-flex; }
+.top .snd-btn:hover, .top .chat-toggle:hover, .top .fs-btn:hover, .top .panel-btn:hover { background: rgba(var(--ink),.08); color: var(--fg); }
+.top .snd-btn:focus-visible, .top .chat-toggle:focus-visible, .top .fs-btn:focus-visible, .top .panel-btn:focus-visible { outline: 2px solid var(--fg); outline-offset: 1px; }
+.top .snd-btn svg, .top .chat-toggle svg, .top .fs-btn svg, .top .panel-btn svg {
+  display: block; flex: none; width: 16px !important; height: 16px !important; margin: 0; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.top-right { align-items: center; }
+.top-right .status { display: inline-flex; align-items: center; height: 32px; line-height: 16px; }
+@media (pointer: fine) { .top .fs-btn { display: inline-flex; } }

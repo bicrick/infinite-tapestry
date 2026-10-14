@@ -648,45 +648,24 @@ void main(){
     const hm = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
     return d.toDateString() === now.toDateString() ? hm : d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + hm;
   }
-  const tl = $("timeline"), tlHead = $("tl-head"), tlTip = $("tl-tip");
   // Centre of what's actually drawn (render offset + ribbon anchor included), as a strip index; strip i covers
   // [i*SW - overlap, (i+1)*SW - overlap), and the -0.5 makes callers' Math.round() pick the strip under the centre.
   function centerIdx() { const c = drawCenter != null ? drawCenter : viewLeft() + viewWorld() / 2; return (c + maxOv) / SW() - 0.5; }
+  // The old bottom scrubber/wheel is gone (native scroll + swipe). The Back-to-live pill says how far back you are.
+  let agoTxt = "";
+  function agoLabel() {
+    const t = timeAt(Math.max(0, Math.round(centerIdx()))), now = Date.now() / 1000;
+    if (t == null) return "";
+    const m = Math.max(0, (now - t) / 60);
+    return m < 1.5 ? "" : m < 60 ? Math.round(m) + " min ago" : m < 36 * 60 ? (m / 60 < 10 ? (m / 60).toFixed(1).replace(/\.0$/, "") : Math.round(m / 60)) + " h ago" : fmtTime(t);
+  }
   function updateTimeline() {
-    if (!tl || maxIndex < 1) return;
-    const f = Math.max(0, Math.min(1, centerIdx() / maxIndex));
-    tlHead.style.left = (f * 100) + "%";
-    tl.classList.toggle("away", !live);
-    $("tl-start").textContent = fmtTime(timeAt(0));
+    if (maxIndex < 1) return;
+    if (!live && liveBtn) {
+      const a = agoLabel();
+      if (a !== agoTxt) { agoTxt = a; const el = liveBtn.querySelector(".ago"); if (el) { el.textContent = a ? a + " · " : ""; } }
+    }
     histCaption();
-  }
-  function fracFromEvent(ev) { const r = tl.getBoundingClientRect(); return Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)); }
-  function scrubTo(f) {
-    enterHistory();
-    panMode = "scrub"; panVel = 0;
-    panPos = Math.max(0, Math.min(maxPan(), f * maxIndex * SW() - viewWorld() / 2));
-  }
-  if (tl) {
-    let downX = 0, moved = false;
-    tl.addEventListener("pointermove", (ev) => {
-      const f = fracFromEvent(ev);
-      const label = f > 0.995 ? "Live" : fmtTime(timeAt(f * maxIndex));
-      if (tlScrub && label !== tlTip.textContent && navigator.vibrate && ev.pointerType === "touch") navigator.vibrate(3);   // scrubber tick
-      tlTip.textContent = label;
-      tlTip.style.left = (f * 100) + "%";
-      if (tlScrub) { if (Math.abs(ev.clientX - downX) > 3) moved = true; if (moved) scrubTo(f); }
-    });
-    tl.addEventListener("pointerdown", (ev) => { tlScrub = true; moved = false; downX = ev.clientX; tl.setPointerCapture(ev.pointerId); tl.classList.add("active"); ev.stopPropagation(); });
-    const end = (ev) => {
-      if (!tlScrub) return;
-      tlScrub = false; tl.classList.remove("active");
-      const f = fracFromEvent(ev);
-      if (f > 0.995) { startReturn(); return; }
-      if (!moved) { const i = Math.round(f * maxIndex); jumpTo(i); }
-      else { panMode = "glide"; panVel = 0; }
-    };
-    tl.addEventListener("pointerup", end);
-    tl.addEventListener("pointercancel", end);
   }
   function jumpTo(idx) {
     enterHistory();
@@ -1164,11 +1143,10 @@ void main(){
     const TV = window.TapestryView;
     if (!wheelHeld) TV.wheelStart();
     TV.wheelMove(-dCss);                    // same 1:1 wheel as the phone's haptic dial
-    const hw = document.getElementById("hwheel"); if (hw) hw.classList.add("active");
     clearTimeout(mwEndT);
-    mwEndT = setTimeout(() => { if (hw) hw.classList.remove("active"); TV.wheelEnd(true); }, 90);   // 1:1, no extra glide: the OS sends momentum
+    mwEndT = setTimeout(() => TV.wheelEnd(true), 90);   // 1:1, no extra glide: the OS sends momentum
   }, { passive: false });
-  // Haptic wheel (wheel.js): drives the timeline 1:1 in CSS px, then hands off to the same glide/drift.
+  // 1:1 drag API (desktop horizontal scroll / shift+wheel): drives the timeline in CSS px, then hands off to the same glide/drift.
   let wheelHeld = false;
   Object.assign(window.TapestryView, {
     offsetCss: () => viewLeft() / Math.max(1e-6, pxToWorld()),
@@ -1253,14 +1231,17 @@ void main(){
     const text = input.value.trim();
     const S = window.TapestrySocial;
     if (!text && !(S && S.hasRef && S.hasRef())) return;
-    if (S && S.enabled && !S.isAdmin()) {  // production: ideas go to the shared pool
+    const hasImg = !!(S && S.hasRef && S.hasRef());
+    // Production: ideas go to the shared pool. Image ideas always do (admins too): only the pool path uploads the
+    // image and runs the vision step; the admin WS intent carries text only, so an image-only send arrived empty.
+    if (S && S.enabled && (!S.isAdmin() || hasImg)) {
       // Feels instant: clear + collapse now (the submit listener below collapses), show "Sending…", one send at a time.
       if (ideaBusy) return;
       ideaBusy = true;
       if (ideaKey.text !== text) ideaKey = { text, key: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)) };
       input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true }));
       $("cmd").classList.add("sending");
-      toast(`Sending <span class="muted">“${esc(text.length > 60 ? text.slice(0, 57) + "…" : text)}”</span>`, 20000);
+      toast(text ? `Sending <span class="muted">“${esc(text.length > 60 ? text.slice(0, 57) + "…" : text)}”</span>` : "Sending your image", 20000);
       Promise.resolve(S.submitIdea(text, ideaKey.key)).catch(() => false).then((ok) => {
         ideaBusy = false; $("cmd").classList.remove("sending");
         if (ok) { ideaKey = {}; return; }
@@ -1268,6 +1249,7 @@ void main(){
       });
       return;
     }
+    if (!text) return;   // the WS intent is text-only
     const req = ++reqId;
     pending.add(req);
     $("cmd").classList.add("busy");
@@ -1517,7 +1499,7 @@ void main(){
       pending.clear(); $("cmd").classList.remove("busy");
       toast(esc(msg.text), 3500);
     } else if (msg.type === "activity") {
-      if (msg.text !== lastOwnText) toast(`Someone added <span class="muted">“${esc(msg.text)}”</span> → ${(msg.titles || []).map(esc).join(" → ")}`, 4500);
+      if (msg.text !== lastOwnText) toast(`Someone added ${msg.text && msg.text.trim() ? `<span class="muted">“${esc(msg.text)}”</span>` : "an image"} → ${(msg.titles || []).map(esc).join(" → ")}`, 4500);
     } else if (msg.type === "plan") {
       pending.delete(msg.req);
       lastOwnText = msg.text;
