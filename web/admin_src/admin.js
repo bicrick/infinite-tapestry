@@ -133,7 +133,7 @@ document.addEventListener("click", async (e) => {
   const { data } = await sb.auth.getSession();
   token = data.session && data.session.access_token;
   if (!token) { $("msg").innerHTML = 'Sign in on <a href="/">the tapestry</a> with an admin account first.'; return; }
-  try { if (location.hash === "#reliability") opsView().catch(() => {}); await overview(); stories().catch(() => {}); chatList().then(openChat).catch(() => {}); if (location.hash === "#render") renderView().catch(() => {}); await load(); } catch (e) { $("msg").textContent = e.message === "admin_only" ? "This account isn't an admin." : "Error: " + e.message; }
+  try { if (location.hash === "#reliability") opsView().catch(() => {}); await overview(); stories().catch(() => {}); chatList().then(openChat).catch(() => {}); if (location.hash === "#config" || location.hash === "#render") renderView().catch(() => {}); await load(); } catch (e) { $("msg").textContent = e.message === "admin_only" ? "This account isn't an admin." : "Error: " + e.message; }
 })();
 
 // ---------- stories: library + playlist ----------
@@ -292,7 +292,7 @@ function confirmBox(title, body, ok) {
 
 // ---------- live render settings ----------
 let RS = null, RS_DEF = null, RS_SEED = 1;
-const rsEls = () => [...document.querySelectorAll("#view-render input[type=range]")];
+const rsEls = () => [...document.querySelectorAll("#view-config input[type=range]")];
 function rsRead() { const r = {}; rsEls().forEach((i) => (r[i.dataset.k] = +i.value)); return r; }
 function rsDual(id, kmin, kmax) {
   const box = $(id), [a, b] = box.querySelectorAll("input"), lo = +a.min, hi = +a.max;
@@ -340,7 +340,7 @@ async function renderView() {
   const d = await call("render_get"); RS_DEF = d.defaults; RS = { ...d.defaults, ...d.render };
   rsSet(RS); RS = rsRead(); rsDraw();
 }
-document.addEventListener("input", (e) => { if (e.target.closest && e.target.closest("#view-render")) rsDraw(); });
+document.addEventListener("input", (e) => { if (e.target.closest && e.target.closest("#view-config")) rsDraw(); });
 $("rs-reroll").onclick = () => { RS_SEED = (RS_SEED * 48271 + 7) % 2147483647 || 1; rsDraw(); };
 $("rs-reset").onclick = () => RS_DEF && rsSet(RS_DEF);
 $("rs-save").onclick = async () => {
@@ -350,12 +350,13 @@ $("rs-save").onclick = async () => {
 
 // ---------- views (sidebar / bottom nav) ----------
 function show(v) {
+  if (v === "render") v = "config";   // old link
   if (!document.getElementById("view-" + v)) v = "overview";
   document.querySelectorAll(".adm .view").forEach((x) => x.classList.toggle("on", x.id === "view-" + v));
   document.querySelectorAll(".side a[data-view]").forEach((a) => a.classList.toggle("on", a.dataset.view === v));
   if (v === "reliability" && token) opsView().catch((e) => ($("msg").textContent = "Error: " + e.message));
   if (v === "auto") { const l = $("chat-log"); l.scrollTop = l.scrollHeight; }
-  if (v === "render" && token) renderView().catch((e) => ($("msg").textContent = "Error: " + e.message));
+  if (v === "config" && token) renderView().catch((e) => ($("msg").textContent = "Error: " + e.message));
   window.scrollTo(0, 0);
 }
 addEventListener("hashchange", () => show(location.hash.slice(1)));

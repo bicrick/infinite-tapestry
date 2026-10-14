@@ -2,12 +2,12 @@
   <nav class="side" aria-label="Admin">
     <div class="brand"><img src="/brand/mark.svg" alt="" /><span>Admin</span></div>
     <a href="#overview" data-view="overview">Overview</a>
+    <a href="#config" data-view="config">Configuration</a>
     <a href="#auto" data-view="auto">Talk to Auto</a>
     <a href="#stories" data-view="stories">Stories</a>
     <a href="#queue" data-view="queue">Queue</a>
     <a href="#reliability" data-view="reliability">Reliability</a>
     <a href="#deploys" data-view="deploys">Deploys</a>
-    <a href="#render" data-view="render">Live render</a>
     <a href="#settings" data-view="settings">Settings</a>
     <a class="back" href="/">← Tapestry</a>
   </nav>
@@ -87,8 +87,8 @@
       <div class="card-a"><h2>History</h2><table id="deploys"></table></div>
     </section>
 
-    <section class="view" id="view-render">
-      <header class="vh"><h1>Live render</h1><span class="fine" id="rs-state"></span></header>
+    <section class="view" id="view-config">
+      <header class="vh"><h1>Configuration</h1><p class="fine">Live settings for the stream. Saved to the database; the pod applies them within ~15 s, no restart.</p><span class="fine" id="rs-state"></span></header>
       <div class="card-a rs">
         <h2>Scene widths</h2>
         <p class="fine">How many strips a scene occupies before the next begins. Each scene picks a random width in its range.</p>
