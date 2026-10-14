@@ -922,7 +922,7 @@ def create_app(
                         at = generator.strip_index
                         sid = data.get("id")
                         if t == "speed":
-                            timeline.set_speed(data.get("mode"), data.get("manual"), data.get("multiplier"))
+                            timeline.set_speed(data.get("mode"), data.get("manual"))   # fast-forward multiplier retired: any viewer could pin the shared stream at 8x
                             unpack_buffer_target()
                             broadcast(clock_msg())
                             continue
