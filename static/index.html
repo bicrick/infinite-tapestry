@@ -135,7 +135,7 @@
         <button type="button" data-when="now">Now</button>
       </div>
       <span class="sep sec"></span>
-      <button id="speed-btn" type="button" class="icon text sec" title="Speed (F to fast-forward)">Auto</button>
+      <button id="speed-btn" type="button" class="icon text sec" title="Speed">Auto</button>
       <button id="skip" type="button" class="icon sec" title="Next scene">
         <svg viewBox="0 0 24 24"><path d="M6 6l8 6-8 6V6zm10 0h2v12h-2z"/></svg>
       </button>
@@ -175,15 +175,6 @@
       <div id="manual-row" class="pop-row dim">
         <input id="manual-speed" type="range" min="4" max="120" value="30" />
         <span id="manual-val" class="num">30 px/s</span>
-      </div>
-      <div class="pop-row">
-        <span class="muted">Fast-forward</span>
-        <div class="seg small" id="ff">
-          <button type="button" data-m="1" class="on">1×</button>
-          <button type="button" data-m="2">2×</button>
-          <button type="button" data-m="4">4×</button>
-          <button type="button" data-m="8">8×</button>
-        </div>
       </div>
       <p class="fine">Auto follows the GPU's measured paint rate and keeps a few strips in reserve, easing speed so it never stalls.</p>
     </div>

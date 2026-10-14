@@ -715,7 +715,7 @@ void main(){
       const zt = 1;   // no zoom-out while scrubbing anywhere (blur + wheel label instead)
       // Desktop ribbon: while the chrome is up the band eases down to a ribbon; idle -> full bleed.
       const b = document.body.classList;
-      const rt = !portrait() && !document.fullscreenElement && !b.contains("immersive") ? RIBBON : 1;   // ribbon in a window; full bleed in fullscreen
+      const rt = !portrait() && !b.contains("immersive") ? RIBBON : 1;   // ribbon always; full only via the fullscreen button
       ribbon += (rt - ribbon) * (1 - Math.exp(-dt * 4.2));
       if (Math.abs(ribbon - rt) < 0.0008) ribbon = rt;
       ribbonAnchor += ((panMode === "live" || panMode === "return" ? 1 : 0) - ribbonAnchor) * Math.min(1, dt * 5);
@@ -832,7 +832,7 @@ void main(){
     if (!el || !window.Odometer) { if (el) el.textContent = pre + viewers + post; return; }
     if (!el._odo) {
       el.textContent = "";
-      el._pre = document.createElement("span"); el._num = document.createElement("span"); el._post = document.createElement("span");
+      el._pre = document.createElement("span"); el._num = document.createElement("span"); el._post = document.createElement("span"); el._num.classList.add("w-n"); el._post.classList.add("w-post");
       el.append(el._pre, el._num, el._post);
       el._odo = window.Odometer(el._num);
     }
@@ -853,9 +853,8 @@ void main(){
     const S = window.TapestrySocial;
     if (!DEBUG && !(S && S.isAdmin())) {
       parts.push(replay ? "replay" : live ? "live" : "rewound");
-      if (speedMult > 1) parts.push(speedMult + "×");
       setWatching(statusText, parts.join("  ·  ") + "  ·  ", " watching");
-      setWatching($("status-mini"), parts.join("  ·  ") + "  ·  ", "");
+      setWatching($("status-mini"), parts.join("  ·  ") + "  ·  ", " watching");
       syncSpeedUi();
       return;
     }
@@ -871,9 +870,9 @@ void main(){
     syncSpeedUi();
   }
   function syncSpeedUi() {
-    if (typeof paintMode === "function") { paintMode(speedMode); paintFF(speedMult); }
+    if (typeof paintMode === "function") paintMode(speedMode);
     if (document.activeElement !== $("manual-speed")) { $("manual-speed").value = manualSpeed; $("manual-val").textContent = Math.round(manualSpeed) + " px/s"; }
-    $("speed-btn").textContent = (speedMode === "auto" ? "Auto" : Math.round(manualSpeed) + " px/s") + (speedMult > 1 ? " " + speedMult + "×" : "");
+    $("speed-btn").textContent = (speedMode === "auto" ? "Auto" : Math.round(manualSpeed) + " px/s");
   }
 
   // ---------- pan physics: drag / wheel momentum, rubber-band, spring back ----------
@@ -945,8 +944,65 @@ void main(){
 
   let driftVel = 0, driftAcc = 0, driftArm = 0, turbo = 0;
   function holdDrift() { driftVel = 0; driftAcc = 0; driftArm = 0; }
+  // ---------- arrow-key flight ----------
+  // Hold ← / → : slow, sustained acceleration that keeps building (exponential ramp, capped) until you're flying.
+  // Opposite arrow while moving = hard brake (quick deceleration, not a dead stop); keep holding and it reverses.
+  // Release: hand the velocity to the glide with loose (turbo) friction, which settles and drifts back to live pace.
+  // Driven by the main rAF loop (stepPan); wheel / drag / touch cancel it instantly so it never fights native scroll.
+  const fly = { dir: 0, keys: new Set() };
+  const FLY_BASE = () => SW() * 0.9;       // world px/s² at a standstill
+  const FLY_GROW = 0.55;                    // 1/s: acceleration grows with speed -> long, building ramp
+  const FLY_MAX = () => SW() * 60;          // ~60 strips/s top speed
+  const FLY_BRAKE = 7.0;                    // 1/s exponential brake + a linear floor below
+  function flyKey(e, down) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return false;
+    if (e.metaKey || e.ctrlKey || e.altKey) return false;
+    const d = e.key === "ArrowRight" ? 1 : -1;
+    if (down) fly.keys.add(d); else fly.keys.delete(d);
+    const prev = fly.dir;
+    fly.dir = fly.keys.has(d) && down ? d : fly.keys.has(-d) ? -d : fly.keys.has(d) ? d : 0;
+    if (fly.dir && !prev) {
+      if (fly.dir > 0 && (panMode === "live" || panMode === "return")) { fly.dir = 0; return true; }   // already at the live edge
+      wheelGlide = false; tlScrub = false;
+      if (panMode === "live" || panMode === "return") enterHistory();
+      if (panMode !== "fly") { panVel = panMode === "glide" ? panVel : 0; panMode = "fly"; }
+    }
+    if (!fly.dir && panMode === "fly") { turbo = Math.min(1, Math.abs(panVel) / (SW() * 8)); panMode = "glide"; }
+    return true;
+  }
+  function flyCancel() { fly.keys.clear(); fly.dir = 0; }
+  addEventListener("blur", () => { flyCancel(); if (panMode === "fly") panMode = "glide"; });
+  function stepFly(dt) {
+    const hi = maxPan(), lo = minPan(), d = fly.dir;
+    if (!d) { panMode = "glide"; return; }
+    if (panVel * d < 0) {                   // braking against the motion
+      const v = Math.abs(panVel), nv = Math.max(0, v * Math.exp(-FLY_BRAKE * dt) - SW() * 6 * dt);
+      panVel = Math.sign(panVel) * nv;
+    } else {
+      const v = Math.abs(panVel);
+      panVel = d * Math.min(FLY_MAX(), v + (FLY_BASE() + FLY_GROW * v) * dt);
+    }
+    panPos += panVel * dt;
+    if (panPos >= hi && panVel > 0) { panPos = hi; panVel = 0; flyCancel(); panMode = "live"; live = true; setAway(false); return; }
+    if (panPos <= lo && panVel < 0) { panPos = lo; panVel = 0; }
+    if (performance.now() - landAt > 250) {   // prefetch ahead of the flight
+      landAt = performance.now();
+      const land = (panPos + panVel * 0.6 + viewWorld() / 2) / SW();
+      const a0 = Math.max(0, Math.floor(land) - 8), b0 = Math.min(maxIndex, Math.ceil(land) + 8);
+      if (b0 >= a0) requestMissing(a0, b0);
+      for (let L = 1; L <= 2; L++) { const c = Math.floor(land / LOD_N[L]); for (let k = -1; k <= 1; k++) if (c + k >= 0) lodTile(L, c + k); }
+    }
+  }
+  window.addEventListener("keydown", (e) => {
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || document.activeElement.isContentEditable) return;
+    if (document.getElementById("drawer").classList.contains("open")) return;
+    if (flyKey(e, true)) e.preventDefault();
+  });
+  window.addEventListener("keyup", (e) => { flyKey(e, false); });
+
   function stepPan(dt) {
     if (panMode === "live") return;
+    if (panMode === "fly") { if (gesture || tlScrub) { flyCancel(); panMode = "drag"; } else { stepFly(dt); return; } }
     if (panMode !== "glide" || gesture || tlScrub) holdDrift();   // held / scrubbing / seeking: no drift
     const lo = minPan(), hi = maxPan();
     if (panMode === "seek") {
@@ -1184,7 +1240,7 @@ void main(){
     },
     speedCss: () => Math.abs(velS) / Math.max(1e-6, pxToWorld()),
     isLive: () => panMode === "live",
-    gliding: () => panMode === "glide" && Math.abs(panVel) > 4,
+    gliding: () => (panMode === "glide" || panMode === "fly") && Math.abs(panVel) > 4,
   });
   function goLive() { if (!live || panMode !== "live") startReturn(); }
   liveBtn.addEventListener("click", goLive);
@@ -1286,14 +1342,6 @@ void main(){
   ms.value = manualSpeed; $("manual-val").textContent = manualSpeed + " px/s";
   ms.addEventListener("input", () => { manualSpeed = Number(ms.value); $("manual-val").textContent = manualSpeed + " px/s"; });
   ms.addEventListener("change", () => send({ type: "speed", mode: "manual", manual: manualSpeed }));
-  function setFF(m) {
-    speedMult = m;
-    paintFF(m);
-    send({ type: "speed", multiplier: m });
-    if (m > 1) goLive();
-  }
-  document.querySelectorAll("#ff button").forEach((b) => b.addEventListener("click", () => setFF(Number(b.dataset.m))));
-  function paintFF(m) { document.querySelectorAll("#ff button").forEach((x) => x.classList.toggle("on", Number(x.dataset.m) === m)); }
   paintMode(speedMode);
 
   window.addEventListener("keydown", (e) => {
@@ -1302,7 +1350,6 @@ void main(){
       return;
     }
     if (e.key === "/") { e.preventDefault(); $("cmd-input").focus(); }
-    else if (e.key === "f" || e.key === "F") { const seq = [1, 2, 4, 8]; setFF(seq[(seq.indexOf(speedMult) + 1) % seq.length]); toast("Fast-forward " + speedMult + "×", 1500); }
     else if (e.key === "l" || e.key === "L") goLive();
     else if (e.key === "q" || e.key === "Q") toggleDrawer();
     else if (e.key === "e" || e.key === "E") toggleExport();
