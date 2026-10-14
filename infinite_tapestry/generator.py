@@ -95,14 +95,10 @@ class StripGenerator:
         # EMA of seconds spent generating one strip = the GPU's raw capacity
         # (independent of buffer gating), used by the client's auto speed.
         self.gen_seconds_ema: float | None = None
-        # P(nsfw) classifier for generated pixels (GPU only; tests may inject one).
-        self.nsfw = None
+        # No checks on the live canvas: generated strips are never scored, repainted, dropped or blurred,
+        # and no classifier is loaded on the GPU. (Uploaded reference images are still screened in crowd.py.)
         self.nsfw_hits = 0
-        self.on_flag = None  # callback(scene) when a scene's strip stays explicit after one repaint
-        if not config.mock and getattr(config, "nsfw_model", ""):
-            from .nsfw import load_classifier
-
-            self.nsfw = load_classifier(config.nsfw_model, config.device)
+        self.on_flag = None
         self._ema_alpha = 0.2
         # Global mean/std matching compounded strip-over-strip and blew out
         # saturation on GPU; off by default.
@@ -221,10 +217,13 @@ class StripGenerator:
             self.inpainter.guidance = cfg.guidance_scale + (getattr(cfg, "user_cfg_boost", 1.5) if user_scene else 0.0)
         from .guard import is_disallowed
 
-        if is_disallowed(prompt_a):
-            prompt_a = "abstract soft colored mist"
-        if prompt_b and is_disallowed(prompt_b):
-            prompt_b = None
+        # Last-line prompt guard for Auto/LLM-written prompts only. User ideas are the user's own words,
+        # already moderated at submit (hard lines), so they are never swapped here.
+        if (scene_meta or {}).get("origin") != "user":
+            if is_disallowed(prompt_a):
+                prompt_a = "abstract soft colored mist"
+            if prompt_b and is_disallowed(prompt_b):
+                prompt_b = None
         shown_prompt = prompt_b if (prompt_b and blend_t >= 0.5) else prompt_a
         from .styles import ramp, with_trigger
 
@@ -293,50 +292,6 @@ class StripGenerator:
                 generated = self.inpainter.generate(
                     image=window, mask=mask, prompt=prompt_a, negative_prompt=self.director.negative_for(blend_t),
                     seed=seed + 31337 * (k + 1), prompt_b=prompt_b, t=blend_t)
-        if self.nsfw is not None:
-            new_region = generated.crop((max(0, ctx_w - band), 0, cfg.window_width - margin, cfg.height))
-            p = self.nsfw(new_region)
-            if getattr(cfg, "nsfw_log_min", 1.0) <= p < cfg.nsfw_threshold:
-                self._nsfw_near(p, scene_meta)
-            if p >= cfg.nsfw_threshold:
-                self.nsfw_hits += 1
-                logger.warning("Strip %d flagged NSFW (p=%.2f); regenerating", self._strip_index, p)
-                retry = self.inpainter.generate(
-                    image=window, mask=mask, prompt=prompt_a + ", everyone fully clothed",
-                    negative_prompt=self.director.negative_for(blend_t) + ", nude, naked, sexual, nsfw, cleavage, bare skin",
-                    seed=seed + 104729, prompt_b=prompt_b, t=blend_t,
-                )
-                if retry.size != window.size:
-                    retry = retry.resize(window.size, Image.Resampling.LANCZOS)
-                r_region = retry.crop((max(0, ctx_w - band), 0, cfg.window_width - margin, cfg.height))
-                if self.nsfw(r_region) < cfg.nsfw_threshold:
-                    generated = retry
-                else:
-                    # Still flagged: the flagged pixels never leave this function (no broadcast,
-                    # no storage). Drop the scene, strike its source idea, repaint as Auto filler.
-                    logger.warning("Strip %d still NSFW after retry; falling back to Auto", self._strip_index)
-                    try:
-                        if self.on_flag:
-                            self.on_flag(self.director.flagged_scene() if hasattr(self.director, "flagged_scene") else scene_meta)
-                    except Exception:
-                        logger.exception("on_flag failed")
-                    if hasattr(self.director, "drop_flagged"):
-                        self.director.drop_flagged(self._strip_index)
-                    safe = self.director.safe_prompt() if hasattr(self.director, "safe_prompt") else "cinematic photo, empty misty landscape"
-                    generated = self.inpainter.generate(
-                        image=window, mask=mask, prompt=safe,
-                        negative_prompt=self.director.negative_for(0.0) + ", nude, naked, sexual, nsfw, people",
-                        seed=seed + 7, prompt_b=None, t=0.0)
-                    if generated.size != window.size:
-                        generated = generated.resize(window.size, Image.Resampling.LANCZOS)
-                    g_region = generated.crop((max(0, ctx_w - band), 0, cfg.window_width - margin, cfg.height))
-                    if self.nsfw(g_region) >= cfg.nsfw_threshold:  # last resort: plain blur of the fallback
-                        from .nsfw import obscure
-
-                        generated = generated.copy()
-                        generated.paste(obscure(g_region), (max(0, ctx_w - band), 0))
-                    shown_prompt, scene_meta = safe, {"title": "Auto", "origin": "auto"}
-
         if generated.size != window.size:
             generated = generated.resize(window.size, Image.Resampling.LANCZOS)
 
@@ -490,18 +445,6 @@ class StripGenerator:
     def _record_time(self, dt: float) -> None:
         a = self._ema_alpha
         self.gen_seconds_ema = dt if self.gen_seconds_ema is None else (1 - a) * self.gen_seconds_ema + a * dt
-
-    on_event = None  # set by main: OpsLog.event(type, **detail)
-
-    def _nsfw_near(self, p: float, meta: object = None, kind: str = "strip") -> None:
-        """Near-miss NSFW score (below the threshold, so the strip ships): log for threshold tuning."""
-        try:
-            if self.on_event:
-                m = meta if isinstance(meta, dict) else {}
-                self.on_event("nsfw_near", kind=kind, score=round(float(p), 3), threshold=self.config.nsfw_threshold,
-                              strip=self._strip_index, title=str(m.get("title") or "")[:80], origin=m.get("origin"))
-        except Exception:
-            pass
 
     def stats(self) -> dict:
         ema = self.gen_seconds_ema

@@ -254,7 +254,8 @@ class Crowd:
             scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
                                  BUSY_HOLD if self.busy else 4, source=body[:200], origin="user",
                                  style=s.get("style"), beats=s.get("beats"), lora=explicit_lora(body))
-                      for s in (plan.get("scenes") or [])[:1] if not is_disallowed(s["prompt"])]
+                      for s in (plan.get("scenes") or [])[:1]
+                      if (body and s["prompt"].startswith(" ".join(body.split()))) or not is_disallowed(s["prompt"])]
             if not scenes:
                 # Nothing survived the guard: don't leave the idea stuck as playing.
                 await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{rid}", {"status": "rejected"}, "return=minimal")
@@ -301,6 +302,21 @@ class Crowd:
         if self.out_of_fuel and not was and self.burn:
             await asyncio.to_thread(self.supa.audit, "out_of_fuel", os.environ.get("RUNPOD_POD_ID", ""), {"cents": self.fuel_cents})
 
+    on_event = None   # set by main: OpsLog.event
+    _ref_clf: Any = False
+
+    def _ref_classifier(self):
+        """Uploaded-image NSFW screen (input only), CPU, loaded on first use. Tests may inject generator.nsfw."""
+        inj = getattr(self.generator, "nsfw", None)
+        if inj is not None:
+            return inj
+        if self._ref_clf is False:
+            cfg = getattr(self.generator, "config", None)
+            model = "" if cfg is None or getattr(cfg, "mock", False) else getattr(cfg, "ref_nsfw_model", "")
+            from .nsfw import load_classifier
+            self._ref_clf = load_classifier(model, "cpu") if model else None
+        return self._ref_clf
+
     def _load_ref(self, path: str) -> tuple[bytes, str] | None:
         """Fetch a reference image (<=2 MB), screen it with the NSFW classifier. None = blocked/unusable."""
         import io
@@ -310,12 +326,12 @@ class Crowd:
             data = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "tapestry"}), timeout=15).read(2_100_000)
             im = Image.open(io.BytesIO(data)).convert("RGB")
             im.thumbnail((768, 768))
-            nsfw = getattr(self.generator, "nsfw", None)
+            nsfw = self._ref_classifier()
             if nsfw is not None:
                 cfg = self.generator.config
                 p = nsfw(im)
-                if getattr(cfg, "nsfw_log_min", 1.0) <= p < getattr(cfg, "nsfw_threshold", 0.8) and hasattr(self.generator, "_nsfw_near"):
-                    self.generator._nsfw_near(p, {"title": path[-60:]}, kind="ref")
+                if getattr(cfg, "nsfw_log_min", 1.0) <= p < getattr(cfg, "nsfw_threshold", 0.8) and self.on_event:
+                    self.on_event("nsfw_near", kind="ref", score=round(float(p), 3), threshold=cfg.nsfw_threshold)
                 if p >= getattr(cfg, "nsfw_threshold", 0.8):
                     return None
             buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)

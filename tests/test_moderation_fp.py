@@ -35,12 +35,10 @@ def test_slurs_still_block_guard():
     assert hard_block_reason("nigger") == "slur" and hard_block_reason("f@ggots") == "slur"
 
 
-def test_nsfw_threshold_raised_and_near_misses_logged():
+def test_ref_image_threshold_raised_and_near_misses_logged():
     c = Config()
     assert c.nsfw_threshold == 0.8 and c.nsfw_log_min == 0.5
-    gen = (ROOT / "infinite_tapestry/generator.py").read_text()
-    assert "nsfw_near" in gen and ", nude, naked, sexual, nsfw, people" in gen  # repaint-then-fallback kept
-    assert "generator.on_event = ops.event" in (ROOT / "infinite_tapestry/main.py").read_text()
+    assert "crowd.on_event = ops.event" in (ROOT / "infinite_tapestry/main.py").read_text()
 
 
 def test_sql_allowlist_mirrors_code():
@@ -70,3 +68,15 @@ console.log(JSON.stringify(out));
     assert all(v == "" for v in r["textok"])
     assert r["gore"] == "" and r["sexHigh"] == "sexual" and r["hateLow"] == "" and r["hateHigh"] == "hate"
     assert r["minors"] == "minor_sexual" and r["instr"] == "unsafe"
+
+
+def test_no_checks_on_live_canvas():
+    gen = (ROOT / "infinite_tapestry/generator.py").read_text()
+    for gone in ("self.nsfw(", "load_classifier", "drop_flagged", "obscure(", "on_flag("):
+        assert gone not in gen, gone
+    assert not hasattr(Config(), "nsfw_model")
+
+
+def test_user_prompt_never_swapped_before_render():
+    gen = (ROOT / "infinite_tapestry/generator.py").read_text()
+    assert 'get("origin") != "user"' in gen

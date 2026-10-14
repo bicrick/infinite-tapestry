@@ -100,7 +100,6 @@ def main(argv: list[str] | None = None) -> int:
     from .ops import OpsLog
 
     ops = OpsLog(generator).start()
-    generator.on_event = ops.event
 
     from .interpreter import PromptInterpreter
 
@@ -111,6 +110,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     app = create_app(config, buffer, generator, interpreter=interpreter)
     ops.viewers = getattr(app.state, "viewer_count", lambda: None)
+    if getattr(app.state, "crowd", None) is not None:
+        app.state.crowd.on_event = ops.event   # reference-image near-miss scores for tuning
 
     # ws_ping_interval: uvicorn/websockets protocol ping (in addition to our JSON pings).
     try:

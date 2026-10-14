@@ -27,7 +27,8 @@ def test_sexual_terms_rejected_but_gore_allowed():
     assert "nude" not in fallback_plan("nude beach at dawn")["scenes"][0]["prompt"]
 
 
-def test_nsfw_classifier_regenerates_then_blurs():
+def test_live_canvas_is_never_checked():
+    """No canvas checks: even an injected classifier is never called on generated strips."""
     from infinite_tapestry.buffer import StripBuffer
     from infinite_tapestry.config import Config
     from infinite_tapestry.generator import StripGenerator
@@ -35,13 +36,8 @@ def test_nsfw_classifier_regenerates_then_blurs():
 
     cfg = Config(mock=True, height=32, window_width=64, strip_width=16, overlap=4, buffer_target=3, buffer_min=1)
     gen = StripGenerator(cfg, MockInpainter(cfg), StripBuffer(3, 1))
-    calls = []
+    calls, flagged = [], []
     gen.nsfw = lambda img: calls.append(1) or 0.99
-    flagged = []
     gen.on_flag = flagged.append
     gen.generate_one()
-    # flagged, repainted clothed, still flagged -> scene dropped to Auto (+ strike), fallback checked too
-    assert gen.nsfw_hits == 1 and len(calls) == 3 and len(flagged) == 1
-    gen.nsfw = lambda img: 0.0
-    gen.generate_one()
-    assert gen.nsfw_hits == 1
+    assert calls == [] and flagged == [] and gen.nsfw_hits == 0

@@ -78,9 +78,11 @@ class Config:
         ]
     )
     autopilot: bool = True
-    nsfw_model: str = "Falconsai/nsfw_image_detection"  # empty = off
-    nsfw_threshold: float = 0.8   # was 0.6: benign Auto scenes (slime pools, canyons) were flagged
-    nsfw_log_min: float = 0.5     # scores in [nsfw_log_min, nsfw_threshold) go to ops_events for tuning
+    # Generated strips are never checked (no canvas classifier). This model only screens UPLOADED
+    # reference images (input), on CPU, loaded lazily on the first image idea. Empty = off.
+    ref_nsfw_model: str = "Falconsai/nsfw_image_detection"
+    nsfw_threshold: float = 0.8   # reference images (was 0.6)
+    nsfw_log_min: float = 0.5     # reference-image scores in [nsfw_log_min, nsfw_threshold) go to ops_events
     negative_prompt: str = (
         "blurry, low quality, distorted, watermark, text, frame, border, "
         "ugly, duplicate, collage, split screen, diptych, panel, seam, "
