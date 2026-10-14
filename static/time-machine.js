@@ -78,7 +78,7 @@
       rows += `<li><span class="hr gap"><span class="hl">${label}</span><em>${gap.future ? "Still to come today" : "Nothing painted"}</em></span></li>`;
       gap = null;
     };
-    const nowMs = Date.now();
+    const nowMs = Date.now(), rib = Array(24).fill(null);
     for (let h = 0; h < 24; h++) {
       const t0 = new Date(Y, M - 1, D, h).getTime(), ia = idxAt(d, Math.max(t0, +new Date(d.t0))), ib = idxAt(d, Math.min(t0 + 36e5 - 1, +new Date(d.t1)));
       const live = ia >= 0 && t0 + 36e5 > +new Date(d.t0) && t0 <= +new Date(d.t1);
@@ -86,13 +86,28 @@
       flush();
       const hi = ideas.filter((x) => { const t = +timeAt(d, x.a); return t >= t0 && t < t0 + 36e5; });
       const chipsHtml = hi.length ? `<div class="hchips">${hi.slice(0, 3).map(chip).join("")}${hi.length > 3 ? `<button class="chip more" type="button" aria-label="Show ${hi.length - 3} more ideas">+${hi.length - 3} more ideas</button><span class="rest">${hi.slice(3).map(chip).join("")}</span>` : ""}</div>` : "";
-      rows += `<li><a class="hr on" href="/?at=${ia}" aria-label="Replay ${fmtH(h)}" title="Replay from ${fmtH(h)}"><span class="hl">${fmtH(h)}</span><i data-src="${thumb(Math.round((ia + Math.max(ia, ib)) / 2))}"></i></a>${chipsHtml}</li>`;
+      const n = Math.max(1, ib - ia + 1), src = thumb(Math.round((ia + Math.max(ia, ib)) / 2));
+      rib[h] = { src, on: true };
+      rows += `<li class="hcard" id="h-${h}"><a class="hr on" href="/?at=${ia}" aria-label="Replay from ${fmtH(h)}"><span class="hl"><b>${fmtH(h)}</b><small>${hi.length ? hi.length + (hi.length === 1 ? " idea" : " ideas") : n + " strips"}</small></span><i data-src="${src}"><span class="play">▶ Replay</span></i></a>${chipsHtml}</li>`;
     }
     flush();
+    $("d-rib").innerHTML = rib.map((r, h) => r ? `<a href="#h-${h}" data-h="${h}" title="${fmtH(h)}"><i data-src="${r.src}"></i></a>` : `<span title="${fmtH(h)}"></span>`).join("")
+      + `<div class="ticks" aria-hidden="true">${[0, 6, 12, 18].map((h) => `<em style="left:${h / 24 * 100}%">${fmtH(h)}</em>`).join("")}</div>`;
+    $("d-rib").querySelectorAll("i[data-src]").forEach((i) => lazy.observe(i));
+    const ks = [...byDay.keys()].sort(), at = ks.indexOf(k);
+    $("d-prev").disabled = at <= 0; $("d-next").disabled = at < 0 || at >= ks.length - 1;
     $("d-hours").innerHTML = rows;
     $("d-hours").querySelectorAll("i[data-src]").forEach((i) => lazy.observe(i));
     $("d-hours").onclick = (e) => { const m = e.target.closest(".more"); if (m) { m.parentElement.classList.add("all"); m.remove(); } };
   }
+
+  const step = (dir) => { const ks = [...byDay.keys()].sort(), k = ks[ks.indexOf(selected) + dir]; if (!k) return;
+    const [y, m] = k.split("-").map(Number); if (!view || view.y !== y || view.m !== m - 1) month(y, m - 1); pick(k); };
+  $("d-prev").onclick = () => step(-1); $("d-next").onclick = () => step(1);
+  $("d-rib").addEventListener("click", (e) => { const a = e.target.closest("a[data-h]"); if (!a) return; e.preventDefault();
+    const row = $("h-" + a.dataset.h); if (!row) return; row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash"); });
+  addEventListener("keydown", (e) => { if (e.target.closest("input,textarea")) return; if (e.key === "ArrowLeft") step(-1); else if (e.key === "ArrowRight") step(1); });
 
   fetch(`/api/about?kind=history&tz=${encodeURIComponent(tz)}`).then((r) => r.json()).then((h) => {
     H = h; lastTile = Math.max(0, Math.floor((h.live_edge + 1) / 64) - 1);

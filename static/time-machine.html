@@ -31,7 +31,7 @@
     <header class="tm-head">
       <p class="eyebrow">Time Machine</p>
       <h1>Everything it has painted, day by day.</h1>
-      <p class="tm-lede">Pick a day, then any hour to replay it in the live viewer.</p>
+      <p class="tm-lede">Pick a day, skim its 24 hours, then tap any moment to replay it in the live viewer.</p>
     </header>
     <div class="tm-grid">
       <section class="tm-cal" aria-label="Calendar">
@@ -41,7 +41,12 @@
         <p class="cal-key"><span><i class="k-on"></i>Painted</span><span><i class="k-today"></i>Today</span></p>
       </section>
       <section class="day" id="day" aria-live="polite">
-        <div class="day-h"><h3 id="d-title">&nbsp;</h3><span class="small" id="d-meta"></span></div>
+        <div class="day-h">
+          <button id="d-prev" class="cal-nav" type="button" aria-label="Previous painted day">‹</button>
+          <div class="day-t"><h3 id="d-title">&nbsp;</h3><span class="small" id="d-meta"></span></div>
+          <button id="d-next" class="cal-nav" type="button" aria-label="Next painted day">›</button>
+        </div>
+        <nav class="dayrib" id="d-rib" aria-label="Jump to an hour"></nav>
         <ol class="hours" id="d-hours"></ol>
       </section>
     </div>

@@ -56,3 +56,39 @@
 .day { scroll-margin-top:80px; }
 .tm-main section { padding:0; }
 .tm-grid > * { min-width:0; } .hchips .chip { max-width:min(100%, 34ch); }
+
+/* ---- v2: day header with prev/next, 24 h overview ribbon, hour cards ---- */
+.day-h { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; margin:0 0 14px; }
+.day-t { display:flex; flex-direction:column; gap:2px; text-align:center; min-width:0; }
+.day-t h3 { margin:0; font-size:22px; letter-spacing:-.025em; }
+.day-h .cal-nav { box-shadow:inset 0 0 0 1px var(--line); width:34px; height:34px; }
+.dayrib { position:relative; display:grid; grid-template-columns:repeat(24, 1fr); gap:2px; height:52px; margin:0 0 30px; padding:3px;
+  border-radius:14px; background:var(--card); box-shadow:inset 0 0 0 1px var(--line); }
+.dayrib > a, .dayrib > span { position:relative; border-radius:5px; overflow:hidden; background:var(--faint); }
+.dayrib > span { opacity:.45; }
+.dayrib > a i { position:absolute; inset:0; background-size:auto 100%; background-position:center; opacity:0; transition:opacity .5s ease, transform .3s var(--ease); }
+.dayrib > a i.in { opacity:1; } .dayrib > a:hover i { transform:scale(1.12); }
+.dayrib > a:first-child, .dayrib > span:first-child { border-radius:11px 5px 5px 11px; } .dayrib > :nth-child(24) { border-radius:5px 11px 11px 5px; }
+.dayrib .ticks { position:absolute; left:3px; right:3px; top:100%; height:18px; pointer-events:none; }
+.dayrib .ticks em { position:absolute; top:5px; font-style:normal; font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.hours { gap:10px; }
+.hcard { padding:8px; margin:0 -8px; border-radius:16px; transition:background .3s ease; scroll-margin:120px; }
+.hcard:hover { background:var(--card); }
+.hcard.flash { animation:flash 1.4s ease; } @keyframes flash { 0%,40% { background:var(--faint); } }
+.hr.on { height:64px; grid-template-columns:72px 1fr; }
+.hr .hl { display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+.hr .hl b { font-weight:500; font-size:13px; color:var(--fg); } .hr .hl small { font-size:11px; color:var(--muted); }
+.hr.on i { position:relative; border-radius:12px; overflow:hidden; background-size:auto 100%; background-repeat:repeat-x; box-shadow:inset 0 0 0 1px rgba(255,255,255,.06); }
+.hr .play { position:absolute; right:10px; bottom:9px; padding:4px 10px; border-radius:999px; font-size:11px; font-style:normal; color:#fff;
+  background:rgba(0,0,0,.55); opacity:0; transform:translateY(4px); transition:opacity .25s ease, transform .25s var(--ease); }
+.hr.on:hover .play, .hr.on:focus-visible .play { opacity:1; transform:none; } .hr.on:hover i { transform:none; }
+.hchips { padding:8px 0 2px 86px; }
+.hr.gap { height:30px; padding-left:14px; }
+.skel { height:64px; border-radius:12px; }
+@media (max-width: 860px) {
+  .tm-cal { max-width:none; padding:14px; } .cal-grid { min-height:0; }
+  .dayrib { height:44px; gap:1px; } .dayrib .ticks em { font-size:10px; }
+  .hr.on { height:56px; grid-template-columns:52px 1fr; gap:10px; } .hchips { padding-left:62px; }
+  .hr .play { opacity:1; transform:none; padding:3px 8px; font-size:10.5px; }
+  .day-t h3 { font-size:19px; }
+}
