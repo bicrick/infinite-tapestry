@@ -296,6 +296,8 @@ class StripGenerator:
         if self.nsfw is not None:
             new_region = generated.crop((max(0, ctx_w - band), 0, cfg.window_width - margin, cfg.height))
             p = self.nsfw(new_region)
+            if getattr(cfg, "nsfw_log_min", 1.0) <= p < cfg.nsfw_threshold:
+                self._nsfw_near(p, scene_meta)
             if p >= cfg.nsfw_threshold:
                 self.nsfw_hits += 1
                 logger.warning("Strip %d flagged NSFW (p=%.2f); regenerating", self._strip_index, p)
@@ -488,6 +490,18 @@ class StripGenerator:
     def _record_time(self, dt: float) -> None:
         a = self._ema_alpha
         self.gen_seconds_ema = dt if self.gen_seconds_ema is None else (1 - a) * self.gen_seconds_ema + a * dt
+
+    on_event = None  # set by main: OpsLog.event(type, **detail)
+
+    def _nsfw_near(self, p: float, meta: object = None, kind: str = "strip") -> None:
+        """Near-miss NSFW score (below the threshold, so the strip ships): log for threshold tuning."""
+        try:
+            if self.on_event:
+                m = meta if isinstance(meta, dict) else {}
+                self.on_event("nsfw_near", kind=kind, score=round(float(p), 3), threshold=self.config.nsfw_threshold,
+                              strip=self._strip_index, title=str(m.get("title") or "")[:80], origin=m.get("origin"))
+        except Exception:
+            pass
 
     def stats(self) -> dict:
         ema = self.gen_seconds_ema

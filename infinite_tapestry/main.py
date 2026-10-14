@@ -100,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     from .ops import OpsLog
 
     ops = OpsLog(generator).start()
+    generator.on_event = ops.event
 
     from .interpreter import PromptInterpreter
 

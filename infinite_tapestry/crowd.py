@@ -311,8 +311,13 @@ class Crowd:
             im = Image.open(io.BytesIO(data)).convert("RGB")
             im.thumbnail((768, 768))
             nsfw = getattr(self.generator, "nsfw", None)
-            if nsfw is not None and nsfw(im) >= getattr(self.generator.config, "nsfw_threshold", 0.6):
-                return None
+            if nsfw is not None:
+                cfg = self.generator.config
+                p = nsfw(im)
+                if getattr(cfg, "nsfw_log_min", 1.0) <= p < getattr(cfg, "nsfw_threshold", 0.8) and hasattr(self.generator, "_nsfw_near"):
+                    self.generator._nsfw_near(p, {"title": path[-60:]}, kind="ref")
+                if p >= getattr(cfg, "nsfw_threshold", 0.8):
+                    return None
             buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
             return buf.getvalue(), "image/jpeg"
         except Exception:

@@ -10,6 +10,27 @@ from __future__ import annotations
 
 import re
 
+# Benign phrases removed before any keyword match (mirrors ALLOW in web/lib/moderate.js and
+# public.mod_allow in migration 019). They never touch the hard lines: "naked mole rat and naked women"
+# still matches on the second "naked".
+_ANIMALS = (r"animals?|elephants?|goats?|lambs?|sheep|deer|fawns?|bears?|pandas?|seals?|owls?|ducks?|ducklings?|chicks?|"
+            r"birds?|turtles?|dragons?|dinosaurs?|whales?|dolphins?|foxes|fox|wolves|wolf|lions?|tigers?|cats?|kittens?|"
+            r"dogs?|puppies|puppy|bunnies|bunny|rabbits?|penguins?|otters?|giraffes?|horses?|ponies|pony|monkeys?|koalas?|"
+            r"sloths?|octopus(?:es)?|sharks?|cows?|pigs?|piglets?|yoda|groot|carrots?|spinach|corn|shower|grand|steps?|teeth")
+_ALLOW = re.compile(r"\b(?:" + "|".join([
+    r"naked mole[- ]?rats?", r"naked eye", r"naked flame", r"naked (?:tree|trees|branches)",
+    r"(?:chicken|turkey|duck|pheasant) breasts?", r"breast ?strokes?", r"breastplates?",
+    r"(?:blue|great|coal|marsh|willow|crested|long[- ]tailed) tits?", r"tit ?mouse", r"tit for tat",
+    r"(?:comic|landing|film|las vegas|vegas|sunset|mobius|möbius|bacon|neon|led|light) strips?", r"strip malls?", r"strip mines?",
+    r"(?:baby|babies|kid|kids) (?:" + _ANIMALS + r")",
+    r"(?:kids|kid|children|child)['’]?s? (?:toys?|books?|drawings?|crayons?|cartoons?|tv|show|menu|meal|room|playground|blocks?|lego)",
+    r"toy (?:box|store|shop|blocks?)", r"kid goats?", r"sex pistols", r"middlesex", r"sussex", r"essex",
+]) + r")\b", re.I)
+
+
+def _clean(texts) -> str:
+    return _ALLOW.sub(" ", " ".join(t for t in texts if t))
+
 _MINOR = re.compile(
     r"\b(child|children|kid|kids|minor|minors|underage|under-age|teen|teens|teenage|teenager|preteen|pre-teen|"
     r"tween|loli|lolicon|shota|shotacon|toddler|infant|baby|babies|schoolgirl|schoolboy|little girl|little boy|"
@@ -18,15 +39,15 @@ _MINOR = re.compile(
     re.I,
 )
 _SEXUAL = re.compile(
-    r"\b(sex|sexy|sexual|sexualized|nude|nudes|naked|nudity|erotic|erotica|porn|porno|pornographic|nsfw|explicit|"
+    r"\b(sex|sexy|sexual|sexualized|nude|nudes|naked|nudity|erotic|erotica|porn|porno|pornographic|nsfw|"
     r"topless|bottomless|lingerie|aroused|arousal|genital|genitals|breasts?|nipples?|orgasm|seductive|sensual|"
-    r"fetish|bdsm|lewd|hentai|undress|undressed|undressing|strip|stripping|intercourse|masturbat\w*)\b",
+    r"fetish|bdsm|lewd|hentai|undress|undressed|undressing|stripper|striptease|intercourse|masturbat\w*)\b",
     re.I,
 )
 
 
 def is_blocked(*texts: str) -> bool:
-    joined = " ".join(t for t in texts if t)
+    joined = _clean(texts)
     return bool(_MINOR.search(joined) and _SEXUAL.search(joined))
 
 
@@ -40,7 +61,7 @@ _SEXUAL_STRICT = re.compile(
 
 
 def is_sexual(*texts: str) -> bool:
-    return bool(_SEXUAL_STRICT.search(" ".join(t for t in texts if t)))
+    return bool(_SEXUAL_STRICT.search(_clean(texts)))
 
 
 def is_disallowed(*texts: str) -> bool:
@@ -53,11 +74,11 @@ _SLUR = re.compile(r"\b(n[i1]gg(?:er|a)s?|f[a@]gg?ots?|k[i1]kes?|sp[i1]cs?|ch[i1
 
 
 def mentions_minor(*texts: str) -> bool:
-    return bool(_MINOR.search(" ".join(t for t in texts if t)))
+    return bool(_MINOR.search(_clean(texts)))
 
 
 def has_slur(*texts: str) -> bool:
-    return bool(_SLUR.search(" ".join(t for t in texts if t)))
+    return bool(_SLUR.search(_clean(texts)))
 
 
 def hard_block_reason(*texts: str) -> str | None:
