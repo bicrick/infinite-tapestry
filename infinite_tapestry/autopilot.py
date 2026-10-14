@@ -137,6 +137,7 @@ class Autopilot:
         self.steer = ""            # auto_config.steer: a live admin hint
         self.journey: dict | None = None   # Auto's own journey state from its last decision
         self.decision_log: Callable[[dict], None] = lambda d: None
+        self.on_render: Callable[[dict], None] = lambda r: None   # auto_config.render -> live render settings
 
     def state(self) -> dict[str, Any]:
         return {
@@ -366,6 +367,11 @@ class Autopilot:
                     self._next_allowed = 0.0
                 elif not st:
                     logger.warning("invalid story config ignored; keeping the last good state")
+        if isinstance(cfg.get("render"), dict):
+            try:
+                self.on_render(cfg["render"])
+            except Exception:
+                logger.warning("render settings ignored")
         self.steer = str(cfg.get("steer") or "").strip()[:300]
         w = cfg.get("mood_weights") or {}
         self.moods.weights = {str(k): float(v) for k, v in w.items() if isinstance(v, (int, float))}
@@ -373,7 +379,7 @@ class Autopilot:
     async def run(self, period: float = 2.0) -> None:
         last_cfg = 0.0
         while True:
-            if self.config_fetch and time.monotonic() - last_cfg > 30:
+            if self.config_fetch and time.monotonic() - last_cfg > 15:
                 last_cfg = time.monotonic()
                 try:
                     self.apply_config(await asyncio.to_thread(self.config_fetch))

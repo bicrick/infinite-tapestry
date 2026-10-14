@@ -402,11 +402,13 @@ class StripGenerator:
         win = np.zeros((H, Wn, 3), np.float32)
         win[:, :L] = np.asarray(old.crop((old.width - L, 0, old.width, H))).astype(np.float32)
         nw = np.asarray(new).astype(np.float32)
-        w = np.linspace(0, 1, ov, dtype=np.float32)
+        # seam (crossfade) width: live admin setting, at most `overlap` (only pixels clients already hold get blended)
+        sx = int(max(32, min(ov, int(getattr(cfg, "anchor_seam_px", ov) or ov))))
+        w = np.linspace(0, 1, sx, dtype=np.float32)
         w = (w * w * (3 - 2 * w))[None, :, None]
-        win[:, L - ov:L] = win[:, L - ov:L] * (1 - w) + nw[:, :ov] * w
-        win[:, L:] = nw[:, ov:ov + Wn - L]
-        z0, z1 = L - ov, min(Wn, L + int(getattr(cfg, "anchor_bridge_px", 128)))
+        win[:, L - sx:L] = win[:, L - sx:L] * (1 - w) + nw[:, :sx] * w
+        win[:, L:] = nw[:, sx:sx + Wn - L]
+        z0, z1 = L - sx, min(Wn, L + int(getattr(cfg, "anchor_bridge_px", 128)))
         m = np.zeros((H, Wn), np.float32)
         m[:, z0:z1] = 1.0
         f = 24                                    # soft mask edges
@@ -427,7 +429,7 @@ class StripGenerator:
         full.paste(old, (0, 0))
         full.paste(Image.fromarray(out[:, L - ov:].clip(0, 255).astype(np.uint8)), (old.width - ov, 0))
         x = old.width + (Wn - L)
-        full.paste(new.crop((ov + Wn - L, 0, ov + Wn - L + tail, H)), (x, 0))
+        full.paste(new.crop((sx + Wn - L, 0, sx + Wn - L + tail, H)), (x, 0))
         n = added // S
         self._anchor_pending = [(full, old.width + S * (j + 1)) for j in range(n)]
         self._anchor_meta = (shown_prompt, scene_meta)

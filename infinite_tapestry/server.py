@@ -38,6 +38,32 @@ PING_INTERVAL_S = 20.0
 RECENT_ON_CONNECT = 24
 
 
+def apply_render_settings(r: dict, generator) -> dict:
+    """Admin live settings (auto_config.render): scene widths and fresh-anchor seam/bridge. Clamped; no restart."""
+    out = {}
+    def num(k, lo, hi, cast=int):
+        try:
+            v = cast(r[k])
+        except Exception:
+            return None
+        return max(lo, min(hi, v))
+    a = (num("auto_min", 3, 30), num("auto_max", 3, 30))
+    u = (num("user_min", 3, 30), num("user_max", 3, 30))
+    d = generator.director
+    if hasattr(d, "set_widths"):
+        d.set_widths(auto=(min(a), max(a)) if None not in a else None, user=(min(u), max(u)) if None not in u else None)
+        out["widths"] = dict(d.widths)
+    cfg = generator.config
+    sp = num("seam_px", 32, int(cfg.overlap))
+    if sp is not None:
+        cfg.anchor_seam_px = sp
+    bs = num("bridge_strength", 0.3, 1.0, float)
+    if bs is not None:
+        cfg.anchor_bridge_strength = bs
+    out.update(seam_px=cfg.anchor_seam_px, bridge_strength=cfg.anchor_bridge_strength)
+    return out
+
+
 def strip_scene_message(strip: "Strip") -> dict | None:
     """Per-strip scene label so clients caption what is on screen, not the director's plan (which runs ahead)."""
     sc = getattr(strip, "scene", None) or {}
@@ -243,6 +269,8 @@ def create_app(
                 logger.warning("story playlist fetch failed; keeping the current story")
             return cfg
         autopilot.config_fetch = _auto_cfg
+        if generator is not None:
+            autopilot.on_render = lambda r: apply_render_settings(r, generator)
 
         def _story_progress(pid: int, k: int) -> None:
             supa.rest("PATCH", f"story_playlist?id=eq.{int(pid)}&status=in.(queued,playing)",

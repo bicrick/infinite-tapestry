@@ -62,6 +62,7 @@ class Config:
     seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
     fresh_anchor: bool = False  # scene change = fresh txt2img window + seam bridge (no old layout carry-over)
     anchor_bridge_px: int = 128  # px of the new scene (past the crossfade) the bridge pass may repaint
+    anchor_seam_px: int = 192  # crossfade width at a fresh-anchor seam (admin live setting, <= overlap)
     anchor_bridge_strength: float = 0.85  # bridge pass denoise (1.0 = repaint the zone from noise)
     prefill_ramp_px: int = 96  # ramp mode: px of edge-colour gradient into the noise fill (seam blend)
     prefill_mode: str = "meannoise"  # masked-area init for SDXL inpaint; "rowmean" = old striped fill (caused banding)

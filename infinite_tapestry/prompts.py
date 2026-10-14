@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import random
+
 from dataclasses import dataclass
 
 
@@ -193,17 +195,45 @@ class LiveDirector:
             return int(scene["transition"])
         return self.blend
 
+    # Scene widths (strips on the ribbon, transition included): random per scene inside a range, so the
+    # tapestry has organic rhythm. Admin live settings (auto_config.render) override these at runtime.
+    widths = {"auto": (3, 9), "user": (5, 7)}
+    random_widths = True
+
+    def set_widths(self, auto=None, user=None) -> None:
+        def norm(r, lo):
+            a, b = int(r[0]), int(r[1])
+            a = max(lo, min(30, a)); b = max(a, min(30, b))
+            return (a, b)
+        w = dict(self.widths)
+        if auto:
+            w["auto"] = norm(auto, 3)
+        if user:
+            w["user"] = norm(user, 3)
+        self.widths = w
+
+    def _width(self, scene: dict) -> int:
+        kind = "user" if scene.get("origin") == "user" else "auto"
+        lo, hi = self.widths.get(kind, (3, 9))
+        w = scene.get("_w")
+        if not isinstance(w, int) or list(scene.get("_wr") or []) != [lo, hi]:   # new scene or range changed
+            w = random.randint(lo, hi)
+            scene["_w"], scene["_wr"] = w, [lo, hi]
+        return w
+
     def _hold_len(self, scene: dict) -> int:
         h = scene.get("hold")
-        h = self.hold if h is None else int(h)
-        # Variable scene length (~20-45 s with the blend at ~2.9 s/strip): ideas linger a bit longer
-        # than default, quiet Auto filler moves on sooner. Same for everyone, donor or not.
-        if scene.get("origin") == "user":  # ideas linger longer than Auto filler
-            base = 0 if h <= 0 else max(2, min(MAX_HOLD_USER, h))
-        else:
-            # a little variation: alternate scenes run one strip shorter/longer (2-4 strips)
-            jitter = sum(map(ord, str(scene.get("title") or scene.get("prompt") or ""))) % 3 - 1
-            base = 0 if h <= 0 else max(2, min(MAX_HOLD, h + jitter))
+        if h is not None and int(h) <= 0:
+            base = 0   # explicit zero hold (pass-through scenes)
+        elif self.random_widths:
+            base = max(0, self._width(scene) - self._blend_len(scene))
+        else:   # fixed v1.0 timing (explicit holds, 2-4 strips); kept for tests and as an off switch
+            h = self.hold if h is None else int(h)
+            if scene.get("origin") == "user":
+                base = 0 if h <= 0 else max(2, min(MAX_HOLD_USER, h))
+            else:
+                jitter = sum(map(ord, str(scene.get("title") or scene.get("prompt") or ""))) % 3 - 1
+                base = 0 if h <= 0 else max(2, min(MAX_HOLD, h + jitter))
         # Crowd heat: the scene on stage lingers while people react to it (+1 strip per ~6 reactions, up to +3).
         heat = getattr(self, "heat", None)
         if heat is not None and scene is self._current and base > 0:

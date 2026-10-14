@@ -2,7 +2,7 @@ from infinite_tapestry.buffer import Strip, StripBuffer
 from infinite_tapestry.prompts import LiveDirector
 
 
-def test_director_blends_and_advances():
+def test_director_blends_and_advances(fixed_widths):
     d = LiveDirector("a", queue=["b"], hold=2, blend=4, loop=False)
     assert d.frame_for(0) == ("a", None, 0.0)
     assert d.frame_for(1) == ("a", None, 0.0)

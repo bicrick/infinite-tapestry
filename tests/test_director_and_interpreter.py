@@ -30,7 +30,7 @@ def test_queue_ops_reorder_remove_edit_play():
     assert not d.remove(9999)
 
 
-def test_scene_transition_and_hold_override_defaults():
+def test_scene_transition_and_hold_override_defaults(fixed_widths):
     d = LiveDirector("a", hold=0, blend=8, loop=False)
     sc = make_scene("b", negative="fog", hold=50)
     sc["transition"] = 2
@@ -159,7 +159,7 @@ def d_has(gen, prompts):
     return all(p in q for p in prompts)
 
 
-def test_user_idea_preempts_auto_hold_and_timings_halved():
+def test_user_idea_preempts_auto_hold_and_timings_halved(fixed_widths):
     from infinite_tapestry.prompts import LiveDirector, make_scene
     d = LiveDirector("seed", hold=12, blend=8)
     d.frame_for(0)
@@ -174,14 +174,14 @@ def test_user_idea_preempts_auto_hold_and_timings_halved():
     assert make_scene("x", hold=200, origin="auto")["hold"] == 4
 
 
-def test_scene_beats_unfold_across_hold():
+def test_scene_beats_unfold_across_hold(fixed_widths):
     d = LiveDirector("a", hold=0, blend=4, loop=False)
     d._current = make_scene("p0", hold=4, origin="user", beats=["b1", "b2", "b3"])  # user +2 → 6-strip hold
     d._active_since = 0
     assert [d.frame_for(i)[0] for i in range(4)] == ["b1", "b1", "b2", "b3"]
 
 
-def test_variable_scene_length_by_weight():
+def test_variable_scene_length_by_weight(fixed_widths):
     d = LiveDirector("a", hold=6, blend=4, loop=False)
     assert d._hold_len(make_scene("x", hold=6, origin="auto")) == 3          # capped at 4, jitter -1
     assert d._hold_len(make_scene("x", hold=6, origin="user")) == 4          # short scenes
@@ -200,7 +200,7 @@ def test_no_priority_queue():
     assert c._pick([{"id": 1, "_prio": False}, {"id": 2, "_prio": True}], 1, False, 2)[0]["id"] == 1   # quiet: untouched
 
 
-def test_reactions_stretch_the_scene_on_stage():
+def test_reactions_stretch_the_scene_on_stage(fixed_widths):
     d = LiveDirector("a", hold=6, blend=4, loop=False)
     d._current = make_scene("x", hold=6, origin="auto"); d._active_since = 100
     assert d._hold_len(d._current) == 3
