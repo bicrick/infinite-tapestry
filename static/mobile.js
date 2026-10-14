@@ -98,14 +98,15 @@
     }
   });
 
-  // 6) Battery saver: low battery (not charging) or data-saver → 1x resolution, ~30fps.
+  // 6) Battery saver: low battery (not charging) or data-saver → 1x resolution, ~30fps. Class is "lowpower":
+  //    "saver" is the fullscreen screensaver layout, and sharing the name put low-battery laptops into it.
   const saver = window.TapestrySaver; if (!saver) return;
-  const set = (on) => { if (saver.on === on) return; saver.on = on; body.classList.toggle("saver", on); window.dispatchEvent(new Event("resize")); };
+  const set = (on) => { if (saver.on === on) return; saver.on = on; body.classList.toggle("lowpower", on); window.dispatchEvent(new Event("resize")); };
   const conn = navigator.connection;
   const check = (bat) => set(!!((bat && !bat.charging && bat.level <= 0.2) || (conn && conn.saveData)));
   if (navigator.getBattery) navigator.getBattery().then((bat) => { check(bat); bat.addEventListener("levelchange", () => check(bat)); bat.addEventListener("chargingchange", () => check(bat)); }).catch(() => check(null));
   else check(null);
-  if (new URLSearchParams(location.search).has("saver")) set(true);
+  if (new URLSearchParams(location.search).has("lowpower")) set(true);
 })();
 
 // Ambient info for the portrait band layout: mirrors status + current scene, always visible, low contrast.
