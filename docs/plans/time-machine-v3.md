@@ -1,14 +1,20 @@
 # Time Machine v3: one zoomable line through all of history (plan, not built)
 
-Status: plan only, Oct 14, 2026. Nothing here is built.
+Status: plan only, Oct 14, 2026 (revised with the user's answers). Nothing here is built.
 
 ## 1. Goal
 
-The whole tapestry becomes **one horizontal line** that you can zoom continuously, from "all time" down to individual strips. The page has:
+The Time Machine becomes **its own immersive viewer**, not a replay mode of the live viewer. It's a place to *explore* the whole tapestry's history, **from the very first strip of the OG era** to (nearly) now, as **one horizontal line** you zoom continuously from "all time" down to individual strips.
 
-- a navigation layer on top: date jump, step through prompts and ideas, a current-time indicator;
-- the month calendar, which stays but opens only from a menu toggle;
-- tap any moment to replay it in the live viewer (`/?at=<strip>`).
+Its own feel:
+- a dark, quiet space where the line floats;
+- smooth zoom-out "breathing" (the band thins into a colour ribbon as you pull back);
+- landmarks that surface as you zoom;
+- no chat, no composer, no live HUD.
+
+On top sits a light navigation layer: date jump, step through prompts and ideas, landmarks, and a current-time / "jump to live" exit. The month calendar stays but opens only from a menu toggle.
+
+Tapping a moment still offers "Open in the live viewer" (`/?at=<strip>`). By default, though, a tap zooms in and plays that stretch *inside* the Time Machine (a local "drift" playback at strip scale), so exploring never kicks you out.
 
 It is performance-first. It works on throttled browsers (Low Power Mode, Energy Saver at ~30 fps, 6x CPU), and desktop behaves the same as mobile (pinch or trackpad zoom, drag).
 
@@ -25,12 +31,14 @@ It is performance-first. It works on throttled browsers (Low Power Mode, Energy 
 
 ## 3. Key decisions
 
-1. **The x-axis is strip index, not wall-clock time.** The art is continuous in index space, so there are no blank gaps when the GPU was off. A time ruler is drawn from an index→time map, and downtime appears as a thin labelled notch ("GPU off 2 h 10 m"). Time-proportional mode can be a later toggle.
+0. **All of history, in eras.** The line starts at the very first strip ever painted and runs through every backend era: SD1.5 (OG, 512-tall strips, session `live`), any interim backends (Klein experiments), and SDXL (`live-sdxl`, Oct 13). Each era is a **segment** of the line with its own local strip index, placed end to end in a global "history coordinate". Era boundaries are landmarks.
+1. **Within an era, the x-axis is strip index, not wall-clock time.** The art is continuous in index space, so there are no blank gaps when the GPU was off. A time ruler is drawn from an index→time map, and downtime appears as a thin labelled notch ("GPU off 2 h 10 m"). Time-proportional mode can be a later toggle.
 2. **A new pyramid ("lod2") on R2**, public, immutable, behind the CDN. Browsers fetch tiles straight from R2 and never through a Vercel function or the pod. The existing L1/L2 stay for the live viewer's scrubbing.
 3. **Anisotropic "line" levels.** Below 1/16 scale, tiles keep a minimum height of 64 px and only the x-axis keeps shrinking. Zoomed far out, the tapestry reads as a colour ribbon, a "spectrogram" of history, not a 4-px sliver.
 4. **Precomputed metadata JSON on R2** replaces the full-table scan: a day index plus one file per day (times, scene runs, moderated ideas). Files are rewritten incrementally; finished days are immutable.
 5. **One canvas renderer** with a float64 camera, time-based motion and parent-tile fallback, so the screen is never blank. DOM is used only for labels, updated at ≤10 Hz.
-6. **Never the GPU.** Every Time Machine request is served from R2 and the CDN. It works when the pod is off.
+6. **A separate viewer**: its own page bundle (`/time-machine`), its own camera and physics, with no WebSocket to the pod. It shares only small utilities with the live viewer (tile loader, gesture normaliser, flight physics).
+7. **Never the GPU.** Every Time Machine request is served from R2 and the CDN. It works when the pod is off.
 
 ## 4. UX layout (desktop and mobile are the same structure)
 
@@ -99,6 +107,45 @@ Tiles are always **1024 px wide**. Level L covers `4^L` x 4 strips:
 - **Concurrency**: at most 6 fetches in flight, with priority to the centre outward. Requests for tiles that left the view are aborted (`AbortController`).
 - **Rendering**: WebGL2 (one textured quad per tile; an atlas isn't needed at this count), with Canvas2D as the fallback. Overlap tiles by 1 px to avoid seams at fractional scales.
 
+## 5b. Landmarks
+
+Markers on the line. Each has a **minimum zoom** at which it appears, and labels collide-and-hide by priority (a higher priority wins when two overlap; the rest collapse into a "+3" cluster).
+
+| Kind | Example | Source | Shows from |
+|---|---|---|---|
+| **Era** | "OG era (SD1.5)", "Klein tests", "SDXL launch · Oct 13" | era table (§5c) | All (always) |
+| **Release** | "v1.0 · Oct 14 1:02 AM", "v1.1" | git tags → `landmarks.json` (CI step on tag) | All/Week |
+| **Milestone** | strip #1, #10k, #50k, #100k… (and "1 million strips") | computed from counts | Week |
+| **Busiest hour** | "Busiest hour: Oct 14 9–10 PM · 41 ideas" (per day and all-time) | ideas + viewer peaks per hour | Day (per day) / All (all-time top 3) |
+| **Notable ideas** | the most-reacted user ideas per day (titles only, "Someone" for the owner) | reactions + votes (existing `strip_reactions`) | Day / Hour |
+| **Long stories** | an Auto story arc spanning many scenes | `stories` table | Day |
+| **Downtime** | "GPU off 2 h 10 m" | gaps in `created_at` | Day / Hour |
+| **Personal** (later) | "your idea" markers for the signed-in user | the user's own ideas | Day |
+
+- **Style**: era bands are tinted backgrounds behind the line. The others are thin ticks with small labels above the ruler. Tapping a landmark flies to it and opens its card.
+- **`landmarks.json`** lives on R2 (global, small) and is rebuilt hourly by the meta writer. Releases and eras can also be hand-edited from the admin (a "Landmarks" list) for curation.
+
+## 5c. Older eras: data formats and normalisation
+
+The OG era predates today's storage layout, so the backfill must normalise it.
+
+- **Sessions and prefixes**: each era is a `strips.session` value / storage prefix (e.g. `live` for SD1.5, `live-sdxl` for SDXL). An `eras` table/JSON lists `{id, session, label, model, strip_width, height, ext, first_idx, last_idx, t0, t1}`. It's built by scanning sessions once, then curated by hand.
+- **Geometry**: SD1.5 strips were 128 px wide and 512 tall (config defaults), SDXL is 256x1024. The **pyramid normalises everything to the same tile geometry**: older strips are upscaled 2x in y for L1 and placed at their true relative width (or normalised to a common "strip unit", an open question). From L3 down everything is a 64-px-tall ribbon, so era differences vanish when zoomed out.
+- **Formats**: JPEG (older) vs WebP, Supabase Storage vs R2, and possibly missing `scene` jsonb or `created_at` precision on early rows. The backfill reads from whichever store has the file (the existing `storagePrefixes()` fallback), re-encodes into the lod2 pyramid on R2, and records any **missing strips** as gaps (drawn as a dark notch, never a crash).
+- **Metadata**: early rows may lack `scene`. Fall back to the `prompt` column (truncated, moderated) as the label, or "untitled" if it's empty.
+- **One-off backfill job**: resumable and idempotent (skips existing tiles), runs on the pod's CPU thread or on the box. It also writes the era table and the first `landmarks.json`.
+
+## 5d. Recommendation: should the newest content be included?
+
+**Recommendation: include it up to a short delay (≈ 2–5 minutes behind live), with a clear "Jump to live →" exit at the right end.**
+
+| | Include with a short delay (recommended) | Stop at end of the previous day / hour | Fully live edge |
+|---|---|---|---|
+| Pros | Feels current ("history up to a few minutes ago"); the right end connects naturally to the live viewer; the cost is small since tiles are finished and cacheable; no pod/WebSocket dependency | Simplest caching (everything immutable); no tip churn | Most "complete" |
+| Cons | The last tile at each level churns (short 60 s cache, rebuilt ≤ every 30 s); needs a moving "end" marker | Feels stale (today missing); confusing next to a live site | Duplicates the live viewer; needs the pod's live clock; unfinished pixels at the tip; the most cost and complexity |
+
+The delay means the Time Machine only ever shows **finished, published** strips and tiles. The right end shows a soft "Now · painting live" marker that opens the live viewer. Within the Time Machine, the end simply grows every few minutes.
+
 ## 6. Performance and throttle-proofing (same rules as the viewer fixes in c2a3ba0)
 
 - **Time-based motion**: all camera motion (pan inertia, zoom springs, fly-to) integrates on `dt` from `performance.now()`, clamped at 100 ms. Fly-tos are parameterised by elapsed time, not frame count.
@@ -145,18 +192,18 @@ Tiles are always **1024 px wide**. Level L covers `4^L` x 4 strips:
 
 ## 9. Phases (rough effort, one engineer)
 
-1. **P0, data foundation (1–1.5 d)**: the `created_at` index; the meta writer (days/day/scenes JSON) on the pod plus a cron fallback; `/api/tm/*`; switch v2's history call to `days.json` (an immediate 3.9 s → <100 ms win for the current page).
-2. **P1, pyramid v2 (1.5–2 d)**: extend `lod.py` to L1–L9 with anisotropic levels and WebP to R2; live-tip handling; a backfill script; a moderation purge hook.
-3. **P2, renderer (3–4 d)**: camera + LOD selection + bitmap LRU + parent fallback + level cross-fade; gestures (drag, flick, pinch, trackpad, wheel, keys); time-based motion; a low-power path.
-4. **P3, navigation UI (2–3 d)**: adaptive ruler; date jump; scene/idea lane with clustering and ◀/▶; Now indicator and fly; calendar slide-over; tap card → `/?at=` replay; deep links `/time-machine?at=idx&z=L`.
-5. **P4, hardening (1–1.5 d)**: tests at 6x CPU, a 30 fps cap and background-tab clamping, the iOS memory ceiling, pod-off mode, a11y (keyboard focus, labels), and Lighthouse/INP budgets.
+1. **P0, data foundation (1.5–2 d)**: the `created_at` index; the **era table** (scan sessions, curate); the meta writer (days/day/scenes JSON across eras) on the pod plus a cron fallback; `/api/tm/*`; switch v2's history call to `days.json` (an immediate 3.9 s → <100 ms win).
+2. **P1, pyramid v2 + OG-era backfill (2.5–3.5 d)**: L1–L9 anisotropic WebP on R2; geometry/format normalisation for older eras (128x512 JPEG → common tiles); a resumable backfill with gap recording; live-tip handling (short delay); a moderation purge hook.
+3. **P2, immersive renderer (3.5–4.5 d)**: its own page bundle; camera in global history coordinates (era segments); LOD selection, bitmap LRU, parent fallback and level cross-fade; gestures (drag, flick, pinch, trackpad, wheel, keys); time-based motion; in-Time-Machine "drift" playback at strip scale; low-power path.
+4. **P3, navigation + landmarks (2.5–3.5 d)**: adaptive ruler with era bands; date jump; scene/idea lane with clustering and ◀/▶; the landmark layer (eras, releases, milestones, busiest hours, notable ideas, downtime) with collision/priority; `landmarks.json` builder + admin curation; "Now / Jump to live" exit; calendar slide-over; deep links `/time-machine?at=<era>:<idx>&z=L`.
+5. **P4, hardening (1–1.5 d)**: tests at 6x CPU, a 30 fps cap and background-tab clamping, the iOS memory ceiling, pod-off mode, a11y, and INP budgets.
 
-**Total ≈ 9–12 days.** P0 alone is worth shipping first.
+**Total ≈ 11–15 days** (up from 9–12 because of the OG-era backfill, the landmarks and the standalone viewer). P0 alone is worth shipping first.
 
 ## 10. Risks
 
 - **Index vs time**: GPU downtime and pace changes make the time ruler non-linear. The gap notches and a "time-proportional" toggle address it later.
-- **Pre-SDXL history**: the older session lives on a different timeline. Exclude it, as v2 does.
+- **OG-era data**: different geometry/format/storage and possibly missing metadata or strips. Handled by the normalising backfill (§5c), with gaps drawn, not crashed on.
 - **Live tip churn**: the last tile at each level changes constantly. Short-cache it and rebuild it at most every 30 s.
 - **Moderation lag**: removed ideas must vanish from immutable day files. The purge hook covers this (or don't mark day files immutable until 24 h old).
 - **Mobile memory**: iOS kills tabs above ~300–400 MB of decoded images. Keep the LRU byte cap and close bitmaps.
@@ -166,8 +213,10 @@ Tiles are always **1024 px wide**. Level L covers `4^L` x 4 strips:
 
 ## 11. Open questions
 
-1. Should time-proportional mode exist at all, or is index-space plus gap notches enough?
-2. How much history is kept forever? That affects whether L1 tiles are kept for old months, since L1 is ~90% of pyramid storage.
-3. Should the lane show submitter handles as v2 does, or only titles (as the embed API will)?
-4. Should "All" start at the SDXL launch (Oct 13), or also show the pre-SDXL era as a separate segment?
-5. Should the Time Machine get its own short-form share cards (a zoomed range → OG image) in P3, or later?
+Decided: start from the very beginning (all eras); a separate immersive viewer; newest content included up to a short delay with a "Jump to live" exit (recommendation, pending the user's OK).
+
+1. **Era widths**: show older strips at their true relative width (SD1.5 strips are half as wide), or normalise every strip to one unit so each era's length reflects strip count?
+2. Is index-space plus downtime notches enough, or do they also want a clock-time-proportional mode?
+3. Retention: keep full-res L1 tiles forever for every era (≈90% of pyramid storage), or only L2+ for months older than N?
+4. Should the scene/idea lane show submitter handles as v2 does, or titles only (as embeds)?
+5. Which landmarks should be hand-curated (e.g. named moments) vs fully automatic?

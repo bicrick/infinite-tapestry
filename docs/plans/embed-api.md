@@ -5,8 +5,8 @@ Status: plan only, Oct 14, 2026.
 ## Principles
 
 - **Read-only**, served only from **cache and R2**. Nothing in the embed path calls the GPU pod; the pod's WebSocket isn't exposed to embeds.
-- **Moderated titles only.** Scene titles and idea text have already passed input moderation ([SAFETY.md](../SAFETY.md)), and anything hidden, rejected or reported is excluded. There is **no submitter identity** at all: no handles, user ids or avatars.
-- **Donor-only perk.** Embeds and JSON keys exist only for people who donated through the existing Stripe Fuel flow. Nobody can apply for a key, and there's no keyless embed.
+- **Scene titles only (decided).** Embeds show moderated scene titles, never idea text. The user said either is fine, so we picked the safer one. Titles have already passed input moderation ([SAFETY.md](../SAFETY.md)), and anything hidden, rejected or reported is excluded. There is **no submitter identity** at all: no handles, user ids or avatars.
+- **Donor-only perk (decided).** **Any donation amount** through the existing Stripe Fuel flow unlocks embeds; nobody can apply for a key, and there's no keyless embed. **Only donations made after launch count**: donors from before launch don't get access (the grant runs only for donations after the launch timestamp).
 - **Rate limited** per key, with the domain allowlist enforced.
 - **No upsell spam.** The only mention on the main site is one quiet line on the Fuel page ("Donors can put a live piece of the tapestry on their own site."). There are no banners, pop-ups or nags in the viewer, Time Machine or composer.
 
@@ -56,14 +56,14 @@ There's also a per-key "Allowed domains" editor, usage stats, a regenerate butto
 
 ## How donations map to embed keys
 
-- **Webhook**: `stripe-webhook.js` already inserts into `donations` (idempotent on `stripe_session_id`, with `user_id` + `handle` from checkout metadata). Add one step after the insert: `rpc('grant_embed_access', {user_id, donation_id})`. It upserts an `embed_access` row and creates the donor's first key if none exists. Guest donations (no `user_id`) get an email with a claim link that attaches the donation to an account on first sign-in.
+- **Webhook**: `stripe-webhook.js` already inserts into `donations` (idempotent on `stripe_session_id`, with `user_id` + `handle` from checkout metadata). Add one step after the insert: `rpc('grant_embed_access', {user_id, donation_id})`. It upserts an `embed_access` row and creates the donor's **3 keys** (e.g. "Main site", "Blog", "Spare"). The RPC ignores donations whose `created_at` is before `EMBED_LAUNCH_AT`. Guest donations (no `user_id`) get an email with a claim link that attaches the donation to an account on first sign-in.
 - **Schema**:
   - `embed_access(user_id pk, status active|grace|lapsed|revoked, since, last_donation_at, active_until, show_name bool default false, display_name)`
   - `embed_keys(id, public_id, secret_hash, user_id, domains text[], created_at, last_used_at, revoked_at)`
 
-  The public id goes in iframes. The secret (shown once) is for JSON calls from servers. Secrets are stored hashed.
+  Each donor has **up to 3 keys** (cap enforced in the RPC), each **regenerable** from the gallery. Regenerating rotates the public id and secret, and the old ones stop after a 24 h overlap so live sites can be updated. The public id goes in iframes. The secret (shown once) is for JSON calls from servers. Secrets are stored hashed.
 - **Domain allowlist**: up to 5 domains per key (wildcard subdomains allowed). The `/embed` response sets `Content-Security-Policy: frame-ancestors <domains>`, and JSON enforces CORS plus an `Origin` check. Local dev (`localhost`) is always allowed. Unknown origins get a neutral "This embed isn't enabled for this site" card, not an error page.
-- **Term and lapse**: open question on the threshold. Proposal: any donation unlocks **12 months** from the latest donation, and a new donation extends it.
+- **Term and lapse (still a proposal)**: any donation unlocks **12 months** from the latest donation, and a new donation extends it.
   - **Lapse**: a 30-day **grace** period, with one quiet email at lapse and none after.
   - **After grace**: embeds keep working in a reduced form, a static "replay loop" of their last day with a plain Infinite Tapestry badge, so donors' sites never break. JSON keys stop with 403.
   - **Refunds or chargebacks** revoke immediately.
@@ -80,7 +80,7 @@ There's also a per-key "Allowed domains" editor, usage stats, a regenerate butto
 
 ## Open questions
 
-1. What threshold and term? (Proposal: any amount, 12 months from the latest donation, 30-day grace.)
+Decided: any amount; 2–3 regenerable keys per donor (plan: 3); no access for donors from before launch; titles only.
+
+1. Confirm the term: 12 months from the latest donation + 30-day grace (proposal).
 2. Counter store: Upstash Redis (new dependency, free tier) or Supabase RPC (no new vendor, slower)?
-3. Should embeds show idea text, or scene titles only (safest)?
-4. Should past donors (before this ships) be granted access retroactively?
