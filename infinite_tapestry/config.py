@@ -61,6 +61,7 @@ class Config:
     context_mask_px: int = 0  # mask (repaint) this many px of far-left context so the model can't copy it
     seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
     fresh_anchor: bool = False  # scene change = fresh txt2img window + seam bridge (no old layout carry-over)
+    anchor_every: int = 0  # >0: Auto scenes also re-anchor every N strips (anti lock-in); 0 = scene changes only
     anchor_bridge_px: int = 128  # px of the new scene (past the crossfade) the bridge pass may repaint
     anchor_bridge_strength: float = 0.85  # bridge pass denoise (1.0 = repaint the zone from noise)
     prefill_ramp_px: int = 96  # ramp mode: px of edge-colour gradient into the noise fill (seam blend)

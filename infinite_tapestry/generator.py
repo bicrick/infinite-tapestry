@@ -277,7 +277,9 @@ class StripGenerator:
         # old horizon / bands / rows can't carry over), then join it to the tapestry with a bridge inpaint
         # over the seam only. The next strips are already painted and are emitted without GPU work.
         if (getattr(cfg, "fresh_anchor", False) and not cfg.mock and self._strip_index > 0
-                and getattr(self, "_scene_strips", 1) == 0):
+                and (getattr(self, "_scene_strips", 1) == 0
+                     or (int(getattr(cfg, "anchor_every", 0) or 0) > 0 and (scene_meta or {}).get("origin") != "user"
+                         and getattr(self, "_scene_strips", 0) % int(cfg.anchor_every) == 0))):
             try:
                 return self._anchor(prompt_b or prompt_a, self.director.negative_for(1.0), seed, shown_prompt, scene_meta)
             except Exception:
