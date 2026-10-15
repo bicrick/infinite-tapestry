@@ -126,15 +126,6 @@
    ]
   },
   {
-   "source": "/strip-reveal-lab.html",
-   "headers": [
-    {
-     "key": "X-Robots-Tag",
-     "value": "noindex, nofollow"
-    }
-   ]
-  },
-  {
    "source": "/llms.txt",
    "headers": [
     {
