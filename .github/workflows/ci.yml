@@ -45,6 +45,10 @@ jobs:
           set -euo pipefail
           OUT="$RUNNER_TEMP/web"
           bash scripts/build_web.sh "$OUT"
+          # Deploy builds must refuse a config with no Supabase URL/key.
+          if env -u SUPABASE_URL -u SUPABASE_ANON_KEY REQUIRE_SUPABASE=1 bash scripts/build_web.sh "$RUNNER_TEMP/guard" 2>/dev/null; then
+            echo "::error::build_web.sh built a deployable bundle without Supabase config"; exit 1
+          fi
           python3 -c 'import json; json.load(open("web/vercel.json"))'
           node --check "$OUT/config.js"
           for f in index.html about.html fuel.html time-machine.html privacy.html terms.html profile.html classic-7f3e21.html u-9b600a56.html; do
@@ -122,6 +126,7 @@ jobs:
           R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
           SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
           TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
+          REQUIRE_SUPABASE: "1"
         run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
       - name: Deploy Vercel preview
         id: deploy
@@ -231,6 +236,7 @@ jobs:
           R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
           SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
           TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
+          REQUIRE_SUPABASE: "1"
         run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
       - name: Deploy to production, smoke-test, then point the domains at it
         if: env.HAS_SECRETS == 'true'

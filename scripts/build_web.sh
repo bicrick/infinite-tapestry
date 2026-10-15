@@ -4,6 +4,11 @@
 set -euo pipefail
 OUT=${1:-/tmp/tapestry-web-build}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# Deploy builds set REQUIRE_SUPABASE=1: never produce a deployable bundle whose config.js has no Supabase URL/key.
+if [ -n "${REQUIRE_SUPABASE:-}" ] && { [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; }; then
+  echo "::error::SUPABASE_URL / SUPABASE_ANON_KEY missing; refusing to build a deployable config.js" >&2
+  exit 1
+fi
 rm -rf "$OUT" && mkdir -p "$OUT"
 cp -r "$ROOT"/static/* "$OUT"/
 cp -r "$ROOT"/web/api "$ROOT"/web/lib "$ROOT"/web/package.json "$ROOT"/web/vercel.json "$OUT"/
