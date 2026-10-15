@@ -106,6 +106,18 @@
         : budget - (Number(m.spend) || 0) + (Number(m.fuel) || 0),
     }));
 
+    // One forward-moving line ending at "now": sort by time, drop anything after now,
+    // and end exactly on the current remaining value.
+    const nowMs = Date.now();
+    series.sort((a, b) => +new Date(a.t) - +new Date(b.t));
+    while (series.length > 1 && +new Date(series[series.length - 1].t) > nowMs) series.pop();
+    const current = Number(d.remaining_usd);
+    if (isFinite(current) && series.length) {
+      const tail = series[series.length - 1];
+      if (+new Date(tail.t) < nowMs - 60e3) series.push({ t: new Date(nowMs).toISOString(), remaining: current });
+      else tail.remaining = current;
+    }
+
     if (series.length < 2) {
       svg.innerHTML = `<text x="320" y="120" text-anchor="middle" font-size="13" fill="currentColor" opacity=".45">No budget history yet</text>`;
       return;
@@ -122,8 +134,9 @@
     let yMin = Math.min(0, ...ys);
     let yMax = Math.max(budget, ...ys);
     if (yMax - yMin < 1) { yMax += 1; yMin -= 0.25; }
-    const xOf = (t) => pad.l + ((+new Date(t) - t0) / span) * innerW;
-    const yOf = (v) => pad.t + (1 - (v - yMin) / (yMax - yMin)) * innerH;
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+    const xOf = (t) => clamp(pad.l + ((+new Date(t) - t0) / span) * innerW, pad.l, W - pad.r);
+    const yOf = (v) => clamp(pad.t + (1 - (v - yMin) / (yMax - yMin)) * innerH, pad.t, H - pad.b);
 
     let path = "";
     series.forEach((p, i) => {
@@ -189,17 +202,10 @@
       $("fc-spend").textContent = money(d.spend_usd);
       $("fc-bought").textContent = money(d.fuel_bought_usd);
       setHeadline(d);
-      if (d.estimated) {
-        $("fc-spend-l").textContent = "GPU spend (est.)";
-        cap.textContent = d.source === "unavailable"
-          ? "GPU budget meter unavailable. Fuel purchases still show on the Fuel page."
-          : (d.note || "Estimated tapestry GPU spend — set RUNPOD_API_KEY on Vercel for live pod billing.");
-      } else {
-        $("fc-spend-l").textContent = "GPU spend";
-        const rate = d.spend_per_hr_usd != null ? ` · ~${money(d.spend_per_hr_usd)}/hr now` : "";
-        const since = d.start_at ? ` since ${when(d.start_at)}` : "";
-        cap.textContent = `Patrick's $${Number(budget).toFixed(0)} budget to get Infinite Tapestry going${since}${rate}. Remaining falls with spend; fuel purchases bump it back up.`;
-      }
+      $("fc-spend-l").textContent = "GPU spend";
+      cap.textContent = d.source === "unavailable"
+        ? "GPU budget meter unavailable. Fuel purchases still show on the Fuel page."
+        : `Patrick's $${Number(budget).toFixed(0)} to get Infinite Tapestry going. GPU time spends it down; fuel buys it back up.`;
       renderChart(d);
       if (legend) legend.hidden = false;
     } catch (_) {
