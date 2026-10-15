@@ -1,1 +1,1 @@
-{"name":"infinite-tapestry-web","private":true,"engines":{"node":">=18"},"dependencies":{"@vercel/og":"^0.6.8"}}
+{"name": "infinite-tapestry-web", "private": true, "engines": {"node": ">=18"}, "dependencies": {"@vercel/og": "^0.6.8", "sharp": "^0.33.5"}}

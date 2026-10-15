@@ -96,7 +96,8 @@
     gl.uniform4f(uT, a, hy, b - a, 1 - 2 * hy);
     const xa = X(ua), xb = X(ub); gl.uniform4f(uR, xa, y, xb - xa, h); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); drawn++;
   }
-  const tileUrl = (l, t, lv) => `${R2}/tm/lod/${l}/${String(t).padStart(6, "0")}.webp${t >= lv.tiles - 2 ? "?u=" + M.units : ""}`;
+  let viaApi = false; // Vercel-built pyramid (/api/tm) once its full build is done; the older R2 pyramid until then
+  const tileUrl = (l, t, lv) => (viaApi ? `${location.origin}/api/tm?tile=${l}/${t}` : `${R2}/tm/lod/${l}/${String(t).padStart(6, "0")}.webp`) + (t >= lv.tiles - 2 ? (viaApi ? "&u=" : "?u=") + M.units : "");
   function tilesAt(l, u0, u1, fn) {
     const lv = M.levels[l - 1], upt = lv.units_per_tile;
     const t0 = Math.max(0, Math.floor(u0 / upt)), t1 = Math.min(lv.tiles - 1, Math.floor(u1 / upt));
@@ -320,7 +321,9 @@
   if (qs.get("perf")) { $("perf").style.display = "block"; let fc = 0, t0 = performance.now(); (function p(ts) { fc++; if (ts - t0 > 1000) { $("perf").textContent = `fps ${Math.round(fc * 1000 / (ts - t0))}  L${levelFor(cam.s)}  quads ${drawn}\ntex ${tex.size} ${(texBytes / 1048576).toFixed(1)} MB  heap ${performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + " MB" : "n/a"}`; fc = 0; t0 = ts; } requestAnimationFrame(p); })(performance.now()); }
 
   const J = (u) => fetch(u).then((r) => r.json());
-  Promise.all([J(`${R2}/tm/lod/manifest.json?t=${Math.floor(Date.now() / 60000)}`), J("/api/about?kind=tm"), J("/api/about?kind=tm&part=hours"),
+  const manifest = () => J("/api/tm?manifest=1").then((m) => { if (!m.full || !m.full.done) throw 0; viaApi = true; return m; })
+    .catch(() => J(`${R2}/tm/lod/manifest.json?t=${Math.floor(Date.now() / 60000)}`));
+  Promise.all([manifest(), J("/api/about?kind=tm"), J("/api/about?kind=tm&part=hours"),
     J("/api/about?kind=tm&part=landmarks").catch(() => ({ items: [] })), J("/api/about?kind=tm&part=scenes").catch(() => ({ scenes: [] }))]).then(([man, st, hr, lm, sc]) => {
     M = man; eras = st.eras; hours = hr.hours;
     marks = lm.items.filter((m) => m.g < M.units + 50);

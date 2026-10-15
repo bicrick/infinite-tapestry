@@ -1,5 +1,8 @@
 {
  "functions": {
+  "api/tm.js": {
+   "maxDuration": 60
+  },
   "api/admin.js": {
    "maxDuration": 60
   },
@@ -203,6 +206,12 @@
   {
    "source": "/robots.txt",
    "destination": "/api/sitemap?kind=robots"
+  }
+ ],
+ "crons": [
+  {
+   "path": "/api/tm?job=all",
+   "schedule": "*/5 * * * *"
   }
  ]
 }
