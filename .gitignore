@@ -13,3 +13,6 @@ build/
 huggingface/
 .cache/
 web/node_modules/
+
+# Local strip-reveal lab fixture (downloaded CDN strip for offline capture)
+static/_lab/

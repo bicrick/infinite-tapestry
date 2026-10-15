@@ -44,7 +44,23 @@
     const meta = document.getElementById("meta");
     let bitmap = null, reveal = null, index = null, raf = 0, t0 = 0, frames = 0, msSum = 0;
 
+    async function loadBitmap(url) {
+      const blob = await fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); });
+      if (bitmap && bitmap.close) bitmap.close();
+      bitmap = await createImageBitmap(blob);
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+    }
+
     async function pickStrip() {
+      // Local fixture first (offline lab / CI capture), then live CDN via /api/live.
+      try {
+        const meta = await fetch("/_lab/demo-strip.json").then((r) => { if (!r.ok) throw 0; return r.json(); });
+        index = meta.index | 0;
+        await loadBitmap("/_lab/demo-strip.webp");
+        return meta;
+      } catch (_) {}
+
       let live;
       try { live = await fetch("/api/live?n=1").then((r) => { if (!r.ok) throw 0; return r.json(); }); }
       catch (_) { live = await fetch("https://infinitetapestry.app/api/live?n=1").then((r) => r.json()); }
@@ -54,11 +70,7 @@
       // Prefer a strip a little behind the tip so the CDN object is warm.
       index = Math.max(0, max - 8 - ((Math.random() * 40) | 0));
       const url = base + String(index).padStart(8, "0") + "." + ext;
-      const blob = await fetch(url).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); });
-      if (bitmap && bitmap.close) bitmap.close();
-      bitmap = await createImageBitmap(blob);
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
+      await loadBitmap(url);
       return live;
     }
 

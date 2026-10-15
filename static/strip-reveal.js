@@ -1,8 +1,9 @@
 // Shared strip load-in reveal (live viewer + any unified page on the same strip path).
 // When a strip bitmap lands: scattered starry dots drift into a coarse B&W stipple of the image,
-// then discrete passes add density and colour, then the real pixels settle in.
+// then discrete passes add density and colour before settling on the real pixels.
 // Cheap by design: sample once from a downscaled offscreen; animate only a short initial drift;
 // later passes redraw the offscreen in one shot. No gradients, no glow. Caps concurrent reveals.
+// Visual language is bright-on-dark (tapestry surround is near-black) — not paper stipple.
 // Usage: const r = TapestryStripReveal.start(bitmap, { now }); r.tick(now); r.draw(ctx, x, y); r.dispose();
 (() => {
   "use strict";
@@ -13,19 +14,19 @@
   let active = 0;
 
   // Pass schedule (ms from start). Drift is the only per-frame particle motion.
-  const T_DRIFT = 480;
-  const T_BW1 = 780;
-  const T_BW2 = 1150;
-  const T_COLOR = 1550;
-  const T_SETTLE = 2000;
-  const T_DONE = 2350;
+  const T_DRIFT = 520;
+  const T_BW1 = 820;
+  const T_BW2 = 1180;
+  const T_COLOR = 1580;
+  const T_SETTLE = 2050;
+  const T_DONE = 2400;
 
   // Dot budgets per pass (index into the pre-sampled pool).
-  const N_STAR = LOW ? 36 : 56;
-  const N_BW1 = LOW ? 90 : 140;
-  const N_BW2 = LOW ? 200 : 320;
-  const N_COLOR = LOW ? 360 : 560;
-  const N_POOL = LOW ? 420 : 680;
+  const N_STAR = LOW ? 56 : 84;
+  const N_BW1 = LOW ? 160 : 240;
+  const N_BW2 = LOW ? 320 : 480;
+  const N_COLOR = LOW ? 480 : 700;
+  const N_POOL = LOW ? 520 : 820;
 
   function mulberry32(a) {
     return () => {
@@ -39,7 +40,9 @@
   function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
   function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
-  // Luminance-weighted Bridson-ish samples on a downscaled grid. Darker → denser (stipple convention).
+  // Stratified luminance-weighted samples with a cheap local min-distance (blue-noise-ish).
+  // Vertical bands guarantee the whole strip is covered — pure Bridson was filling the pool
+  // from the brightest corner before the rest of the strip got any dots.
   function samplePool(bitmap, W, H, seed) {
     const maxSide = LOW ? 96 : 128;
     const scale = Math.min(1, maxSide / Math.max(W, H));
@@ -54,7 +57,7 @@
     catch (_) { return null; }
 
     const rnd = mulberry32(seed || (Math.random() * 1e9) | 0);
-    const cell = Math.max(1.4, Math.sqrt((sw * sh) / (N_POOL * 2.2)));
+    const cell = Math.max(1.2, Math.sqrt((sw * sh) / (N_POOL * 2.6)));
     const cols = Math.ceil(sw / cell);
     const rows = Math.ceil(sh / cell);
     const grid = new Int16Array(cols * rows).fill(-1);
@@ -66,8 +69,7 @@
       return (0.2126 * data[o] + 0.7152 * data[o + 1] + 0.0722 * data[o + 2]) / 255;
     }
     function radiusFor(L) {
-      // Light areas: larger spacing (fewer dots). Dark: tighter pack.
-      return cell * (0.55 + 1.35 * L);
+      return cell * (0.55 + 1.1 * (1 - L));
     }
     function ok(x, y, r) {
       const c0 = Math.floor(x / cell), r0 = Math.floor(y / cell);
@@ -80,7 +82,7 @@
           if (id < 0) continue;
           const p = pts[id];
           const dx = p.sx - x, dy = p.sy - y;
-          const minR = Math.min(r, p.r);
+          const minR = Math.min(r, p.r) * 0.92;
           if (dx * dx + dy * dy < minR * minR) return false;
         }
       }
@@ -95,84 +97,76 @@
       const o = (iy * sw + ix) * 4;
       const gi = Math.floor(y / cell) * cols + Math.floor(x / cell);
       if (gi < 0 || gi >= grid.length) return false;
-      const id = pts.length;
-      grid[gi] = id;
+      grid[gi] = pts.length;
       pts.push({
         sx: x, sy: y,
         x: x * sx, y: y * sy,
         r, L,
         cr: data[o], cg: data[o + 1], cb: data[o + 2],
-        // Star start: scattered across the strip, biased slightly toward centre vertically.
         ox: rnd() * W,
-        oy: (0.15 + rnd() * 0.7) * H + (rnd() - 0.5) * H * 0.35,
+        oy: rnd() * H,
         j: rnd(),
       });
       return true;
     }
 
-    // Seed + Bridson active list.
-    const active = [];
-    for (let k = 0; k < 12 && pts.length === 0; k++) {
-      if (push(rnd() * sw, rnd() * sh)) active.push(0);
-    }
-    let guard = 0;
-    while (active.length && pts.length < N_POOL && guard++ < N_POOL * 30) {
-      const ai = (rnd() * active.length) | 0;
-      const p = pts[active[ai]];
-      let placed = false;
-      for (let t = 0; t < 18; t++) {
-        const ang = rnd() * Math.PI * 2;
-        const rad = p.r * (1.05 + rnd() * 1.6);
-        const nx = p.sx + Math.cos(ang) * rad;
-        const ny = p.sy + Math.sin(ang) * rad;
-        if (nx < 0.5 || ny < 0.5 || nx >= sw - 0.5 || ny >= sh - 0.5) continue;
-        // Soft luminance gate: keep blue-noise structure but bias acceptance to darker sites.
-        const ix = nx | 0, iy = ny | 0;
-        const L = lumAt(ix, iy);
-        if (rnd() > (1.05 - L) * 0.92 && rnd() > 0.18) continue;
-        if (push(nx, ny)) { active.push(pts.length - 1); placed = true; break; }
+    const bands = LOW ? 10 : 14;
+    const perBand = Math.ceil(N_POOL / bands);
+    for (let b = 0; b < bands; b++) {
+      const y0 = (b / bands) * sh;
+      const y1 = ((b + 1) / bands) * sh;
+      let got = 0, tries = 0;
+      while (got < perBand && tries++ < perBand * 50) {
+        const x = 0.5 + rnd() * (sw - 1);
+        const y = y0 + rnd() * Math.max(0.5, y1 - y0);
+        const L = lumAt(x | 0, y | 0);
+        if (rnd() > Math.pow(L, 0.85) + 0.2) continue;
+        if (push(x, y)) got++;
       }
-      if (!placed) { active[ai] = active[active.length - 1]; active.pop(); }
     }
 
-    // Top up with rejection samples if Bridson undershot (very flat/bright images).
-    let tries = 0;
-    while (pts.length < Math.min(N_POOL, N_BW2) && tries++ < N_POOL * 8) {
-      const x = rnd() * sw, y = rnd() * sh;
-      const L = lumAt(x | 0, y | 0);
-      if (rnd() > Math.pow(1 - L, 1.15) + 0.08) continue;
-      push(x, y);
-    }
-
-    // Sort dark→light so early passes read as clustered coarse form.
-    pts.sort((a, b) => a.L - b.L || a.j - b.j);
     return pts;
   }
 
-  function paintDots(ctx, pts, n, mode, W, H) {
-    // Hard dots only — no shadows, blurs, or soft brushes.
-    ctx.clearRect(0, 0, W, H);
+  // Evenly stride through the pool so early passes sketch the whole strip, not just the brightest corner.
+  function takeSpread(pts, n) {
     const lim = Math.min(n, pts.length);
-    for (let i = 0; i < lim; i++) {
-      const p = pts[i];
-      let s;
+    if (lim >= pts.length) return pts;
+    const out = new Array(lim);
+    for (let i = 0; i < lim; i++) out[i] = pts[((i * pts.length) / lim) | 0];
+    return out;
+  }
+
+  function takeBright(pts, n) {
+    const ranked = pts.slice().sort((a, b) => b.L - a.L || a.j - b.j);
+    return ranked.slice(0, Math.min(n, ranked.length));
+  }
+
+  function paintDots(ctx, pts, n, mode, W, H) {
+    ctx.clearRect(0, 0, W, H);
+    const list = mode === "star" ? takeBright(pts, n) : takeSpread(pts, n);
+    const coarse = mode === "bw" && n <= N_BW1;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      let s, fill;
       if (mode === "star") {
-        s = 1.1 + p.j * 1.4;
-        const a = 0.55 + 0.4 * p.j;
-        ctx.fillStyle = `rgba(235,235,228,${a.toFixed(3)})`;
+        s = 1.2 + p.j * 1.6;
+        fill = `rgba(236,234,226,${(0.5 + 0.45 * p.j).toFixed(3)})`;
       } else if (mode === "bw") {
-        // Coarse stipple: darker sites → larger black dots; lights → tiny pale flecks.
-        const dark = 1 - p.L;
-        const coarse = n <= N_BW1;
-        s = 1.2 + dark * (coarse ? 4.2 : 2.6);
-        let g = Math.round(p.L * 255);
-        if (dark > 0.45) g = Math.round(g * 0.35);   // punch dark ink for structure
-        ctx.fillStyle = `rgb(${g},${g},${g})`;
+        // Bright-on-dark stipple: dot size and value track image luminance.
+        s = (coarse ? 1.8 : 1.2) + p.L * (coarse ? 5.2 : 3.2);
+        const g = Math.round(36 + p.L * 219);
+        fill = `rgb(${g},${g},${g})`;
       } else {
-        // Colour pass: ink-like dots with real RGB, size still tracks darkness a little.
-        s = 1.0 + (1 - p.L) * 2.2;
-        ctx.fillStyle = `rgb(${p.cr},${p.cg},${p.cb})`;
+        s = 1.15 + p.L * 3.0;
+        // Lift colour a touch so midtones read on the dark surround before the photo settles.
+        const lift = 1.1;
+        const r = Math.min(255, (p.cr * lift) | 0);
+        const g = Math.min(255, (p.cg * lift) | 0);
+        const b = Math.min(255, (p.cb * lift) | 0);
+        fill = `rgb(${r},${g},${b})`;
       }
+      ctx.fillStyle = fill;
       const hs = s * 0.5;
       ctx.fillRect(p.x - hs, p.y - hs, s, s);
     }
@@ -180,19 +174,22 @@
 
   function paintDrift(ctx, pts, n, u, W, H) {
     ctx.clearRect(0, 0, W, H);
-    const lim = Math.min(n, pts.length);
+    // Drift: bright seeds scatter, then land on a coarse spatial spread (whole-strip silhouette).
+    const stars = takeBright(pts, Math.min(n, N_STAR));
+    const targets = takeSpread(pts, Math.min(Math.max(n, N_BW1), N_BW1));
     const e = easeOutCubic(u);
+    const lim = Math.min(stars.length, targets.length);
     for (let i = 0; i < lim; i++) {
-      const p = pts[i];
-      // Stagger arrivals slightly so the constellation doesn't snap as one sheet.
-      const local = Math.max(0, Math.min(1, (e - p.j * 0.22) / 0.78));
+      const p0 = stars[i];
+      const p = targets[i];
+      const local = Math.max(0, Math.min(1, (e - p0.j * 0.25) / 0.75));
       const k = easeInOut(local);
-      const x = p.ox + (p.x - p.ox) * k;
-      const y = p.oy + (p.y - p.oy) * k;
-      const s = 1.0 + (1 - k) * 1.2 + k * (1.2 + (1 - p.L) * 2.5);
-      const g = Math.round((0.92 * (1 - k) + p.L * k) * 255);
-      ctx.fillStyle = k < 0.55
-        ? `rgba(232,232,224,${(0.45 + 0.4 * p.j).toFixed(3)})`
+      const x = p0.ox + (p.x - p0.ox) * k;
+      const y = p0.oy + (p.y - p0.oy) * k;
+      const s = 1.15 + (1 - k) * 1.35 + k * (1.5 + p.L * 3.6);
+      const g = Math.round(210 * (1 - k) + (36 + p.L * 219) * k);
+      ctx.fillStyle = k < 0.5
+        ? `rgba(236,234,226,${(0.5 + 0.4 * p0.j).toFixed(3)})`
         : `rgb(${g},${g},${g})`;
       const hs = s * 0.5;
       ctx.fillRect(x - hs, y - hs, s, s);
@@ -205,8 +202,7 @@
     const W = bitmap.width | 0, H = bitmap.height | 0;
     if (!W || !H) return null;
 
-    // Reduced motion / over budget: caller draws the bitmap with the ordinary fade.
-    if (REDUCE || (opts.forceSkip) || active >= MAX_ACTIVE) return null;
+    if (REDUCE || opts.forceSkip || active >= MAX_ACTIVE) return null;
 
     const seed = ((opts.seed != null ? opts.seed : (W * 73856093) ^ (H * 19349663) ^ ((now0 * 1000) | 0)) >>> 0);
     const pts = samplePool(bitmap, W, H, seed);
@@ -214,11 +210,9 @@
 
     active++;
     const cv = document.createElement("canvas");
-    // Half-res working buffer keeps fillRect passes cheap; upsample when drawing.
     const rw = Math.max(64, W >> 1), rh = Math.max(64, H >> 1);
     cv.width = rw; cv.height = rh;
     const cx = cv.getContext("2d", { alpha: true });
-    // Scale point coords into working buffer space.
     const xScale = rw / W, yScale = rh / H;
     for (const p of pts) {
       p.x *= xScale; p.y *= yScale;
@@ -297,7 +291,6 @@
       pts.length = 0;
     }
 
-    // Kick first drift frame so the first draw isn't blank.
     tick(now0);
 
     return {
