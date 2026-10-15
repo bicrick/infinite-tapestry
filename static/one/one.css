@@ -4,13 +4,16 @@ html, body { margin: 0; height: 100%; background: #050506; color: #e9e6df; overf
 #one-c { position: fixed; inset: 0; width: 100vw; height: 100vh; touch-action: none; display: block; }
 .one-ui { position: fixed; inset: 0; pointer-events: none; }
 .one-ui button { pointer-events: auto; }
-.one-clock { position: absolute; top: 14px; left: 16px; font-variant-numeric: tabular-nums; opacity: .8; }
-.one-bar { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
-  padding: 8px 8px 8px 18px; border-radius: 999px; background: rgba(30,30,32,.72); backdrop-filter: blur(10px); min-width: 300px; }
-.one-cap { flex: 1; font-variant-numeric: tabular-nums; }
-.one-bar button { border: 0; border-radius: 999px; height: 36px; min-width: 36px; padding: 0 12px; background: rgba(255,255,255,.1); color: inherit; font: inherit; cursor: pointer; }
+.one-clock { position: absolute; top: 14px; left: 56px; font-variant-numeric: tabular-nums; opacity: .8; }
 #one-live { background: #fff; color: #111; display: flex; gap: 6px; align-items: center; }
 #one-live .dot { width: 7px; height: 7px; border-radius: 50%; background: #999; }
 .is-live #one-live .dot { background: #e33; }
 .one-hints { position: absolute; right: 16px; bottom: 8px; font-size: 11px; opacity: .45; }
 .one-perf { position: absolute; top: 40px; left: 16px; margin: 0; font: 11px/1.4 ui-monospace, monospace; background: rgba(0,0,0,.6); color: #9f9; padding: 6px 8px; border-radius: 6px; }
+
+/* Phase 4 bar: STATE only (which slots exist per mode). Look, layout polish and the morph are UI Tapestry's. */
+#cmd[data-mode="scrub"] [data-slot="composer"], #cmd[data-mode="scrub"] #send-btn { display: none !important; }
+#cmd[data-mode="compose"] #one-scrub, #cmd[data-mode="compose"] #one-live { display: none !important; }
+.one-scrub { display: flex; align-items: center; gap: 4px; flex: 1; justify-content: center; }
+.one-marks { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.one-marks .mk { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 11px; opacity: .75; transform-origin: left; }

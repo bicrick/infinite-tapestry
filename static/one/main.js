@@ -29,30 +29,12 @@
   function timeUnit(ms) { for (let i = hours.length - 1; i >= 0; i--) if (hours[i][2] <= ms) { const h = hours[i]; return h[0] + Math.min(1, (ms - h[2]) / Math.max(1, h[3] - h[2])) * (h[1] - h[0]); } return 0; }
   cam.setRate((u) => { const h = hourAt(u); return h && h[3] > h[2] ? Math.max(0.05, Math.min(2, (h[1] - h[0]) / ((h[3] - h[2]) / 1000))) : 0.35; });
 
-  // ---------- UI (phase-1 minimum; the real UI layer is phase 4) ----------
-  const clock = $("one-clock"), cap = $("one-cap"), bPlay = $("one-play"), bLive = $("one-live");
-  const wall = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-  const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  (function tick() { clock.textContent = wall.format(new Date()); setTimeout(tick, 1000 - (Date.now() % 1000) + 5); })(); // ALWAYS wall time
-  const setText = (el, t) => { if (el._t !== t) { el._t = t; el.textContent = t; } };
-  let lastUi = 0;
-  function ui() {
-    const c = cam.get(), t = unitTime(c.centerTime);
-    setText(cap, c.followLive ? "Live" : t ? fmt.format(t) : "");
-    document.documentElement.style.setProperty("--zp", c.zoomProgress.toFixed(3));
-    document.body.classList.toggle("is-live", c.followLive);
-    bLive.setAttribute("aria-pressed", String(c.followLive));
-  }
-  cam.on("change", () => urlSoon());
-  cam.on("live", ui); cam.on("settle", () => { ui(); urlSoon(); });
-  cam.on("play", (on) => { bPlay.classList.toggle("on", on); bPlay.setAttribute("aria-label", on ? "Pause" : "Play"); bPlay.textContent = on ? "❚❚" : "▶"; });
-  T.renderer.onTick((dt, ts) => {
-    if (ts - lastUi > 100) { lastUi = ts; ui(); }
+  // ---------- UI: the bar/caption/clock live in one/ui/* (phase 4); this file only feeds them data ----------
+  cam.on("change", () => urlSoon()); cam.on("settle", () => urlSoon());
+  T.renderer.onTick((dt) => {
     const mu = T.ingest.maxUnit(); if (mu != null && M) for (let g = mu - 1; g >= mu - 8; g--) tiles.request(0, g, -5e5 + (mu - g)); // the head's strips, always
     return heldTick(dt);
   });
-  bPlay.onclick = () => (cam.get().playing ? cam.pause() : cam.play());
-  bLive.onclick = () => { cam.goLive(); T.renderer.kick(); };
 
   // ---------- input: one handler for every zoom ----------
   const typing = (t) => t && t.closest && t.closest("input,textarea,select,[contenteditable]");
@@ -60,7 +42,7 @@
   let magnetT = 0; const magnetSoon = () => { clearTimeout(magnetT); magnetT = setTimeout(() => { cam.magnet(); kick(); }, 170); };
   const zoomDelta = (e) => { const u = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1; return (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * u; };
   addEventListener("wheel", (e) => {
-    if (typing(e.target) || e.target.closest(".ui-scroll")) return;
+    if (typing(e.target) || e.target.closest(".ui-scroll, #chat, #drawer, .pop, .sheet, dialog")) return;
     e.preventDefault();
     if (e.shiftKey || e.ctrlKey) { const rate = e.ctrlKey && !e.shiftKey ? 0.012 : 0.004; cam.nudge({ dZoom: -zoomDelta(e) * rate / Math.LN2, anchorX: e.clientX }); magnetSoon(); }
     else { const u = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1, dx = e.deltaX * u, dy = e.deltaY * u; cam.nudge({ dTime: (Math.abs(dx) > Math.abs(dy) ? dx : -dy) / cam.get().s }); }
@@ -145,12 +127,17 @@
     T.ingest.on("head", () => { layout(T.renderer.size()); T.renderer.kick(); });
     T.ingest.on("strip", () => T.renderer.kick());
     T.ingest.start({ sdxlBase: m.strips.sdxl.g0, apiBase: API });
-    const t = Q.get("t"), z = parseFloat(Q.get("z") || "0");
+    const at = Q.get("at"), t = Q.get("t") || (/^\d+$/.test(at || "") ? "s" + (m.strips.sdxl.g0 + +at) : null), z = parseFloat(Q.get("z") || "0"); // ?at=<strip> permalinks (prod share links)
     const deep = () => cam.set({ centerTime: /^s\d+$/.test(t) ? +t.slice(1) : M.units - 1, zoom: Math.min(0, z) });
     if (t) { deep(); T.ingest.on("boot", () => { layout(T.renderer.size()); deep(); T.renderer.kick(); }); } // deep link: no intro, no animation (re-applied once the live head is known)
     else { cam.set({ zoom: 0, centerTime: M.units }); cam.goLive(); cam.set({ zoom: 0, centerTime: cam.get().target.centerTime }); }
     window.__one.ready = true; T.renderer.kick();
-    J(`${API}/api/about?kind=tm&part=hours`).then((h) => { hours = h.hours || []; if (t && !/^s\d+$/.test(t)) cam.set({ centerTime: timeUnit(Date.parse(t)) }); ui(); }).catch(() => {});
+    J(`${API}/api/about?kind=tm&part=hours`).then((h) => { hours = h.hours || []; const U = T.ui || {};
+      if (U.caption) U.caption.setHours(hours); if (U.events) U.events.setData({ hrs: hours });
+      if (t && !/^s\d+$/.test(t)) cam.set({ centerTime: timeUnit(Date.parse(t)) }); }).catch(() => {});
+    J(`${API}/api/about?kind=tm&part=landmarks`).then((d) => { const U = T.ui || {}, items = (d.landmarks || d.items || []).filter((x) => x && x.g != null).sort((x, y) => x.g - y.g);
+      if (U.events) U.events.setData({ items }); }).catch(() => {});
+    J(`${API}/api/about?kind=tm&part=scenes`).then((d) => { const U = T.ui || {}, sc = d.scenes || []; if (U.caption) U.caption.setScenes(sc); if (U.events) U.events.setData({ scenes: sc }); }).catch(() => {});
     setInterval(() => { if (!document.hidden) manifest().then((m2) => { if (m2.units !== M.units) applyManifest(m2); }).catch(() => {}); }, 60000);
   });
   window.__one = { ready: false, cam, tiles, renderer: T.renderer };

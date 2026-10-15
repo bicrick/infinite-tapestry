@@ -42,7 +42,7 @@
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "strip") return onStripRef(msg, true);
     if (msg.type === "strips") return (msg.items || []).forEach((r) => onStripRef(r, false));
-    if (msg.type === "config") { config = Object.assign(config, msg); delete config.type; return; }
+    if (msg.type === "config") { config = Object.assign(config, msg); delete config.type; emit("config", msg); return; }
     if (msg.type === "ping") return send({ type: "pong" });
     if (msg.type === "clock") return onClock(msg);
     emit("msg", msg); // chat, react, fuel, ... (UI layer, phase 4)
@@ -82,7 +82,7 @@
         emit("boot", j);
       }).catch(() => {}).finally(connect);
     },
-    step, send,
+    step, send, wsUrl,
     arrivals: () => arrivals,
     headTime: () => headU,               // eased live edge (unit), null before the first ref
     maxUnit: () => (maxIndex < 0 ? null : base + maxIndex + 1),

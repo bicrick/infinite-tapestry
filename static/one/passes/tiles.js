@@ -5,22 +5,22 @@
 (() => {
   "use strict";
   const T = window.Tapestry;
-  let pr, uR, uV, uT, uA, uO, buf, ap, bpr, bLoc, bbuf;
+  let pr, uR, uV, uT, uA, uO, uC, buf, ap, bpr, bLoc, bbuf;
   const ops = []; // this frame's draws (display list), replayed by the reflection pass into its small FBO
   const MINB = () => (matchMedia("(pointer: coarse)").matches ? 10 : 12);
   const pxPerUnit = (l) => 64 / Math.pow(4, l - 1);
-  function levelFor(sDev) { if (sDev > 80) return 0; let l = 1; while (l < 7 && pxPerUnit(l + 1) >= sDev) l++; return l; }
+  function levelFor(sDev) { if (sDev > pxPerUnit(1)) return 0; /* any upscale of L1 is softer than prod: use strips */ let l = 1; while (l < 7 && pxPerUnit(l + 1) >= sDev) l++; return l; }
   const sh = (gl, t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); return o; };
   function setup(gl) {
     pr = gl.createProgram();
     gl.attachShader(pr, sh(gl, gl.VERTEX_SHADER, `attribute vec2 p; uniform vec4 r; uniform vec2 v; uniform vec2 o; varying vec2 uv;
       void main(){ uv=p; vec2 q=r.xy+p*r.zw-o; gl_Position=vec4(q.x/v.x*2.-1., 1.-q.y/v.y*2., 0., 1.); }`));
-    gl.attachShader(pr, sh(gl, gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; uniform float al;
-      void main(){ gl_FragColor=vec4(texture2D(t, uvt.xy+uv*uvt.zw).rgb, al); }`));
+    gl.attachShader(pr, sh(gl, gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; uniform float al; uniform vec4 cl;
+      void main(){ gl_FragColor=vec4(texture2D(t, clamp(uvt.xy+uv*uvt.zw, cl.xy, cl.zw)).rgb, al); }`));
     gl.linkProgram(pr);
     buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
     ap = gl.getAttribLocation(pr, "p");
-    uR = gl.getUniformLocation(pr, "r"); uV = gl.getUniformLocation(pr, "v"); uT = gl.getUniformLocation(pr, "uvt"); uA = gl.getUniformLocation(pr, "al"); uO = gl.getUniformLocation(pr, "o");
+    uR = gl.getUniformLocation(pr, "r"); uV = gl.getUniformLocation(pr, "v"); uT = gl.getUniformLocation(pr, "uvt"); uA = gl.getUniformLocation(pr, "al"); uO = gl.getUniformLocation(pr, "o"); uC = gl.getUniformLocation(pr, "cl");
     // Batched program (atlas strips): per-vertex position, uv, alpha.
     bpr = gl.createProgram();
     gl.attachShader(bpr, sh(gl, gl.VERTEX_SHADER, `attribute vec2 p; attribute vec2 q; attribute float a; uniform vec2 v; uniform vec2 o; varying vec2 uv; varying float al;
@@ -40,7 +40,7 @@
       if (!pr) return;
       gl.useProgram(pr); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
       gl.uniform2f(uV, W, h); gl.uniform2f(uO, 0, y0); gl.activeTexture(gl.TEXTURE0);
-      for (const o of ops) if (!o.verts) { gl.bindTexture(gl.TEXTURE_2D, o.t); gl.uniform4f(uT, ...o.uvt); gl.uniform1f(uA, o.al); gl.uniform4f(uR, ...o.r); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+      for (const o of ops) if (!o.verts) { gl.bindTexture(gl.TEXTURE_2D, o.t); gl.uniform4f(uT, ...o.uvt); gl.uniform4f(uC, ...o.cl); gl.uniform1f(uA, o.al); gl.uniform4f(uR, ...o.r); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
       if (ops.some((o) => o.verts)) {
         gl.useProgram(bpr); gl.uniform2f(bLoc.v, W, h); gl.uniform2f(bLoc.o, 0, y0); gl.bindBuffer(gl.ARRAY_BUFFER, bbuf); gl.disableVertexAttribArray(ap);
         for (const a of ["p", "q", "a"]) gl.enableVertexAttribArray(bLoc[a]);
@@ -65,14 +65,17 @@
       const X = (u) => Math.round((u - u0) * s * dpr) / dpr;
       covered.length = 0; sharpL.length = 0; let quads = 0;
       // [ua, ub] of a texture whose image spans [ia, ib] in units
-      const quad = (e, ia, ib, ua, ub) => {
+      // Exact mapping (texel i covers [i, i+1)/w; no squeeze), then clamp to the centres of the outermost texels of the
+      // FILLED span [sa, sb]: LINEAR never blends in the unfilled (black) part of a partial tile or wraps across an edge.
+      const quad = (e, ia, ib, ua, ub, sa = ia, sb = ib) => {
         ub = Math.min(ub, head); if (ub <= ua) return;
         const xa = X(ua), xb = X(ub); if (xb < 0 || xa > W) return;
         gl.bindTexture(gl.TEXTURE_2D, e.t);
-        const hx = 0.5 / e.w, hy = 0.5 / e.h, k = (1 - 2 * hx) / (ib - ia);
-        gl.uniform4f(uT, hx + (ua - ia) * k, hy, (ub - ua) * k, 1 - 2 * hy);
+        const hx = 0.5 / e.w, hy = 0.5 / e.h, k = 1 / (ib - ia);
+        const uvt = [(ua - ia) * k, 0, (ub - ua) * k, 1], cl = [Math.max(hx, (sa - ia) * k + hx), hy, Math.min(1 - hx, (sb - ia) * k - hx), 1 - hy];
+        gl.uniform4f(uT, ...uvt); gl.uniform4f(uC, ...cl);
         gl.uniform1f(uA, e.alpha); gl.uniform4f(uR, xa, y0, xb - xa, bandH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); quads++;
-        ops.push({ t: e.t, uvt: [hx + (ua - ia) * k, hy, (ub - ua) * k, 1 - 2 * hy], r: [xa, y0, xb - xa, bandH], al: e.alpha, lv: e.level });
+        ops.push({ t: e.t, uvt, cl, r: [xa, y0, xb - xa, bandH], al: e.alpha, lv: e.level });
         covered.push(Math.max(0, xa), Math.min(W, xb)); sharpL.push(e.level <= Math.max(1, L) ? 1 : 0);
         if (e.alpha < 1) f.needFrames = true;
       };
@@ -99,7 +102,7 @@
         const t0 = Math.max(0, Math.floor(u0 / U)), t1 = Math.floor(Math.min(u1, head - 1e-6) / U);
         if (t1 - t0 > 48) continue;
         for (let t = t0; t <= t1; t++) { const e = tiles.peek(l, t); if (!e) continue; const ia = t * U, ib = ia + e.w / tiles.ppu(l);
-          for (const [p, q] of e.spans || [[ia, ib]]) quad(e, ia, ib, Math.max(p, u0 - U), Math.min(q, u1 + U)); }
+          for (const [p, q] of e.spans || [[ia, ib]]) quad(e, ia, ib, Math.max(p, u0 - U), Math.min(q, u1 + U), p, q); }
       }
       if (L === 0) { // strips, batched per atlas page
         const g0 = Math.max(0, Math.floor(u0) - 1), g1 = Math.min(head - 1, Math.floor(u1) + 1), byPage = new Map(), loose = [];

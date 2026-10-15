@@ -96,10 +96,16 @@ def unit(g):
     k = g - sd["g0"]; src = sdxl_tile(k // 16)
     if src is not None and src.width >= (k % 16 + 1) * UW:
         return src.crop(((k % 16) * UW, 0, (k % 16 + 1) * UW, 256))
-    p = sd_paths.get(k); b = p and r2get(p)  # live tip: the pod hasn't built this L1 tile yet
+    return None  # live tip: the pod hasn't built this L1 tile yet -> strip_full(g), composited WITH its overlap
+
+def strip_full(g):
+    """(image scaled to UW px per unit incl. its left inpainting overlap, overlap width in px) for an SDXL strip.
+    Strips are [overlap | core]; the classic renderer draws each at x = g*core - overlap in g order, so the overlap
+    cross-fades over the previous strip. Cropping to the core (the old behaviour) left a hard edge at every strip."""
+    k = g - sd["g0"]; p = sd_paths.get(k); b = p and r2get(p)
     if not b: return None
-    im = Image.open(io.BytesIO(b)).convert("RGB"); core = im.height // 4
-    return im.crop((im.width - core, 0, im.width, im.height)).resize((UW, 256), Image.LANCZOS)
+    im = Image.open(io.BytesIO(b)).convert("RGB"); core = im.height / 4; kx = UW / core
+    return im.resize((max(1, round(im.width * kx)), 256), Image.LANCZOS), round((im.width - core) * kx)
 
 def path(l, t): return OUT / str(l) / f"{t:06d}.webp"
 def child(l, t):
@@ -117,8 +123,14 @@ def build(l, t, force):
     n = min(UPT[l], N - t * UPT[l])
     if l == 1:
         im = Image.new("RGB", (n * UW, 256), (10, 10, 12))
-        for i in range(n):
-            u = unit(t * 16 + i)
+        for i in range(n + 1):  # +1: the next tile's first strip overlaps into this tile's last unit
+            g = t * 16 + i
+            if g >= N: break
+            # Full strips first: the pod's lod/1 slices are cut per unit, so the first strip of every pod tile lost its
+            # left overlap (a hard edge every 16 strips, visible until full-res loads). Pod slice only as a fallback.
+            f = strip_full(g) if g >= sd["g0"] else None
+            if f: im.paste(f[0], (i * UW - f[1], 0)); continue  # PIL clips at the tile's edges
+            u = unit(g) if i < n else None
             if u: im.paste(u, (i * UW, 0))
     else:
         w = max(1, round(n * TW / UPT[l])); im = Image.new("RGB", (w, 64), (10, 10, 12)); x = 0

@@ -21,7 +21,7 @@
     },
     get gl() { return gl; },
     resize() {
-      dpr = Math.min(dprCap, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+      dpr = Math.min(window.TapestrySaver && window.TapestrySaver.on ? 1 : dprCap, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
       const cw = Math.round(W * dpr), ch = Math.round(H * dpr);
       if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
       for (const f of resizeFns) f({ W, H, dpr }); R.kick();
