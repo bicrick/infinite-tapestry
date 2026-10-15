@@ -1,15 +1,14 @@
-// /about: reveal-on-scroll + live fuel gauge + recent Hall of Heroes.
-// Data: /api/about?kind=transparency (hours_left, fuel) and ?kind=heroes.
+// /about: reveal-on-scroll + GPU cash chart + recent Hall of Heroes.
+// Cash chart: GET /api/gpu-cash (RunPod server-side; Stripe fuel purchases only lift as "fuel").
+// Heroes: GET /api/about?kind=heroes — same source as /fuel (donors_heroes, owner → Someone).
 (() => {
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const usd = (c) => "$" + (c / 100).toFixed(c >= 10000 ? 0 : 2);
-  const dur = (h) => {
-    if (h == null || !isFinite(h)) return "—";
-    if (h >= 48) return `${Math.round(h / 24)}d`;
-    if (h >= 20) return `${(h / 24).toFixed(1).replace(/\.0$/, "")}d`;
-    if (h >= 1) return `${Math.round(h)}h`;
-    return `${Math.max(1, Math.round(h * 60))}m`;
+  const money = (n) => {
+    if (n == null || !isFinite(n)) return "—";
+    const abs = Math.abs(n);
+    const dig = abs >= 100 ? 0 : 2;
+    return (n < 0 ? "-$" : "$") + abs.toFixed(dig);
   };
   const when = (t) => new Date(t).toLocaleDateString([], {
     month: "short", day: "numeric",
@@ -24,57 +23,99 @@
     io.observe(el);
   });
 
-  function setGauge(hoursLeft, covered, painted) {
-    const fill = $("fg-fill");
-    const hasLeft = hoursLeft != null && isFinite(hoursLeft);
-    const left = hasLeft ? Math.max(0, hoursLeft) : null;
-    // Ring: remaining inference hours (48h ≈ full), else purchase-vs-cost coverage.
-    let pct = 0;
-    if (left != null) pct = Math.max(0, Math.min(100, (left / 48) * 100));
-    else if (painted > 0) pct = Math.max(0, Math.min(100, (covered / painted) * 100));
-    if (fill) {
-      fill.style.setProperty("--fg-pct", String(pct));
-      fill.classList.toggle("low", left != null && left < 2);
-      fill.classList.add("on");
+  function renderChart(d) {
+    const svg = $("fc-chart");
+    if (!svg) return;
+    const pts = (d.points || []).filter((p) => p && p.t != null && isFinite(p.balance));
+    const markers = d.markers || [];
+    if (pts.length < 2) {
+      svg.innerHTML = `<text x="320" y="120" text-anchor="middle" font-size="13" fill="currentColor" opacity=".45">No cash history yet</text>`;
+      return;
     }
-    if (left != null) {
-      $("fg-hours").textContent = left > 0 ? dur(left) : "0";
-      $("fg-unit").textContent = "GPU time left";
-      $("fg-caption").textContent = left > 0
-        ? `About ${dur(left)} of GPU inference time left — fuel pays those compute costs.`
-        : painted
-          ? `Fuel bought has paid for ${dur(covered)} of ${dur(painted)} painted so far.`
-          : "Fuel balance is spent; fuel purchases pay GPU inference costs as the tapestry generates.";
-    } else {
-      $("fg-hours").textContent = painted ? dur(covered) : "—";
-      $("fg-unit").textContent = "fuel covered";
-      $("fg-caption").textContent = painted
-        ? `Fuel bought has paid for ${dur(covered)} of ${dur(painted)} painted.`
-        : "Live meter of GPU inference time paid for by fuel.";
-    }
+
+    const W = 640, H = 240;
+    const pad = { l: 44, r: 16, t: 28, b: 28 };
+    const innerW = W - pad.l - pad.r;
+    const innerH = H - pad.t - pad.b;
+    const t0 = +new Date(pts[0].t);
+    const t1 = +new Date(pts[pts.length - 1].t);
+    const span = Math.max(1, t1 - t0);
+    const ys = pts.map((p) => p.balance).concat(markers.map((m) => m.balance));
+    let yMin = Math.min(0, ...ys);
+    let yMax = Math.max(d.starting_credit_usd || 100, ...ys);
+    if (yMax - yMin < 1) { yMax += 1; yMin -= 0.25; }
+    const xOf = (t) => pad.l + ((+new Date(t) - t0) / span) * innerW;
+    const yOf = (v) => pad.t + (1 - (v - yMin) / (yMax - yMin)) * innerH;
+
+    // Thin step/line path through balance points.
+    let path = "";
+    pts.forEach((p, i) => {
+      const x = xOf(p.t), y = yOf(p.balance);
+      path += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1) + " ";
+    });
+
+    const yTicks = [];
+    const nice = [0, 25, 50, 75, 100, 125, 150, 200];
+    for (const v of nice) if (v >= yMin - 0.01 && v <= yMax + 0.01) yTicks.push(v);
+    if (!yTicks.length) yTicks.push(yMin, yMax);
+
+    const grid = yTicks.map((v) => {
+      const y = yOf(v);
+      return `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y}" y2="${y}" stroke="currentColor" opacity=".12" stroke-width="1"/>`
+        + `<text x="${pad.l - 8}" y="${y + 3}" text-anchor="end" font-size="10" fill="currentColor" opacity=".55">${money(v)}</text>`;
+    }).join("");
+
+    const xLabel = (t, anchor) => {
+      const x = xOf(t);
+      return `<text x="${x}" y="${H - 8}" text-anchor="${anchor || "middle"}" font-size="10" fill="currentColor" opacity=".5">${esc(when(t))}</text>`;
+    };
+    const xLabels = xLabel(pts[0].t, "start") + xLabel(pts[pts.length - 1].t, "end");
+
+    const dots = markers.map((m) => {
+      const x = xOf(m.t), y = yOf(m.balance);
+      const fuel = m.kind === "fuel";
+      const fill = fuel ? "#c9a46a" : "currentColor";
+      const opacity = fuel ? "1" : ".55";
+      const shape = fuel
+        ? `<circle cx="${x}" cy="${y}" r="3.5" fill="${fill}" stroke="#0b0b0c" stroke-width="1.5"/>`
+        : `<rect x="${x - 3}" y="${y - 3}" width="6" height="6" fill="${fill}" opacity="${opacity}" stroke="#0b0b0c" stroke-width="1"/>`;
+      const label = m.label ? `<text x="${x}" y="${y - 10}" text-anchor="middle" font-size="9" fill="currentColor" opacity=".7">${esc(m.label)}</text>` : "";
+      const title = `<title>${esc(m.label || m.kind)} · ${money(m.usd)} · ${esc(when(m.t))}</title>`;
+      return `<g>${title}${shape}${label}</g>`;
+    }).join("");
+
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    svg.innerHTML = `${grid}`
+      + `<path d="${path.trim()}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>`
+      + dots + xLabels;
   }
 
-  async function loadFuel() {
+  async function loadCash() {
+    const cap = $("fc-caption");
+    const legend = $("fc-legend");
     try {
-      const d = await (await fetch("/api/about?kind=transparency", { cache: "no-store" })).json();
-      const F = d && d.fuel;
-      $("t-state").textContent = d.painting ? "Live" : "Replay";
-      if (F) {
-        $("fg-rate").textContent = usd(F.rate_cents_per_hour || 89);
-        $("fg-bought").textContent = usd(F.donated_cents || 0);
-        setGauge(d.hours_left, F.hours_covered || 0, F.hours_painted || 0);
+      const d = await (await fetch("/api/gpu-cash", { cache: "no-store" })).json();
+      $("fc-start").textContent = money(d.starting_credit_usd ?? 100);
+      $("fc-spend").textContent = money(d.spend_usd);
+      $("fc-bought").textContent = money(d.fuel_bought_usd);
+      $("fc-bal").textContent = money(d.balance_usd);
+      if (d.estimated) {
+        $("fc-spend-l").textContent = "total spend (est.)";
+        cap.textContent = d.source === "unavailable"
+          ? "GPU cash meter unavailable. Fuel purchases still show on the Fuel page."
+          : "Estimated from fuel purchases and painting cost — connect RUNPOD_API_KEY on Vercel for live RunPod balance and spend.";
       } else {
-        setGauge(d.hours_left, 0, 0);
+        $("fc-spend-l").textContent = "total spend";
+        const rate = d.spend_per_hr_usd != null ? ` · ~${money(d.spend_per_hr_usd)}/hr now` : "";
+        cap.textContent = `Available GPU cash on RunPod${rate}. Fuel purchases step the line up; owner top-ups are marked separately.`;
       }
+      renderChart(d);
+      if (legend) legend.hidden = false;
     } catch (_) {
-      $("t-state").textContent = "Live";
-      $("fg-caption").textContent = "Couldn't load the live meter. See the Fuel page for GPU inference costs.";
+      if (cap) cap.textContent = "Couldn't load GPU cash. See the Fuel page for prepaid GPU purchases.";
     }
   }
 
-  // Same Hall of Heroes source as /fuel (static/heroes.js): GET /api/about?kind=heroes →
-  // web/api/about.js heroes(), which reads the donors_heroes view (live fuel buyers only) and
-  // anonymizes the site owner to "Someone". Do not invent a separate paid-fuel query here.
   async function loadHeroes() {
     const ol = $("about-heroes");
     if (!ol) return;
@@ -93,6 +134,6 @@
     }
   }
 
-  loadFuel();
+  loadCash();
   loadHeroes();
 })();

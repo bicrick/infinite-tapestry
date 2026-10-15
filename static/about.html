@@ -85,23 +85,22 @@
             <p>Every strip is painted by a rented GPU. Fuel is prepaid GPU time you purchase for that inference — the same compute that turns ideas into the live scroll.</p>
           </div>
           <div class="fuel-stage">
-            <div class="fuel-gauge" role="img" aria-labelledby="fg-hours fg-caption">
-              <div class="fg-ring" aria-hidden="true">
-                <svg viewBox="0 0 120 120">
-                  <circle class="fg-track" cx="60" cy="60" r="52" />
-                  <circle class="fg-fill" id="fg-fill" cx="60" cy="60" r="52" pathLength="100" />
-                </svg>
-                <div class="fg-core">
-                  <b id="fg-hours">—</b>
-                  <span id="fg-unit">GPU time left</span>
-                </div>
+            <div class="fuel-cash" aria-labelledby="fc-caption">
+              <div class="fc-totals" role="group" aria-label="GPU cash totals">
+                <div class="fc-stat"><b id="fc-start">$100</b><span>starting credit</span></div>
+                <div class="fc-stat"><b id="fc-spend">—</b><span id="fc-spend-l">total spend</span></div>
+                <div class="fc-stat"><b id="fc-bought">—</b><span>fuel bought</span></div>
+                <div class="fc-stat"><b id="fc-bal">—</b><span>balance now</span></div>
               </div>
-              <p class="fg-caption" id="fg-caption">Loading live fuel…</p>
-              <div class="fg-stats">
-                <div class="fg-stat"><b id="fg-rate">—</b><span>inference / hr</span></div>
-                <div class="fg-stat"><b id="t-state">—</b><span id="t-state-l">right now</span></div>
-                <div class="fg-stat"><b id="fg-bought">—</b><span>fuel bought</span></div>
-              </div>
+              <figure class="fc-chart-wrap">
+                <svg id="fc-chart" class="fc-chart" viewBox="0 0 640 240" role="img" aria-label="Available GPU cash over time"></svg>
+                <figcaption id="fc-caption" class="fc-caption">Loading GPU cash…</figcaption>
+              </figure>
+              <p class="fc-legend" id="fc-legend" hidden>
+                <span class="fc-key line"></span>Available GPU cash
+                <span class="fc-key fuel"></span>Fuel purchase
+                <span class="fc-key owner"></span>Owner top-up
+              </p>
             </div>
             <div class="fuel-side">
               <div class="fuel-heroes">
