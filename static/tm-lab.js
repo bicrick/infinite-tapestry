@@ -11,9 +11,13 @@
   const gl = cv.getContext("webgl", { alpha: false, antialias: false, powerPreference: "low-power" });
   if (!gl) { document.body.textContent = "WebGL unavailable"; return; }
   let M = null, eras = [], hours = [], marks = [], scenes = [], ideas = [], dpr = 1, W = 0, Hh = 0, bandH = 0, y0 = 0, maxBand = 0, lineY = 0, bg = [0.043, 0.043, 0.047];
-  let shimmerUntil = 0, ptrX = -1e4, light = false;
+  let light = false;
   const cam = { cx: 0, s: 1, tcx: 0, ts: 1, vx: 0 };
-  let dirty = true, anim = false, now = 0, drawn = 0, playing = false, showMarks = true, ideasOnly = false;
+  let dirty = true, anim = false, now = 0, drawn = 0, playing = false, showMarks = false, ideasOnly = false;
+  // Landmarks are off by default; each category is opt-in from the menu (remembered locally).
+  const CATS = [["era", "Eras"], ["release", "Releases"], ["milestone", "Milestones"], ["busiest", "Busiest hours"], ["story", "Long stories"], ["idea", "Ideas"], ["downtime", "Downtime"]];
+  let cats = new Set(); try { cats = new Set(JSON.parse(localStorage.getItem("tm:marks") || "[]")); } catch (_) {}
+  showMarks = cats.size > 0;
 
   // ---------- GL ----------
   const vs = `attribute vec2 p; uniform vec4 r; uniform vec2 v; varying vec2 uv;
@@ -24,19 +28,7 @@
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
   const ap = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
   const uR = gl.getUniformLocation(pr, "r"), uV = gl.getUniformLocation(pr, "v"), uT = gl.getUniformLocation(pr, "uvt");
-  // Glow + reflection: reuse the already-loaded coarse tiles (no second full render). mode 0 = halo around the
-  // line, 1 = mirrored reflection that fades out, with a shimmer that follows the pointer.
-  const fs2 = `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; uniform vec4 fx; uniform vec2 vw;
-    void main(){ vec2 p=uv; float a;
-      if (fx.x < .5) { float d=abs(p.y-.5)*2.; a=fx.y*exp(-d*d*4.); p.y=.5; }
-      else { float ripple=sin(p.y*38.+fx.z*2.2)*.0025*p.y + sin(p.y*91.-fx.z*3.1)*.0012*p.y;
-             p.x+=ripple; p.y=1.-p.y*.85; a=fx.y*pow(1.-uv.y,2.2);
-             float px=(gl_FragCoord.x/vw.x); a*=1.+.6*exp(-pow((px-fx.w)*7.,2.)); }
-      vec3 c=texture2D(t, uvt.xy+p*uvt.zw).rgb; gl_FragColor=vec4(c*a, a); }`;
-  const pr2 = gl.createProgram(); gl.attachShader(pr2, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr2, sh(gl.FRAGMENT_SHADER, fs2)); gl.linkProgram(pr2);
-  if (!gl.getProgramParameter(pr2, gl.LINK_STATUS)) console.warn("tm reflection shader:", gl.getProgramInfoLog(pr2));
-  const u2 = { vw: gl.getUniformLocation(pr2, "vw"), r: gl.getUniformLocation(pr2, "r"), v: gl.getUniformLocation(pr2, "v"), t: gl.getUniformLocation(pr2, "uvt"), fx: gl.getUniformLocation(pr2, "fx") };
-  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  const refl = window.TapestryReflection ? window.TapestryReflection.create(cv, { surr: () => (light ? "244,239,231" : "5,5,6"), coarse: () => matchMedia("(pointer: coarse)").matches }) : null;
 
   // ---------- loader worker: fetch + decode off the main thread ----------
   const workerSrc = `self.onmessage=async(e)=>{const {id,url}=e.data;try{const r=await fetch(url);if(!r.ok)throw 0;const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);}catch(_){self.postMessage({id,bm:null});}};`;
@@ -119,18 +111,7 @@
     y0 = Math.round((lineY - bandH / 2) * dpr) / dpr;
     const u0 = cam.cx - W / 2 / cam.s, u1 = cam.cx + W / 2 / cam.s; U0 = u0;
     const L = levelFor(cam.s); drawn = 0;
-    // glow + reflection from the coarse level (already resident as the fallback layer)
-    const CL = Math.min(7, Math.max(1, L) + 1);
-    gl.useProgram(pr2); gl.uniform2f(u2.v, W, Hh); gl.uniform2f(u2.vw, cv.width, cv.height); gl.enable(gl.BLEND);
-    const tsec = (now % 600000) / 1000, glowH = Math.max(bandH * 2.2, 26), reflH = Math.max(bandH * 0.62, 18);
-    tilesAt(CL, u0, u1, (e, ua, ub) => {
-      gl.bindTexture(gl.TEXTURE_2D, e.t); gl.uniform4f(u2.t, 0, 0, 1, 1);
-      const xa = X(ua), xb = X(ub);
-      const ga = (light ? 0.22 : 0.38) * Math.min(1, 24 / bandH); // halo for the hairline, fades out once the band is tall
-      if (ga > 0.02) { gl.uniform4f(u2.fx, 0, ga, tsec, ptrX / W); gl.uniform4f(u2.r, xa, lineY - glowH / 2, xb - xa, glowH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
-      gl.uniform4f(u2.fx, 1, light ? 0.22 : 0.3, tsec, ptrX / W); gl.uniform4f(u2.r, xa, y0 + bandH + Math.max(2, bandH * 0.04), xb - xa, reflH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    });
-    gl.disable(gl.BLEND); gl.useProgram(pr); gl.uniform2f(uV, W, Hh);
+    gl.uniform2f(uV, W, Hh);
     for (let l = Math.min(7, Math.max(1, L) + 2); l >= Math.max(1, L); l--) tilesAt(l, u0, u1, (e, ua, ub) => quad(e, ua, ub, y0, bandH)); // coarse -> fine
     if (L === 0) { // full-res strips, composed exactly like the live viewer: each image starts `overlap` before its slot,
       // later strips paint over earlier ones, so the result matches the pod's level-1 tiles pixel for pixel
@@ -141,6 +122,9 @@
         quad(e, g - ov, g + 1, y0, bandH);
       }
     }
+    // Reflection: the production module (static/refl.js, same as the live viewer). It samples this frame's band
+    // (GPU->GPU drawImage), so it must run in the same task as the draw above. Idle = zero work inside the module.
+    if (refl) refl.frame({ left: U0 * cam.s * dpr, cov: 1, lod: true, fading: 0 }, y0 * dpr, bandH * dpr, cv.width, cv.height, 1);
   }
 
   // ---------- time mapping ----------
@@ -167,7 +151,7 @@
     lastGroupS = cam.s; lastGroupCx = cam.cx;
     const span = W / cam.s, u0 = cam.cx - span, u1 = cam.cx + span; // one screen of slack each side
     const vis = []; for (let i = bs(marks, u0 - 1); i < marks.length && marks[i].g <= u1; i++) {
-      const m = marks[i]; if (m.k === "idea" && !m.top && cam.s < 2) continue; // plain ideas only when zoomed in
+      const m = marks[i]; if (!cats.has(m.k)) continue; if (m.k === "idea" && !m.top && cam.s < 2) continue; // plain ideas only when zoomed in
       vis.push(m);
     }
     const out = []; const GAP = 96 / cam.s; // units within ~96 px merge into one group
@@ -212,7 +196,7 @@
     if (!dragging && Math.abs(cam.vx) > 0.01) { cam.tcx += cam.vx * dt; cam.vx *= Math.exp(-4 * dt); clamp(); }
     const k = 1 - Math.exp(-12 * dt), ls = Math.log(cam.s), lt = Math.log(cam.ts);
     cam.s = Math.exp(ls + (lt - ls) * k); cam.cx += (cam.tcx - cam.cx) * (playing ? 1 : k);
-    const moving = playing || ts < shimmerUntil || Math.abs(lt - Math.log(cam.s)) > 1e-4 || Math.abs(cam.tcx - cam.cx) * cam.s > 0.05 || Math.abs(cam.vx) * cam.s > 1;
+    const moving = playing || Math.abs(lt - Math.log(cam.s)) > 1e-4 || Math.abs(cam.tcx - cam.cx) * cam.s > 0.05 || Math.abs(cam.vx) * cam.s > 1;
     if (uploads.length) flushUploads(4);
     if (moving || dirty) { draw(); dirty = false; placeMarks(); if (ts - lastHud > 120) { hud(); lastHud = ts; } }
     if (moving || inflight || uploads.length || perf.on || dirty) requestAnimationFrame(frame); else { anim = false; last = 0; hud(); }
@@ -229,7 +213,6 @@
   }, { passive: false });
   const ptrs = new Map(); let pinch = null, lastMove = [], downAt = null;
   cv.addEventListener("pointerdown", (e) => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, e.clientX); dragging = true; cam.vx = 0; downAt = [e.clientX, performance.now()]; lastMove = [[performance.now(), e.clientX]]; if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.abs(a - b) || 1, s: cam.ts, mid: (a + b) / 2 }; } });
-  addEventListener("pointermove", (e) => { ptrX = e.clientX; shimmerUntil = performance.now() + 1600; kick(); }, { passive: true });
   cv.addEventListener("pointermove", (e) => {
     if (!ptrs.has(e.pointerId)) return;
     const px = ptrs.get(e.pointerId); ptrs.set(e.pointerId, e.clientX);
@@ -275,7 +258,13 @@
   $("menuB").onclick = () => { const o = !menu.classList.contains("open"); menu.classList.toggle("open", o); $("menuB").setAttribute("aria-expanded", o); };
   const mode = (io) => { ideasOnly = io; $("mIdeas").classList.toggle("on", io); $("mScenes").classList.toggle("on", !io); };
   $("mIdeas").onclick = () => mode(true); $("mScenes").onclick = () => mode(false);
-  $("mMarks").onclick = () => { showMarks = !showMarks; $("mMarks").classList.toggle("on", showMarks); lastGroupS = 0; regroup(); dirty = true; kick(); };
+  const catRow = $("mCats");
+  for (const [k, label] of CATS) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "tml-pill" + (cats.has(k) ? " on" : ""); b.textContent = label; b.setAttribute("aria-pressed", cats.has(k));
+    b.onclick = () => { cats.has(k) ? cats.delete(k) : cats.add(k); b.classList.toggle("on", cats.has(k)); b.setAttribute("aria-pressed", cats.has(k));
+      showMarks = cats.size > 0; try { localStorage.setItem("tm:marks", JSON.stringify([...cats])); } catch (_) {} lastGroupS = 0; regroup(); dirty = true; kick(); };
+    catRow.appendChild(b);
+  }
   addEventListener("keydown", (e) => {
     if (e.target.tagName === "INPUT") return;
     if (e.key === "ArrowRight") cam.vx = 900 / cam.ts; else if (e.key === "ArrowLeft") cam.vx = -900 / cam.ts;

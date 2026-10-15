@@ -24,8 +24,10 @@
     <h4>Jump to a day</h4><div id="cal"></div>
     <h4>Step through</h4>
     <div class="row"><button id="mScenes" class="tml-pill on" type="button">All prompts</button><button id="mIdeas" class="tml-pill" type="button">Ideas only</button></div>
-    <h4>Show</h4>
-    <div class="row"><button id="mMarks" class="tml-pill on" type="button">Landmarks</button><span class="theme-toggle" data-theme-toggle><button type="button" data-t="">Auto</button><button type="button" data-t="light">Light</button><button type="button" data-t="dark">Dark</button></span></div>
+    <h4>Show events</h4>
+    <div class="row" id="mCats"></div>
+    <h4>Theme</h4>
+    <div class="row"><span class="theme-toggle" data-theme-toggle><button type="button" data-t="">Auto</button><button type="button" data-t="light">Light</button><button type="button" data-t="dark">Dark</button></span></div>
     <p class="tml-note"><a href="/time-machine">Classic calendar view</a></p>
   </div>
   <div id="bot" class="tml-dock">
@@ -38,6 +40,7 @@
   <div id="toast" class="tml-toast" role="status"></div>
   <div id="perf"></div>
   <!--chrome:scripts-->
+  <script src="/refl.js"></script>
   <script src="/tm-lab.js"></script>
 </body>
 </html>
