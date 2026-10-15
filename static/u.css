@@ -27,3 +27,8 @@ body.u-tl #top-clock, body.u-tl .dock .now:not(.u-now), body.u-tl #speed-btn, bo
 #u-perf { position:fixed; left:8px; bottom:90px; font:11px ui-monospace, monospace; background:#000a; color:#fff; padding:6px 8px; border-radius:6px; white-space:pre; display:none; pointer-events:none; z-index:99; }
 @media (max-width:560px) { body.u-tl .u-desk, body.u-tl #u-prev, body.u-tl #u-next { display:none !important; } } /* phone: pinch zooms, swipe steps; the composer keeps its text field */
 .u-cats .mode { flex:0 0 auto; padding:6px 10px; }
+/* In the timeline the live viewer is in its own history state; keep its composer (with the timeline controls) and our
+   caption on screen, with its "Back to live" pill above them: the phone layout of the live page, on every device. */
+body.u-tl.away .dock .cmd { opacity:1; transform:none; pointer-events:auto; }
+body.u-tl.away .dock .now.u-now { opacity:1 !important; pointer-events:auto; }
+body.u-tl .dock .pill#live-btn { bottom:calc(100% + 34px); height:40px; padding:0 18px; border-radius:20px; font-size:14px; }
