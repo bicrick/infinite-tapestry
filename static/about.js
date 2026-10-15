@@ -103,11 +103,12 @@
         $("fc-spend-l").textContent = "total spend (est.)";
         cap.textContent = d.source === "unavailable"
           ? "GPU cash meter unavailable. Fuel purchases still show on the Fuel page."
-          : "Estimated from fuel purchases and painting cost — connect RUNPOD_API_KEY on Vercel for live RunPod balance and spend.";
+          : "Estimated from tapestry fuel purchases and painting cost — set RUNPOD_API_KEY on Vercel for live pod billing.";
       } else {
         $("fc-spend-l").textContent = "total spend";
         const rate = d.spend_per_hr_usd != null ? ` · ~${money(d.spend_per_hr_usd)}/hr now` : "";
-        cap.textContent = `Available GPU cash on RunPod${rate}. Fuel purchases step the line up; owner top-ups are marked separately.`;
+        const since = d.start_at ? ` since ${when(d.start_at)}` : "";
+        cap.textContent = `Infinite Tapestry GPU cash${since}${rate}. Spend is tapestry pods only; fuel purchases step the line up; owner top-ups after the start are marked separately.`;
       }
       renderChart(d);
       if (legend) legend.hidden = false;
