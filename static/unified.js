@@ -37,6 +37,8 @@
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   // The exact production reflection module (static/refl.js), imported, not copied.
   const refl = window.TapestryReflection ? window.TapestryReflection.create(cv, { surr: () => (light ? "244,239,231" : "5,5,6"), coarse: () => matchMedia("(pointer: coarse)").matches }) : null;
+  // No black bars: stippled wireframe where the band has no pixels yet, halftone bloom as textures land (same GL context).
+  const fill = window.TapestryStipple ? window.TapestryStipple.create({ gl, dpr: Math.min(2, devicePixelRatio || 1) }) : null;
 
   // ---------- worker fetch + decode ----------
   const workerSrc = `self.onmessage=async(e)=>{const {id,url}=e.data;try{const r=await fetch(url);if(!r.ok)throw 0;const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);}catch(_){self.postMessage({id,bm:null});}};`;
@@ -90,13 +92,18 @@
   }
   let U0 = 0, viaApi = false;
   const X = (u) => Math.round((u - U0) * cam.s * dpr) / dpr;
-  function quad(e, ua, ub, y, h) {
+  function quad(e, ua, ub, y, h, ca = ua, cb = ub) { // [ca, cb]: the part of [ua, ub] to draw
     gl.bindTexture(gl.TEXTURE_2D, e.t);
-    const hx = 0.5 / e.w, hy = 0.5 / e.h; gl.uniform4f(uT, hx, hy, 1 - 2 * hx, 1 - 2 * hy);
-    const xa = X(ua), xb = X(ub), a = e.at ? Math.min(1, (performance.now() - e.at) / FADE) : 1;
+    const hx = 0.5 / e.w, hy = 0.5 / e.h, k = (1 - 2 * hx) / (ub - ua); gl.uniform4f(uT, hx + (ca - ua) * k, hy, (cb - ca) * k, 1 - 2 * hy);
+    const xa = X(ca), xb = X(cb), a = e.at ? Math.min(1, (performance.now() - e.at) / FADE) : 1;
     if (a < 1) fading = true; else e.at = 0;
     gl.uniform1f(uA, a); gl.uniform4f(uR, xa, y, xb - xa, h); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); drawn++;
     covered.push(xa, xb);
+  }
+  function put(e, ua, ub, key) {
+    if (!fill) return quad(e, ua, ub, y0, bandH);
+    const hx = 0.5 / e.w, hy = 0.5 / e.h;
+    for (const [ca, cb] of fill.paintTexture(ua, ub, key, e.t, [hx, hy, 1 - hx, 1 - hy])) quad(e, ua, ub, y0, bandH, ca, cb);
   }
   let coarseDone = false, liveSnap = null;
   const FADE = 200; let fading = false; const covered = []; let gaps = [];
@@ -105,7 +112,7 @@
     const lv = M.levels[l - 1]; if (!lv) return; const upt = lv.units_per_tile;
     const t0 = Math.max(0, Math.floor(u0 / upt)), t1 = Math.min(lv.tiles - 1, Math.floor(u1 / upt));
     if (t1 - t0 > 24) return;
-    for (let t = t0; t <= t1; t++) { const e = only ? peek(`${l}/${t}`) : want(`${l}/${t}`, tileUrl(l, t, lv)); if (e) fn(e, t * upt, Math.min(M.units, (t + 1) * upt)); }
+    for (let t = t0; t <= t1; t++) { const k = `${l}/${t}`, e = only ? peek(k) : want(k, tileUrl(l, t, lv)); if (e) fn(e, t * upt, Math.min(M.units, (t + 1) * upt), k); }
   }
   let coverage = 1;
   function draw() {
@@ -119,6 +126,7 @@
     const L = levelFor(cam.s); drawn = 0;
     gl.uniform2f(uV, W, Hh);
     covered.length = 0; fading = false;
+    if (fill) fill.begin();
     // Coarse prefetch: every level-7 then level-6 tile (a few dozen small webps for all history), requested before
     // anything finer and kept resident, so a jump anywhere always has a parent to scale up.
     if (!coarseDone) { let all = true; for (const l of [7, 6]) { const lv = M.levels[l - 1]; if (lv) for (let t = 0; t < lv.tiles; t++) if (!want(`${l}/${t}`, tileUrl(l, t, lv))) all = false; } coarseDone = all; }
@@ -127,9 +135,9 @@
       const xa = X(liveSnap.ua), xb = X(liveSnap.ub); gl.uniform4f(uR, xa, y0, xb - xa, bandH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); drawn++; covered.push(xa, xb); }
     // Never a blank: coarsest first (7 is always requested first = coarse prefetch, and kept resident), then every
     // resident level in between scaled up, then the wanted levels L+2..L; each new texture fades in over its parent.
-    const lw = Math.min(7, Math.max(1, L) + 2), Q = (e, ua, ub) => quad(e, ua, ub, y0, bandH);
-    for (let l = 7; l > lw; l--) tilesAt(l, u0, u1, Q, l !== 7 && l !== 6);
-    for (let l = lw; l >= Math.max(1, L); l--) tilesAt(l, u0, u1, Q);
+    const lw = Math.min(7, Math.max(1, L) + 2);
+    for (let l = 7; l > lw; l--) tilesAt(l, u0, u1, put, l !== 7 && l !== 6);
+    for (let l = lw; l >= Math.max(1, L); l--) tilesAt(l, u0, u1, put);
     // Full-res strips at strip zoom; past the pyramid (the live tip, up to now) the live viewer's own LOD chunks
     // (16/64/256 strips per tile, R2), finishing with single strips at the very edge. The line always reaches now.
     let need = 0, have = 0;
@@ -141,11 +149,11 @@
       for (let lv = 3; lv >= 1; lv--) { const N = [0, 16, 64, 256][lv];
         for (let c = Math.max(0, Math.floor(f0 / N)); c < Math.floor(lmi / N) && base + c * N <= g1; c++) {
           const e = lv === 3 ? want(`p3/${c}`, `${R2}/live-sdxl/lod/3/${String(c).padStart(6, "0")}.jpg`) : peek(`p${lv}/${c}`);
-          if (e) quad(e, base + c * N, base + (c + 1) * N, y0, bandH); } }
+          if (e) put(e, base + c * N, base + (c + 1) * N, `p${lv}/${c}`); } }
     }
     if (L === 0) {
       const g0 = Math.max(0, Math.floor(u0) - 1);
-      for (let g = g0; g <= g1; g++) { need++; const e = want("s/" + g, stripUrl(g)); if (!e) continue; have++; const core = e.h / 4, ov = Math.max(0, e.w - core) / core; quad(e, g - ov, g + 1, y0, bandH); }
+      for (let g = g0; g <= g1; g++) { need++; const e = want("s/" + g, stripUrl(g)); if (!e) continue; have++; const core = e.h / 4, ov = Math.max(0, e.w - core) / core; put(e, g - ov, g + 1, "s/" + g); }
     } else if (g1 >= M.units) {
       const base = SDXL0(), lmi = lm - base, dev = cam.s * dpr;
       let from = Math.max(M.units, Math.floor(u0)) - base; // SDXL index
@@ -154,14 +162,15 @@
         const N = [0, 16, 64, 256][lv], c0 = Math.floor(from / N), c1 = Math.floor(lmi / N) - 1; // complete chunks only
         for (let c = c0; c <= c1 && (base + c * N) <= g1; c++) {
           need++; const e = want(`p${lv}/${c}`, `${R2}/live-sdxl/lod/${lv}/${String(c).padStart(6, "0")}.jpg`);
-          if (e) { have++; quad(e, base + c * N, base + (c + 1) * N, y0, bandH); }
+          if (e) { have++; put(e, base + c * N, base + (c + 1) * N, `p${lv}/${c}`); }
         }
         from = Math.max(from, (c1 + 1) * N);
       }
-      for (let i = from; i < lmi && base + i <= g1; i++) { need++; const e = want("s/" + (base + i), stripUrl(base + i)); if (e) { have++; quad(e, base + i, base + i + 1, y0, bandH); } }
+      for (let i = from; i < lmi && base + i <= g1; i++) { need++; const e = want("s/" + (base + i), stripUrl(base + i)); if (e) { have++; put(e, base + i, base + i + 1, "s/" + (base + i)); } }
     }
     coverage = need ? have / need : 1;
     gaps = trueGaps(X(0), Math.min(W, X(liveMax()))); // fading keeps the frame loop running (see frame())
+    if (fill) fill.end(null, { left: U0, span: W / cam.s, s: cam.s * dpr, yOff: y0 * dpr, bandH: bandH * dpr, width: cv.width, height: cv.height, lo: 0, hi: lm, dpr });
 
     if (refl && now - lastRefl >= 32) { lastRefl = now; refl.frame({ left: U0 * cam.s * dpr, cov: 1, lod: true, fading: 0 }, y0 * dpr, bandH * dpr, cv.width, cv.height, 1); reflPending = false; }
     else if (refl) reflPending = true;
@@ -300,6 +309,7 @@
     if (targetS) zoomAt(targetS / cam.ts, sx ?? W / 2);
     // Pre-draw a frame before the fade so the crossover never shows an empty canvas (strips around the centre are
     // usually in the browser cache already: the live viewer just loaded them).
+    if (fill) fill.reset();
     dirty = true; frameNow(); setTimelineUi(true); kick(); urlSoon();
   }
   let passLive = false;
@@ -374,11 +384,14 @@
     if (anim && dt < 0.1) { ewma = ewma * 0.9 + dt * 0.1; if (ewma > 0.022 && dprCap > 0.75 && ++slow > 20) { dprCap = dprCap > 1 ? 1 : 0.75; slow = 0; ewma = 0.016; resize(); } }
     const moving = step(dt);
     if (uploads.length) flushUploads(4);
-    if (moving || dirty) { draw(); dirty = false; placeMarks(); if (ts - lastHud > 120) { hud(); lastHud = ts; urlSoon(); } }
-    if (fading) dirty = true;
-    if (moving || inflight || uploads.length || perf.on || dirty || reflPending) { if (reflPending && !moving) dirty = true; requestAnimationFrame(frame); }
-    else { anim = false; last = 0; hud(); urlSoon(); }
+    if (moving || dirty) { draw(); dirty = false; drawnAt = ts; placeMarks(); if (ts - lastHud > 120) { hud(); lastHud = ts; urlSoon(); } }
+    const fa = fill ? fill.active() : 0;
+    if (fading || fa === 2) dirty = true; // a fade or a bloom runs every frame
+    if (moving || inflight || uploads.length || perf.on || dirty || reflPending) { if (reflPending && !moving) dirty = true; if (fa === 1 && !RM && ts - drawnAt > 60) dirty = true; requestAnimationFrame(frame); }
+    else { anim = false; last = 0; hud(); urlSoon(); if (fa === 1 && !RM) shimmerSoon(); }
   }
+  let shimmerT = 0, drawnAt = 0; // only the wireframe is on screen: its slow shimmer needs ~15 redraws a second, not 60
+  function shimmerSoon() { clearTimeout(shimmerT); shimmerT = setTimeout(() => { if (mode === "tl" && !anim) { dirty = true; kick(); } }, 66); }
   function kick() { if (!anim && M && mode === "tl") { anim = true; requestAnimationFrame(frame); } }
 
   // ---------- URL: ?t=s<g>&z=<z> (replaceState, <= 4 Hz) ----------
@@ -593,7 +606,7 @@
   } };
   window.__u = {
     cam, mode: () => mode, detents, zOf, level: () => levelFor(cam.s), drawn: () => drawn, coverage: () => coverage, dpr: () => dpr, liveMax,
-    tex: () => ({ count: tex.size, bytes: texBytes, inflight, uploads: uploads.length }), enterTimeline, toLive, zoomAt, stepDetent, fly, snap,
+    tex: () => ({ count: tex.size, bytes: texBytes, inflight, uploads: uploads.length }), stipple: () => (fill ? fill.active() : -1), enterTimeline, toLive, zoomAt, stepDetent, fly, snap,
     startPerf() { perf.on = true; perf.frames = []; kick(); }, stopPerf() { perf.on = false; const f = perf.frames.slice(1); perf.frames = []; return f; }, ready: false,
   };
   if (new URLSearchParams(location.search).get("perf")) { const p = $("u-perf"); p.style.display = "block"; let fc = 0, t0 = performance.now(); (function q(ts) { fc++; if (ts - t0 > 1000) { p.textContent = `fps ${Math.round(fc * 1000 / (ts - t0))}  ${mode}  L${levelFor(cam.s)}  quads ${drawn}  z ${zOf(cam.s).toFixed(2)}\ntex ${tex.size} ${(texBytes / 1048576).toFixed(1)} MB  heap ${performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + " MB" : "n/a"}`; fc = 0; t0 = ts; } requestAnimationFrame(q); })(performance.now()); }
