@@ -1,5 +1,6 @@
 // Shared helpers for the Vercel functions. No dependencies: Stripe, Supabase and RunPod via fetch.
 const crypto = require("crypto");
+const { pickAdoptPod } = require("./podpick");
 
 const env = (k, d) => process.env[k] || d;
 // The public domain is ONE config value (SITE_URL); everything else derives from it.
@@ -111,15 +112,14 @@ async function loadPod(force) {
   try { const r = await rest("GET", "pod_state?id=eq.1&select=pod_id"); if (r && r[0] && r[0].pod_id) _pod = r[0].pod_id; } catch (_) {}
   return POD();
 }
-// RunPod's "migrate" gives the pod a new id. If our pod is gone or stopped while a pod with the same name runs, adopt it.
+// RunPod's "migrate" gives the pod a new id (and often a "-migration" name). If our pod is gone or stopped while a
+// matching pod runs, adopt it. Matching rule: lib/podpick.js.
 async function adoptPod() {
-  const d = await runpod(`query { myself { pods { id name desiredStatus } } }`).catch(() => null);
+  const d = await runpod(`query { myself { pods { id name desiredStatus runtime { uptimeInSeconds } } } }`).catch(() => null);
   const pods = (d && d.myself && d.myself.pods) || [];
-  const cur = pods.find((p) => p.id === POD());
-  const name = (cur && cur.name) || env("RUNPOD_POD_NAME", "tapestry-sdxl");
-  if (cur && cur.desiredStatus === "RUNNING") return null;
-  const alt = pods.find((p) => p.id !== POD() && p.name === name && p.desiredStatus === "RUNNING") || (!cur && pods.find((p) => p.name === name));
+  const alt = pickAdoptPod(pods, POD(), env("RUNPOD_POD_NAME", "tapestry-sdxl"));
   if (!alt) return null;
+  const name = alt.name;
   const old = POD();
   await rest("PATCH", "pod_state?id=eq.1", { pod_id: alt.id }, { prefer: "return=minimal" });
   _pod = alt.id;
