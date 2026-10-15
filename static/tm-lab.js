@@ -26,15 +26,16 @@
   const uR = gl.getUniformLocation(pr, "r"), uV = gl.getUniformLocation(pr, "v"), uT = gl.getUniformLocation(pr, "uvt");
   // Glow + reflection: reuse the already-loaded coarse tiles (no second full render). mode 0 = halo around the
   // line, 1 = mirrored reflection that fades out, with a shimmer that follows the pointer.
-  const fs2 = `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; uniform vec4 fx; uniform vec2 v;
+  const fs2 = `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; uniform vec4 fx; uniform vec2 vw;
     void main(){ vec2 p=uv; float a;
       if (fx.x < .5) { float d=abs(p.y-.5)*2.; a=fx.y*exp(-d*d*4.); p.y=.5; }
       else { float ripple=sin(p.y*38.+fx.z*2.2)*.0025*p.y + sin(p.y*91.-fx.z*3.1)*.0012*p.y;
              p.x+=ripple; p.y=1.-p.y*.85; a=fx.y*pow(1.-uv.y,2.2);
-             float px=(gl_FragCoord.x/v.x); a*=1.+.6*exp(-pow((px-fx.w)*7.,2.)); }
+             float px=(gl_FragCoord.x/vw.x); a*=1.+.6*exp(-pow((px-fx.w)*7.,2.)); }
       vec3 c=texture2D(t, uvt.xy+p*uvt.zw).rgb; gl_FragColor=vec4(c*a, a); }`;
   const pr2 = gl.createProgram(); gl.attachShader(pr2, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr2, sh(gl.FRAGMENT_SHADER, fs2)); gl.linkProgram(pr2);
-  const u2 = { r: gl.getUniformLocation(pr2, "r"), v: gl.getUniformLocation(pr2, "v"), t: gl.getUniformLocation(pr2, "uvt"), fx: gl.getUniformLocation(pr2, "fx") };
+  if (!gl.getProgramParameter(pr2, gl.LINK_STATUS)) console.warn("tm reflection shader:", gl.getProgramInfoLog(pr2));
+  const u2 = { vw: gl.getUniformLocation(pr2, "vw"), r: gl.getUniformLocation(pr2, "r"), v: gl.getUniformLocation(pr2, "v"), t: gl.getUniformLocation(pr2, "uvt"), fx: gl.getUniformLocation(pr2, "fx") };
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
   // ---------- loader worker: fetch + decode off the main thread ----------
@@ -120,12 +121,13 @@
     const L = levelFor(cam.s); drawn = 0;
     // glow + reflection from the coarse level (already resident as the fallback layer)
     const CL = Math.min(7, Math.max(1, L) + 1);
-    gl.useProgram(pr2); gl.uniform2f(u2.v, W, Hh); gl.enable(gl.BLEND);
+    gl.useProgram(pr2); gl.uniform2f(u2.v, W, Hh); gl.uniform2f(u2.vw, cv.width, cv.height); gl.enable(gl.BLEND);
     const tsec = (now % 600000) / 1000, glowH = Math.max(bandH * 2.2, 26), reflH = Math.max(bandH * 0.62, 18);
     tilesAt(CL, u0, u1, (e, ua, ub) => {
       gl.bindTexture(gl.TEXTURE_2D, e.t); gl.uniform4f(u2.t, 0, 0, 1, 1);
       const xa = X(ua), xb = X(ub);
-      gl.uniform4f(u2.fx, 0, light ? 0.22 : 0.38, tsec, ptrX / W); gl.uniform4f(u2.r, xa, lineY - glowH / 2, xb - xa, glowH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      const ga = (light ? 0.22 : 0.38) * Math.min(1, 24 / bandH); // halo for the hairline, fades out once the band is tall
+      if (ga > 0.02) { gl.uniform4f(u2.fx, 0, ga, tsec, ptrX / W); gl.uniform4f(u2.r, xa, lineY - glowH / 2, xb - xa, glowH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
       gl.uniform4f(u2.fx, 1, light ? 0.22 : 0.3, tsec, ptrX / W); gl.uniform4f(u2.r, xa, y0 + bandH + Math.max(2, bandH * 0.04), xb - xa, reflH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     });
     gl.disable(gl.BLEND); gl.useProgram(pr); gl.uniform2f(uV, W, Hh);
