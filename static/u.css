@@ -36,3 +36,13 @@ body.u-tl .dock .pill#live-btn { bottom:calc(100% + 34px); height:40px; padding:
    button returns to live. Fade only (no layout change). */
 #live-btn { transition:opacity .2s linear; }
 body.u-tl #live-btn { opacity:0 !important; pointer-events:none !important; }
+/* Timeline = no composing: the composer bar keeps only the timeline controls and narrows; chat steps aside.
+   Everything returns at live zoom. Width animates between two explicit values (no auto-width jump). */
+.dock { transition:width .25s var(--ease, ease); }
+body.u-tl .dock { width:min(352px, calc(100vw - 32px)); }
+body.u-tl #cmd-input, body.u-tl #ref-btn, body.u-tl #ref-chip, body.u-tl #send-btn, body.u-tl #more-btn, body.u-tl .cmd .seg, body.u-tl .cmd .sep,
+body.u-tl #hide-btn, body.u-tl #fullscreen-btn, body.u-tl #export-btn, body.u-tl .cmd-terms, body.u-tl #export-pop { display:none !important; }
+body.u-tl .cmd { justify-content:center; }
+#chat { transition:opacity .2s linear; }
+body.u-tl #chat { opacity:0 !important; pointer-events:none !important; }
+@media (max-width:560px) { body.u-tl .dock { width:200px; } }
