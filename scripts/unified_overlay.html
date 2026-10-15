@@ -5,3 +5,5 @@
     <div id="u-perf"></div>
   </div>
   <div class="u-hints ui" aria-hidden="true"><span class="u-fine">Scroll · scrub</span><span class="u-fine">Shift+scroll · zoom</span><span class="u-fine">WASD / arrows</span><span class="u-coarse">Swipe · scrub</span><span class="u-coarse">Pinch · zoom</span></div>
+  <script>/* timeline deep link (?t=…&z<-0.15): skip the live intro, the timeline shows at once */
+    (function () { var q = new URLSearchParams(location.search); if (q.get("t") && parseFloat(q.get("z") || "0") < -0.15 && !q.has("nointro")) { q.set("nointro", "1"); history.replaceState(null, "", location.pathname + "?" + q.toString()); } })();</script>

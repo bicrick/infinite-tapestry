@@ -16,7 +16,7 @@
   liveCv.after(host);
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let M = null, eras = [], hours = [], marks = [], scenes = [], dpr = 1, W = 0, Hh = 0, bandH = 0, y0 = 0, lineY = 0, bg = [0.02, 0.02, 0.024];
-  let MINB = 12, light = false, lastRefl = -1e9, reflPending = false, upH = 1200; // units per hour (measured from the index)
+  let lineYT = null, MINB = 12, light = false, lastRefl = -1e9, reflPending = false, upH = 1200; // units per hour (measured from the index)
   const cam = { cx: 0, s: 1, tcx: 0, ts: 1, vx: 0 };
   let mode = "live", dirty = true, anim = false, now = 0, drawn = 0, playing = false;
   let entry = null; // {y, s}: the live band at the moment we left it (the crossover anchor)
@@ -192,6 +192,7 @@
   function readLive() {
     const TV = window.TapestryView; if (!TV || !TV.band) return null;
     const ld = liveCv.width / Math.max(1, W), b = TV.band();
+    if (!(b.height > 0) || !(ld > 0)) { const h = innerHeight * (innerHeight > innerWidth * 1.15 ? 0.5 : 0.6); return { s: h / 4, y: innerHeight / 2, g: 0 }; }
     return { s: b.height / ld / 4, y: (b.top + b.height / 2) / ld, g: SDXL0() + TV.center() + 0.5 };
   }
   const minS = () => W / Math.max(1, liveMax()) * 0.9;
@@ -229,14 +230,15 @@
 
   const held = new Set();
   // ---------- mode switching ----------
-  let revealT = 0;
+  let revealT = 0, instant = false;
   function setTimelineUi(on) {
     clearTimeout(revealT);
+    if (on && instant) { instant = false; document.body.classList.add("u-tl"); return; }
     if (!on) { document.body.classList.remove("u-tl"); calPop.classList.add("hidden"); return; }
     const t0 = performance.now();
     (function reveal() { // keep the live canvas on screen until the timeline can show the same strips (<= 450 ms)
       if (mode !== "tl") return;
-      if (coverage >= 0.9 || performance.now() - t0 > 450) { document.body.classList.add("u-tl"); } else revealT = setTimeout(reveal, 30);
+      if (instant || coverage >= 0.9 || performance.now() - t0 > 450) { document.body.classList.add("u-tl"); } else revealT = setTimeout(reveal, 30);
     })();
   }
   function enterTimeline(targetS, sx) {
@@ -261,30 +263,39 @@
     handing = true; setPlay(false); cam.vx = 0; held.clear();
     const TV = window.TapestryView, L0 = readLive();
     const atEdge = !L0 || g >= L0.g - Math.max(24, W / sLive);
+    if (L0) lineYT = L0.y; // band eases onto the live band's height (matters after a cold timeline deep link)
     followLive = atEdge; cam.ts = sLive; if (!atEdge) cam.tcx = g; clamp(); kick();
-    const t0 = performance.now();
+    document.body.classList.add("u-hold");
+    // History: move the hidden live viewer to the target NOW (1:1 drag API, no seek), so its full-res strips fetch and
+    // decode during the zoom. The cover stays until it is aligned AND fully loaded: never a black hand-off.
+    let pos = false, gain = 1, req = 0, from = 0;
+    const nudge = () => { // align the viewer to cam.tcx, measuring the drag API's px gain on the fly
+      const L = readLive(); if (!L) return false;
+      const off = cam.tcx - L.g; if (Math.abs(off) * sLive <= 1) return true;
+      if (req && Math.abs(L.g - from) > 1e-3) { gain = (L.g - from) / req || 1; req = 0; }
+      if (!req) { const d = off / gain; from = L.g; req = d; TV.wheelMove(-d * sLive); }
+      return false;
+    };
+    if (!atEdge && TV.wheelStart && L0) { TV.wheelStart(); pos = true; nudge(); }
+    // Live = the real live edge now: if the hidden viewer was left rewound, send it home (its own return) while the
+    // camera flies to the current tip; hand off once it is live again.
+    if (atEdge && TV.live && !TV.live()) { const b = $("live-btn"); if (b) { passLive = true; b.click(); passLive = false; } }
+    const t0 = performance.now(); let loadedAt = 0;
     (function wait() {
-      const done = Math.abs(Math.log(cam.s / sLive)) < 0.01 && Math.abs(cam.tcx - cam.cx) * cam.s < 0.75;
-      if (!RM && !done && performance.now() - t0 < 1400) return requestAnimationFrame(wait);
+      const el = performance.now() - t0;
+      const zoomed = Math.abs(Math.log(cam.s / sLive)) < 0.01 && Math.abs(cam.tcx - cam.cx) * cam.s < (followLive ? 4 : 0.75);
+      const aligned = pos ? nudge() : true;
+      const loaded = (!TV.coverage || TV.coverage() >= 0.98) && (!atEdge || !TV.live || TV.live() || (TV.max() - (readLive() || {g: 0}).g) * sLive < W);
+      if (loaded && aligned && !loadedAt) loadedAt = el;
+      if (!RM && !(zoomed && aligned && loaded) && el < 8000) return requestAnimationFrame(wait);
       cam.s = cam.ts; cam.cx = cam.tcx; frameNow();
-      const L = readLive();
-      // 1:1 drag to the exact unit (the drag API's px scale can differ from the band's by the ribbon factor: measure
-      // the gain from the first move and correct on the next frames, still under the cover)
-      let gain = 1, req = 0, from = L ? L.g : 0;
-      if (TV.wheelStart) { TV.wheelStart(); if (L) { req = cam.cx - L.g; TV.wheelMove(-req * sLive); } }
-      document.body.classList.add("u-hold"); // the live viewer is briefly "rewound" while it holds: no pill flash
-      const t1 = performance.now();
-      (function aligned() { // uncover only once the live viewer draws the same strip under the needle
-        const L2 = readLive();
-        if (L2 && Math.abs(L2.g - cam.cx) * sLive > 1 && performance.now() - t1 < 500) {
-          if (req && Math.abs(L2.g - from) > 1e-3) { gain = (L2.g - from) / req; req = 0; }
-          if (!req && TV.wheelMove) { const d = (cam.cx - L2.g) / (gain || 1); from = L2.g; req = d; TV.wheelMove(-d * sLive); gain = gain || 1; }
-          return requestAnimationFrame(aligned);
-        }
+      if (!pos && TV.wheelStart) { const L = readLive(); TV.wheelStart(); if (L) TV.wheelMove(-(cam.cx - L.g) * sLive); }
+      window.__u.lastHandoff = { ms: Math.round(el), waitedForLoad: Math.round(Math.max(0, el - (loadedAt || el))), edge: atEdge, coverage: TV.coverage ? +TV.coverage().toFixed(3) : null };
+      requestAnimationFrame(() => requestAnimationFrame(() => { // the viewer has drawn the aligned frame: uncover
         followLive = false; handing = false;
         mode = "live"; entry = null; setTimelineUi(false); urlSoon();
-        setTimeout(() => { document.body.classList.remove("u-hold"); if (TV.wheelEnd) TV.wheelEnd(true); }, RM ? 0 : 800);
-      })();
+        setTimeout(() => { document.body.classList.remove("u-hold"); if (TV.wheelEnd && !atEdge) TV.wheelEnd(true); if (atEdge && TV.live && !TV.live()) { const b = $("live-btn"); if (b) { passLive = true; b.click(); passLive = false; } } }, RM ? 0 : 800);
+      }));
     })();
   }
 
@@ -292,7 +303,8 @@
   let last = 0, dragging = false, lastHud = 0, ewma = 0.016, slow = 0, dprCap = 2;
   const perf = { frames: [], on: false };
   function step(dt) {
-    if (followLive) { const L = readLive(); if (L) cam.tcx = L.g; }
+    if (followLive) { const TV = window.TapestryView; const L = readLive(); if (L) cam.tcx = L.g; }
+    if (lineYT != null && Math.abs(lineYT - lineY) > 0.3) { lineY += (lineYT - lineY) * (1 - Math.exp(-12 * dt)); dirty = true; } else if (lineYT != null) { lineY = lineYT; lineYT = null; }
     if (held.size) { if (held.has("w")) zoomAt(Math.exp(2.2 * dt), W / 2); if (held.has("s")) zoomAt(Math.exp(-2.2 * dt), W / 2);
       const dir = (held.has("d") ? 1 : 0) - (held.has("a") ? 1 : 0); if (dir) { cam.tcx += dir * 1100 / cam.ts * dt; clamp(); } }
     if (playing && !dragging) { cam.tcx += rateAt(cam.tcx) * dt; if (cam.tcx >= liveMax() - 1) setPlay(false); }
@@ -320,7 +332,7 @@
   function urlSoon() { if (urlT) return; urlT = setTimeout(writeUrl, Math.max(0, 250 - (performance.now() - urlLast))); }
   function writeUrl() {
     urlT = 0; urlLast = performance.now();
-    const q = new URLSearchParams(location.search); q.delete("at"); q.delete("to");
+    const q = new URLSearchParams(location.search); q.delete("at"); q.delete("to"); q.delete("nointro");
     if (mode === "tl") { q.set("t", "s" + Math.round(cam.tcx)); q.set("z", String(Math.round(zOf(cam.ts) * 4) / 4)); } else { q.delete("t"); q.delete("z"); }
     const s = q.toString(), u = location.pathname + (s ? "?" + s : "");
     if (u !== location.pathname + location.search) history.replaceState(null, "", u);
@@ -490,6 +502,10 @@
     dirty = true; if (M && mode === "tl") { clamp(); lastGroupS = 0; regroup(); } kick();
   }
   addEventListener("resize", resize);
+  let lastLm = 0; setInterval(() => { // new strips keep landing while you browse: redraw if the line's end is on screen
+    if (mode !== "tl" || !M || document.hidden) return; const lm = liveMax(); if (lm === lastLm) return; lastLm = lm;
+    if ((lm - cam.cx) * cam.s < W) { dirty = true; kick(); }
+  }, 1000);
   function theme() {
     light = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "light" : matchMedia("(prefers-color-scheme: light)").matches;
     const c = getComputedStyle(document.body).backgroundColor.match(/\d+(\.\d+)?/g);
@@ -522,14 +538,16 @@
     const q = new URLSearchParams(location.search), t = q.get("t"), z = parseFloat(q.get("z") || "0");
     if (t) {
       const g = /^s\d+$/.test(t) ? +t.slice(1) : timeUnit(Date.parse(t));
-      const waitLive = (n) => { const L = readLive(); if (L && window.TapestryView.ready()) go(g, L); else if (n < 80) setTimeout(() => waitLive(n + 1), 100); };
+      const waitLive = (n) => { const L = readLive(); if (z < -0.15 && L) go(g, L); else if (L && window.TapestryView.ready()) go(g, L); else if (n < 80) setTimeout(() => waitLive(n + 1), 100); };
       const go = (g, L) => {
-        if (z < -0.15) { enterTimeline(null); cam.cx = cam.tcx = g; cam.s = cam.ts = L.s * Math.pow(2, z); entry = null; clamp(); dirty = true; kick(); }
+        if (z < -0.15) { instant = true; enterTimeline(null); cam.cx = cam.tcx = g; cam.s = cam.ts = L.s * Math.pow(2, z); entry = null; clamp(); dirty = true; kick(); }
         else if (g >= SDXL0() && window.TapestrySeek) window.TapestrySeek(Math.round(g - SDXL0()), Math.round(g - SDXL0() + 8));
       };
       waitLive(0);
     }
   });
-  const waitFirst = (n) => { const TV = window.TapestryView; if ((TV && TV.ready && TV.ready()) || n > 40) boot(); else setTimeout(() => waitFirst(n + 1), 150); };
+  // Timeline deep links boot at once (the live viewer initialises in the background, its intro skipped).
+  const DQ = new URLSearchParams(location.search), DEEP = DQ.get("t") && parseFloat(DQ.get("z") || "0") < -0.15;
+  const waitFirst = (n) => { if (DEEP) return boot(); const TV = window.TapestryView; if ((TV && TV.ready && TV.ready()) || n > 40) boot(); else setTimeout(() => waitFirst(n + 1), 150); };
   waitFirst(0);
 })();
