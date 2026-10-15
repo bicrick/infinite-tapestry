@@ -13,9 +13,10 @@
   const host = $("u-tl"), cv = $("u-c"), liveCv = $("view");
   const gl = cv.getContext("webgl", { alpha: false, antialias: false, powerPreference: "low-power" });
   if (!gl || !host) return;
+  liveCv.after(host);
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let M = null, eras = [], hours = [], marks = [], scenes = [], dpr = 1, W = 0, Hh = 0, bandH = 0, y0 = 0, lineY = 0, bg = [0.02, 0.02, 0.024];
-  let light = false, lastRefl = -1e9, reflPending = false, upH = 1200; // units per hour (measured from the index)
+  let MINB = 12, light = false, lastRefl = -1e9, reflPending = false, upH = 1200; // units per hour (measured from the index)
   const cam = { cx: 0, s: 1, tcx: 0, ts: 1, vx: 0 };
   let mode = "live", dirty = true, anim = false, now = 0, drawn = 0, playing = false;
   let entry = null; // {y, s}: the live band at the moment we left it (the crossover anchor)
@@ -101,9 +102,8 @@
     gl.viewport(0, 0, cv.width, cv.height); gl.clearColor(bg[0], bg[1], bg[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
     if (!M) return;
     // Band: true aspect (a unit is 1:4). Vertical position eases from the live band (at the crossover) to the line.
-    bandH = Math.max(2, Math.round(4 * cam.s * dpr) / dpr);
-    const k = entry ? smooth(Math.min(1, Math.max(0, Math.log2(entry.s / cam.s) / 2))) : 1;
-    const cy = entry ? entry.y + (lineY - entry.y) * k : lineY;
+    bandH = Math.round(Math.max(MINB, 4 * cam.s) * dpr) / dpr; // true aspect, never thinner than MINB
+    const cy = lineY; // one band, one height on screen: the live band's centre at every zoom
     y0 = Math.round((cy - bandH / 2) * dpr) / dpr;
     const u0 = cam.cx - W / 2 / cam.s, u1 = cam.cx + W / 2 / cam.s; U0 = u0;
     const L = levelFor(cam.s); drawn = 0;
@@ -148,13 +148,18 @@
   // ---------- HUD + landmarks ----------
   const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const setText = (el, t) => { if (el._t !== t) { el._t = t; el.textContent = t; } };
+  const fmtT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }), fmtD = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
   function hud() {
-    const t = unitTime(cam.cx), e = eras.find((x) => cam.cx >= x.g0 && cam.cx < x.g0 + x.n) || eras[eras.length - 1];
-    setText($("u-when"), t ? fmt.format(t) : "…");
-    setText($("u-era"), e ? `${e.label} · strip ${Math.max(0, Math.floor(cam.cx - e.g0)).toLocaleString()}` : "");
-    const i = bs(scenes, cam.cx) - 1, sc = scenes[i];
-    setText($("u-title"), sc && cam.cx < sc.g + sc.len + 2 ? sc.title + (sc.user ? " · an idea" : "") : "");
-    cv.setAttribute("aria-label", (t ? fmt.format(t) : "Timeline") + (sc ? ", " + sc.title : ""));
+    // Same slots as the live viewer: the clock by the mark shows the moment under the needle, the caption above the
+    // composer shows its scene. Content changes, location doesn't.
+    const t = unitTime(cam.cx), today = t && t.toDateString() === new Date().toDateString();
+    setText(uClock, t ? (today ? "" : fmtD.format(t) + ", ") + fmtT.format(t) : "");
+    const i = bs(scenes, cam.cx) - 1, sc = scenes[i], on = sc && cam.cx < sc.g + sc.len + 2;
+    const TV = window.TapestryView, tip = !on && cam.cx > (scenes.length ? scenes[scenes.length - 1].g : 0);
+    setText(uTitle, on ? sc.title : tip && TV.title ? TV.title() || "—" : "—");
+    const e = eras.find((x) => cam.cx >= x.g0 && cam.cx < x.g0 + x.n) || eras[eras.length - 1];
+    setText(uSub, (on && sc.user ? "an idea · " : "") + (e ? `strip ${Math.max(0, Math.floor(cam.cx)).toLocaleString()}` : ""));
+    cv.setAttribute("aria-label", (t ? fmt.format(t) : "Timeline") + (on ? ", " + sc.title : ""));
   }
   const pool = [], markHost = $("u-marks"); let groups = [], lastGroupS = 0, lastGroupCx = 0;
   function regroup() {
@@ -222,18 +227,21 @@
   }
 
   // ---------- mode switching ----------
-  const inerted = [];
+  let revealT = 0;
   function setTimelineUi(on) {
-    document.body.classList.toggle("u-tl", on);
-    // inert (focus/a11y) is applied after the fade so its style invalidation never lands in a crossover frame
-    clearTimeout(setTimelineUi.t);
-    if (on) setTimelineUi.t = setTimeout(() => { if (mode !== "tl") return; for (const el of document.body.children) if (el !== host && el.tagName !== "SCRIPT" && !el.inert) { el.inert = true; inerted.push(el); } }, 260);
-    else { while (inerted.length) inerted.pop().inert = false; menu.classList.remove("open"); }
+    clearTimeout(revealT);
+    if (!on) { document.body.classList.remove("u-tl"); calPop.classList.add("hidden"); return; }
+    const t0 = performance.now();
+    (function reveal() { // keep the live canvas on screen until the timeline can show the same strips (<= 450 ms)
+      if (mode !== "tl") return;
+      if (coverage >= 0.9 || performance.now() - t0 > 450) { document.body.classList.add("u-tl"); } else revealT = setTimeout(reveal, 30);
+    })();
   }
   function enterTimeline(targetS, sx) {
     if (!M) return;
     const L = readLive(); if (!L) return;
-    sLive = L.s; entry = { y: L.y, s: L.s };
+    sLive = L.s; entry = { y: L.y, s: L.s }; lineY = L.y; host.style.setProperty("--u-line", lineY + "px");
+    const TV = window.TapestryView; if (TV.live && TV.live() && window.TapestrySeek) { const c = Math.round(TV.center()); window.TapestrySeek(c - 4, c + 4); } // the viewer's own "Back to live" pill appears
     cam.cx = cam.tcx = L.g; cam.s = cam.ts = L.s; cam.vx = 0;
     mode = "tl"; resize(); clamp();
     if (targetS) zoomAt(targetS / cam.ts, sx ?? W / 2);
@@ -241,6 +249,7 @@
     // usually in the browser cache already: the live viewer just loaded them).
     dirty = true; frameNow(); setTimelineUi(true); kick(); urlSoon();
   }
+  let passLive = false;
   function toLive(g) {
     if (mode !== "tl") return;
     const lm = liveMax(), TV = window.TapestryView;
@@ -248,7 +257,7 @@
     const atEdge = g >= lm - Math.max(40, W / sLive);
     cam.ts = sLive; cam.tcx = atEdge ? lm - W / 2 / sLive * 0.35 : g; clamp(); kick();
     setTimeout(() => {
-      if (atEdge) { const b = $("live-btn"); if (b && !b.classList.contains("hidden")) b.click(); }
+      if (atEdge) { const b = $("live-btn"); passLive = true; if (b) b.click(); passLive = false; }
       else if (window.TapestrySeek && g >= SDXL0()) window.TapestrySeek(Math.round(g - SDXL0() - 4), Math.round(g - SDXL0() + 4));
       mode = "live"; entry = null; setTimelineUi(false); setPlay(false); urlSoon();
     }, RM ? 0 : 200);
@@ -365,13 +374,30 @@
     else if (e.key === "Home") fly(0, cam.ts);
     else if (e.key === "]" || e.key === ".") stepPrompt(1); else if (e.key === "[" || e.key === ",") stepPrompt(-1);
     else if (e.key === " ") setPlay(!playing);
-    else if (e.key === "Escape") { if (menu.classList.contains("open")) menu.classList.remove("open"); else toLive(cam.tcx); }
+    else if (e.key === "Escape") { if (!calPop.classList.contains("hidden")) calPop.classList.add("hidden"); else toLive(cam.tcx); }
     else return;
     e.preventDefault(); e.stopImmediatePropagation(); kick();
   }, true);
 
-  // ---------- controls ----------
-  const toast = (t) => { const el = $("u-toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove("show"), 1800); };
+  // ---------- controls: folded into the live viewer's own chrome (same components, classes, sizes) ----------
+  const el = (tag, cls, html) => { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; };
+  const clock = $("top-clock"), uClock = el("span", "top-clock u-only-i"); uClock.setAttribute("aria-label", "Time on the timeline"); clock && clock.after(uClock);
+  const nowRow = document.querySelector(".dock .now"), uNow = el("div", "now u-now");
+  const uTitle = el("span"), uSub = el("span", "now-time"); uTitle.id = "u-now-title"; uNow.append(uTitle, uSub); nowRow && nowRow.after(uNow);
+  const ICON = (d) => `<svg viewBox="0 0 24 24">${d}</svg>`;
+  const mk = (id, title, svg, extra) => { const b = el("button", "icon sec u-only" + (extra ? " " + extra : ""), ICON(svg)); b.type = "button"; b.id = id; b.title = title; b.setAttribute("aria-label", title); return b; };
+  const bOut = mk("u-zout", "Zoom out (−)", '<path d="M5 12h14"/>', "u-desk"), bIn = mk("u-zin", "Zoom in (+)", '<path d="M5 12h14M12 5v14"/>', "u-desk");
+  const bPrev = mk("u-prev", "Previous prompt ([)", '<path d="M15 6l-6 6 6 6"/>'), bNext = mk("u-next", "Next prompt (])", '<path d="M9 6l6 6-6 6"/>');
+  const PLAY = '<path d="M8 6l10 6-10 6z"/>', PAUSE = '<path d="M8 6v12M16 6v12"/>';
+  const bPlay = mk("u-play", "Play from here (space)", PLAY), bCal = mk("u-cal-b", "Calendar and events", '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>');
+  const anchor = $("hide-btn"); if (anchor) for (const b of [bOut, bIn, bPrev, bPlay, bNext, bCal]) anchor.before(b);
+  const calPop = el("div", "pop hidden u-pop", '<div class="pop-title">Jump to a day</div><div id="u-cal"></div><div class="pop-title">Show events</div><div class="pop-row u-cats" id="u-cats"></div><p class="fine">Events are off unless you turn them on here.</p>');
+  $("cmd").after(calPop);
+  bCal.onclick = (e) => { e.stopPropagation(); calPop.classList.toggle("hidden"); };
+  document.addEventListener("pointerdown", (e) => { if (!calPop.contains(e.target) && !bCal.contains(e.target)) calPop.classList.add("hidden"); });
+  // The live viewer's own "Back to live" pill is the Live control at every zoom.
+  $("live-btn") && $("live-btn").addEventListener("click", (e) => { if (mode === "tl" && !passLive) { e.stopImmediatePropagation(); toLive(liveMax()); } }, true);
+  const toast = (t) => { if (window.TapestryWS && window.TapestryWS.toast) window.TapestryWS.toast(window.TapestryWS.esc ? window.TapestryWS.esc(t) : t, 1800); };
   const fly = (g, s) => { setPlay(false); cam.vx = 0; if (s) cam.ts = s; cam.tcx = g; clamp(); kick(); };
   function stepPrompt(dir) {
     if (!scenes.length) return;
@@ -380,18 +406,13 @@
     fly(it.g + Math.min(6, (it.len || 6) / 2), Math.max(cam.ts, detents()[1] || cam.ts)); toast(it.title);
   }
   function setPlay(on) {
-    playing = on; const b = $("u-play"); b.textContent = on ? "Pause" : "Play here"; b.classList.toggle("on", on);
+    playing = on; bPlay.innerHTML = ICON(on ? PAUSE : PLAY); bPlay.classList.toggle("on", on); bPlay.title = on ? "Pause (space)" : "Play from here (space)";
     if (on) { cam.vx = 0; const d = detents(); cam.ts = Math.max(cam.ts, d[1] || cam.ts); clamp(); kick(); }
   }
-  $("u-prev").onclick = () => stepPrompt(-1); $("u-next").onclick = () => stepPrompt(1);
-  $("u-play").onclick = () => setPlay(!playing);
-  $("u-all").onclick = () => { const d = detents(); zoomAt(d[d.length - 1] / cam.ts, W / 2); cam.tcx = liveMax() / 2; clamp(); };
-  $("u-zin").onclick = () => stepDetent(-1); $("u-zout").onclick = () => stepDetent(1);
-  $("u-live").onclick = () => toLive(liveMax());
-  const menu = $("u-menu");
-  $("u-menuB").onclick = () => { const o = !menu.classList.contains("open"); menu.classList.toggle("open", o); $("u-menuB").setAttribute("aria-expanded", o); };
+  bPrev.onclick = () => stepPrompt(-1); bNext.onclick = () => stepPrompt(1); bPlay.onclick = () => setPlay(!playing);
+  bIn.onclick = () => stepDetent(-1); bOut.onclick = () => stepDetent(1);
   for (const [k, label] of CATS) {
-    const b = document.createElement("button"); b.type = "button"; b.className = "u-pill" + (cats.has(k) ? " on" : ""); b.textContent = label; b.setAttribute("aria-pressed", cats.has(k));
+    const b = document.createElement("button"); b.type = "button"; b.className = "mode" + (cats.has(k) ? " on" : ""); b.textContent = label; b.setAttribute("aria-pressed", cats.has(k));
     b.onclick = () => { cats.has(k) ? cats.delete(k) : cats.add(k); b.classList.toggle("on", cats.has(k)); b.setAttribute("aria-pressed", cats.has(k));
       try { localStorage.setItem("u:marks", JSON.stringify([...cats])); } catch (_) {} lastGroupS = 0; regroup(); dirty = true; kick(); };
     $("u-cats").appendChild(b);
@@ -409,7 +430,7 @@
       const lastD = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
       for (let dd = 1; dd <= lastD; dd++) {
         const key = m + "-" + String(dd).padStart(2, "0"), x = days.get(key), c = document.createElement("div"); c.textContent = dd;
-        if (x) { c.className = "d"; c.onclick = () => { menu.classList.remove("open"); fly((x.a + x.b) / 2, Math.max(minS(), W / Math.max(1, x.b - x.a) * 0.9)); }; } else c.style.opacity = 0.25;
+        if (x) { c.className = "d"; c.onclick = () => { calPop.classList.add("hidden"); fly((x.a + x.b) / 2, Math.max(minS(), W / Math.max(1, x.b - x.a) * 0.9)); }; } else c.style.opacity = 0.25;
         grid.appendChild(c);
       }
       cal.appendChild(grid);
@@ -420,7 +441,9 @@
     dpr = Math.min(dprCap, devicePixelRatio || 1); W = innerWidth; Hh = innerHeight;
     const cw = Math.round(W * dpr), ch = Math.round(Hh * dpr);
     if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; } // no backing-store realloc on mode switches
-    lineY = Math.round(Hh * 0.46);
+    if (mode !== "tl") { const L = readLive(); lineY = L ? L.y : Math.round(Hh * 0.46); }
+    MINB = matchMedia("(pointer: coarse)").matches ? 10 : 12;
+    host.style.setProperty("--u-line", lineY + "px");
     dirty = true; if (M && mode === "tl") { clamp(); lastGroupS = 0; regroup(); } kick();
   }
   addEventListener("resize", resize);
