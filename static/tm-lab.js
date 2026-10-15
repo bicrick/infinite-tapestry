@@ -38,7 +38,7 @@
   // ---------- textures: LRU cache + per-frame upload budget ----------
   const tex = new Map(); // key -> {state 1 loading | 2 ready | 3 failed, t, w, h, used, bm}
   const uploads = [];
-  const MAX_TEX = 200; let inflight = 0, texBytes = 0, loaded = 0;
+  const MAX_TEX = 200, MAX_BYTES = 96 * 1048576; let inflight = 0, texBytes = 0, loaded = 0;
   function want(k, url) {
     let e = tex.get(k);
     if (e) { e.used = now; return e.state === 2 ? e : null; }
@@ -58,12 +58,16 @@
       e.t = g; e.w = e.bm.width; e.h = e.bm.height; e.state = 2; texBytes += e.w * e.h * 4; loaded++;
       e.bm.close && e.bm.close(); e.bm = null; dirty = true;
     }
-    if (tex.size > MAX_TEX * 1.15) evict();
+    if (tex.size > MAX_TEX * 1.15 || texBytes > MAX_BYTES * 1.15) evict();
   }
   function evict() { // one O(n log n) pass per ~30 loads instead of a sort per load
     const ready = []; for (const [k, e] of tex) if (e.state >= 2) ready.push([e.used, k, e]);
     ready.sort((a, b) => a[0] - b[0]);
-    for (const [, k, e] of ready.slice(0, tex.size - MAX_TEX)) { if (e.t) { gl.deleteTexture(e.t); texBytes -= e.w * e.h * 4; } tex.delete(k); }
+    for (const [used, k, e] of ready) {
+      if (tex.size <= MAX_TEX && texBytes <= MAX_BYTES) break;
+      if (used === now) break; // never evict what this frame drew
+      if (e.t) { gl.deleteTexture(e.t); texBytes -= e.w * e.h * 4; } tex.delete(k);
+    }
   }
 
   // ---------- draw ----------
@@ -158,11 +162,13 @@
   // ---------- motion (time-based) ----------
   const minS = () => W / M.units * 0.9, maxS = () => Math.max(8, bandH / 4) * 1.6;
   const clamp = () => { cam.ts = Math.min(maxS(), Math.max(minS(), cam.ts)); const pad = W / 2 / cam.ts; cam.tcx = Math.min(M.units + pad * 0.2, Math.max(-pad * 0.2, cam.tcx)); };
-  let last = 0, dragging = false, lastHud = 0;
+  let last = 0, dragging = false, lastHud = 0, ewma = 0.016, slow = 0, dprCap = 2;
   const perf = { frames: [], on: false };
   function frame(ts) {
     now = ts; const dt = Math.min(0.1, last ? (ts - last) / 1000 : 0.016); last = ts;
     if (perf.on) perf.frames.push(dt * 1000);
+    // quality governor: if motion can't hold ~45 fps, drop the backing store to 1x (fill-rate bound on weak/throttled GPUs)
+    if (anim && last && dt < 0.1) { ewma = ewma * 0.9 + dt * 0.1; if (ewma > 0.022 && dprCap > 1 && ++slow > 20) { dprCap = 1; resize(); } }
     if (playing && !dragging) { cam.tcx += rateAt(cam.tcx) * dt; if (cam.tcx >= lastG() - 1) setPlay(false); }
     if (!dragging && Math.abs(cam.vx) > 0.01) { cam.tcx += cam.vx * dt; cam.vx *= Math.exp(-4 * dt); clamp(); }
     const k = 1 - Math.exp(-12 * dt), ls = Math.log(cam.s), lt = Math.log(cam.ts);
@@ -259,7 +265,7 @@
   }
 
   function resize() {
-    dpr = Math.min(2, devicePixelRatio || 1); W = innerWidth; Hh = innerHeight;
+    dpr = Math.min(dprCap, devicePixelRatio || 1); W = innerWidth; Hh = innerHeight;
     cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
     bandH = Math.round(Math.min(Hh * 0.6, Math.max(160, W * 0.55))); y0 = Math.round((Hh - bandH) / 2);
     dirty = true; if (M) { clamp(); lastGroupS = 0; regroup(); } kick();
@@ -268,7 +274,7 @@
 
   // ---------- perf harness ----------
   window.__tm = {
-    cam, tex: () => ({ count: tex.size, bytes: texBytes, inflight, loaded, uploads: uploads.length }), drawn: () => drawn, level: () => levelFor(cam.s),
+    cam, dpr: () => dpr, tex: () => ({ count: tex.size, bytes: texBytes, inflight, loaded, uploads: uploads.length }), drawn: () => drawn, level: () => levelFor(cam.s),
     startPerf() { perf.on = true; perf.frames = []; kick(); }, stopPerf() { perf.on = false; const f = perf.frames.slice(1); perf.frames = []; return f; },
     zoomAt, fly, step, setPlay, maxS: () => maxS(), minS: () => minS(), ready: false, worker: !!worker,
   };
