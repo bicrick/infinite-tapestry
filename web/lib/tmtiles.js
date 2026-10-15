@@ -101,12 +101,29 @@ async function runTiles({ budgetMs = 45000, rebuild = false } = {}) {
         if (built % 48 < batch.length) { const { lock, ...m } = man; await putJSON(MAN, { ...m, lock: man.lock }); }
       }
     } else if (C.N > man.units) {
-      const start = Math.max(0, man.units - 64);
-      for (let l = 1; l <= LMAX && Date.now() - t0 < budgetMs; l++) {
-        const a = Math.floor(start / UPT[l]), b = tiles(l, C.N);
-        for (let t = a; t < b; t++) await save(l, t, l === 1 ? await buildL1(C, t) : await buildUp(C, l, t));
+      // Incremental catch-up in bounded chunks (CHUNK units: L1 tiles, then every parent). The time budget is checked
+      // before EVERY tile and the cursor (man.inc) is saved as we go, so a run that runs out of time resumes exactly
+      // where it stopped and man.units advances chunk by chunk. Previously the tile loop never checked the budget and
+      // units only advanced if the whole gap fitted in one run: once behind, every run was killed by maxDuration
+      // before saving and the gap only grew.
+      const CHUNK = 256, over = () => Date.now() - t0 >= budgetMs;
+      while (!over() && C.N > man.units) {
+        if (!man.inc || man.inc.from !== man.units) {
+          const from = man.units, target = Math.min(C.N, Math.floor(Math.max(0, from - 64) / 16) * 16 + CHUNK + 64);
+          man.inc = { from, target, start: Math.max(0, from - 64), l: 1, t: Math.floor(Math.max(0, from - 64) / UPT[1]) };
+        }
+        const inc = man.inc, N0 = C.N; C.N = inc.target; // build the chunk as if the line ended at its target
+        try {
+          while (inc.l <= LMAX && !over()) {
+            const b = tiles(inc.l, inc.target);
+            if (inc.t >= b) { inc.l++; if (inc.l <= LMAX) inc.t = Math.floor(inc.start / UPT[inc.l]); continue; }
+            await save(inc.l, inc.t, inc.l === 1 ? await buildL1(C, inc.t) : await buildUp(C, inc.l, inc.t));
+            inc.t++;
+            if (built % 8 === 0) await putJSON(MAN, { ...man }); // persist the cursor (lock stays set)
+          }
+        } finally { C.N = N0; }
+        if (inc.l > LMAX) { man.units = inc.target; delete man.inc; await putJSON(MAN, { ...man }); }
       }
-      if (Date.now() - t0 < budgetMs) man.units = C.N;
     }
   } finally {
     const N = man.full.done ? man.units : man.full.target;
