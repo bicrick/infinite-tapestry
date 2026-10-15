@@ -1,21 +1,17 @@
-// Public GPU cash chart for /about — Infinite Tapestry only.
-// RunPod account history includes Patrick's other projects; we scope to:
-//   - GPU_CASH_START (default: first painted strip, 2026-10-12)
-//   - Spend billed to tapestry pod id(s) only (name match + pod_state + audit)
-//   - Owner top-ups on/after the start date (account-level credits; temporally scoped)
-// Stripe live fuel purchases remain the only "fuel bought".
-// Account clientBalance is whole-account and cannot be split per project — returned
-// separately; the chart's balance is the reconstructed tapestry project balance.
+// Public GPU budget chart for /about — Infinite Tapestry only.
+// Never reads or returns RunPod account balance (no clientBalance).
+// Never includes owner top-ups.
+// Data: cumulative tapestry-pod GPU spend since GPU_CASH_START + Stripe fuel bought.
+// Framing: Patrick's $100 budget to get the project going; spend climbs; fuel offsets net burn.
 const { env, rest, runpod, loadPod, POD } = require("../lib/common");
 
-// First Infinite Tapestry strip (OG era t0 from /api/about?kind=tm): 2026-10-12T07:59:16Z.
-// Override with GPU_CASH_START (ISO date or datetime) if the project window moves.
+// First Infinite Tapestry strip (OG era t0): 2026-10-12T07:59:16Z.
 const DEFAULT_START = "2026-10-12T07:59:16.000Z";
-const DEFAULT_START_USD = 100;
+const DEFAULT_BUDGET_USD = 100;
 const CACHE_MS = 15 * 60e3;
 const OWNER = new Set(["bicrick"]);
 
-let cache = null; // { at, body }
+let cache = null;
 
 function usdRound(n) {
   return Math.round(Number(n) * 100) / 100;
@@ -27,9 +23,9 @@ function cashStartIso() {
   return Number.isFinite(+d) ? d.toISOString() : DEFAULT_START;
 }
 
-function cashStartUsd() {
-  const n = Number(env("GPU_CASH_START_USD", String(DEFAULT_START_USD)));
-  return Number.isFinite(n) && n >= 0 ? usdRound(n) : DEFAULT_START_USD;
+function budgetUsd() {
+  const n = Number(env("GPU_CASH_BUDGET_USD", env("GPU_CASH_START_USD", String(DEFAULT_BUDGET_USD))));
+  return Number.isFinite(n) && n >= 0 ? usdRound(n) : DEFAULT_BUDGET_USD;
 }
 
 function onOrAfter(iso, startIso) {
@@ -51,14 +47,13 @@ async function liveFuelPurchases(startIso) {
         t: d.created_at,
         usd: usdRound((Number(d.amount_cents) || 0) / 100),
         handle: name,
-        kind: "fuel",
       };
     })
     .filter((d) => d.usd > 0);
 }
 
 async function estimatedSpendByDay(startIso) {
-  // Hourly burn from transparency RPC (tapestry ledger only), after project start.
+  // Tapestry fuel_ledger burn via transparency RPC (cents → USD), after project start.
   try {
     const SB = env("SUPABASE_URL").replace(/\/$/, "");
     const key = env("SUPABASE_SERVICE_ROLE_KEY");
@@ -100,12 +95,12 @@ async function tapestryPodIds() {
     ids.add(id);
   }
   try {
+    // Pod list only — never query clientBalance / account spend.
     const d = await runpod(`query { myself { pods { id name } } }`);
     for (const p of (d && d.myself && d.myself.pods) || []) {
       if (p && p.id && podNameMatch(p.name)) ids.add(p.id);
     }
   } catch (_) {}
-  // Migrated / prior tapestry pods recorded in audit.
   try {
     const rows = await rest(
       "GET",
@@ -122,70 +117,52 @@ async function tapestryPodIds() {
   return [...ids].filter(Boolean);
 }
 
-async function runpodAccount() {
-  const d = await runpod(`query {
-    myself {
-      clientBalance
-      currentSpendPerHr
-      stripeReloadHistory { amount transactionCompletedAt type medium }
-    }
-  }`);
-  const me = d && d.myself;
-  if (!me) throw new Error("runpod myself empty");
-  const balance = Number(me.clientBalance);
-  const spendPerHr = Number(me.currentSpendPerHr);
-  return {
-    account_balance: Number.isFinite(balance) ? usdRound(balance) : null,
-    spend_per_hr: Number.isFinite(spendPerHr) ? usdRound(spendPerHr) : null,
-    reloads: (me.stripeReloadHistory || [])
-      .map((x) => ({
-        t: x.transactionCompletedAt,
-        usd: usdRound(Number(x.amount) || 0),
-        kind: "owner",
-        handle: "owner top-up",
-      }))
-      .filter((x) => x.usd > 0 && x.t)
-      .sort((a, b) => new Date(a.t) - new Date(b.t)),
-  };
+async function podCostPerHr(podId) {
+  // Rate from the pod itself (costPerHr), not account currentSpendPerHr.
+  if (!podId) return null;
+  try {
+    const d = await runpod(`query { pod(input: {podId: "${podId}"}) { costPerHr desiredStatus } }`);
+    const n = d && d.pod ? Number(d.pod.costPerHr) : NaN;
+    return Number.isFinite(n) ? usdRound(n) : null;
+  } catch (_) {
+    return null;
+  }
 }
 
-async function tapestryBillingDays(startIso, podIds) {
-  // Daily spend for tapestry pods only. Prefer per-pod REST billing; fall back to
-  // grouping=podId over the window and keep matching ids.
+async function fetchBillingRows(startIso, extra = {}) {
   const key = env("RUNPOD_API_KEY");
-  if (!key) return { spendDays: [], byPod: {} };
+  if (!key) return [];
   const end = new Date().toISOString();
-  const idSet = new Set(podIds);
-  const byDay = new Map();
-  const byPod = {};
-
-  async function fetchBilling(extra) {
-    const url = new URL("https://api.runpod.io/v1/billing/pods");
+  // Try both REST hosts; RunPod has flipped between api. and rest. over time.
+  const hosts = ["https://rest.runpod.io/v1/billing/pods", "https://api.runpod.io/v1/billing/pods"];
+  for (const base of hosts) {
+    const url = new URL(base);
     url.searchParams.set("bucketSize", "day");
     url.searchParams.set("startTime", startIso);
     url.searchParams.set("endTime", end);
     url.searchParams.set("grouping", "podId");
-    for (const [k, v] of Object.entries(extra || {})) url.searchParams.set(k, v);
+    for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v);
     const r = await fetch(url, { headers: { authorization: "Bearer " + key } }).catch(() => null);
-    if (!r || !r.ok) return [];
-    const rows = await r.json().catch(() => []);
-    return Array.isArray(rows) ? rows : [];
+    if (!r || !r.ok) continue;
+    const rows = await r.json().catch(() => null);
+    if (Array.isArray(rows)) return rows;
   }
+  return [];
+}
+
+async function tapestryBillingDays(startIso, podIds) {
+  const idSet = new Set(podIds);
+  const byDay = new Map();
+  const byPod = {};
 
   let rows = [];
   if (podIds.length === 1) {
-    rows = await fetchBilling({ podId: podIds[0] });
+    rows = await fetchBillingRows(startIso, { podId: podIds[0] });
   } else if (podIds.length > 1) {
-    // One request for the window, filter client-side (avoids N round-trips).
-    rows = (await fetchBilling({})).filter((row) => idSet.has(String(row.podId || "")));
-    // If the unfiltered call failed / returned nothing useful, try each id.
+    rows = (await fetchBillingRows(startIso)).filter((row) => idSet.has(String(row.podId || "")));
     if (!rows.length) {
-      for (const id of podIds) {
-        rows = rows.concat(await fetchBilling({ podId: id }));
-      }
+      for (const id of podIds) rows = rows.concat(await fetchBillingRows(startIso, { podId: id }));
     }
-  } else {
-    rows = [];
   }
 
   for (const row of rows) {
@@ -205,129 +182,138 @@ async function tapestryBillingDays(startIso, podIds) {
   return { spendDays, byPod };
 }
 
-function buildSeries({ startUsd, startAt, spendDays, fuel, topups }) {
+/** Build cumulative spend + net-burn series. Net = cumulative spend − cumulative fuel. */
+function buildSeries({ startAt, budget, spendDays, fuel }) {
   const spendByDay = new Map(spendDays.map((s) => [s.day, s.usd]));
-  const lifts = [
-    ...fuel.map((f) => ({ ...f, kind: "fuel" })),
-    ...topups.map((o) => ({ ...o, kind: "owner" })),
-  ].sort((a, b) => new Date(a.t) - new Date(b.t));
+  const fuelEvents = [...fuel].sort((a, b) => new Date(a.t) - new Date(b.t));
 
   const daySet = new Set([
     ...spendByDay.keys(),
-    ...lifts.map((e) => String(e.t).slice(0, 10)),
+    ...fuelEvents.map((e) => String(e.t).slice(0, 10)),
     new Date().toISOString().slice(0, 10),
   ]);
   const startDay = String(startAt).slice(0, 10);
   const days = [...daySet].filter((d) => d >= startDay).sort();
 
-  let bal = startUsd;
-  const points = [{ t: startAt, balance: usdRound(bal), kind: "start" }];
+  let cumSpend = 0;
+  let cumFuel = 0;
+  const points = [{ t: startAt, spend: 0, net: 0, fuel: 0, budget, kind: "start" }];
   const markers = [];
 
   for (const day of days) {
-    const dayLifts = lifts.filter((e) => String(e.t).slice(0, 10) === day);
-    dayLifts.sort((a, b) => new Date(a.t) - new Date(b.t));
-    for (const e of dayLifts) {
-      bal = usdRound(bal + e.usd);
+    const dayFuel = fuelEvents.filter((e) => String(e.t).slice(0, 10) === day);
+    dayFuel.sort((a, b) => new Date(a.t) - new Date(b.t));
+
+    // Apply day's GPU spend first (end-of-day), then fuel offsets at their timestamps.
+    // Actually: interleave by time — spend attributed end-of-day, fuel at purchase time.
+    for (const e of dayFuel) {
+      cumFuel = usdRound(cumFuel + e.usd);
+      const net = usdRound(Math.max(0, cumSpend - cumFuel));
       markers.push({
         t: e.t,
-        kind: e.kind,
         usd: e.usd,
-        balance: bal,
-        label: e.kind === "fuel" ? e.handle : "owner top-up",
+        handle: e.handle,
+        spend: cumSpend,
+        net,
+        fuel: cumFuel,
       });
-      points.push({ t: e.t, balance: bal, kind: e.kind });
+      points.push({ t: e.t, spend: cumSpend, net, fuel: cumFuel, budget, kind: "fuel" });
     }
+
     const spent = spendByDay.get(day) || 0;
     if (spent > 0) {
-      bal = usdRound(Math.max(0, bal - spent));
-      points.push({ t: `${day}T23:59:59.000Z`, balance: bal, kind: "spend", spend: spent });
+      cumSpend = usdRound(cumSpend + spent);
+      const net = usdRound(Math.max(0, cumSpend - cumFuel));
+      points.push({
+        t: `${day}T23:59:59.000Z`,
+        spend: cumSpend,
+        net,
+        fuel: cumFuel,
+        budget,
+        kind: "spend",
+        day_spend: spent,
+      });
     }
   }
 
   const now = new Date().toISOString();
-  if (!points.length || points[points.length - 1].t < now) {
-    points.push({ t: now, balance: usdRound(bal) });
+  const last = points[points.length - 1];
+  if (!last || last.t < now) {
+    points.push({
+      t: now,
+      spend: usdRound(cumSpend),
+      net: usdRound(Math.max(0, cumSpend - cumFuel)),
+      fuel: usdRound(cumFuel),
+      budget,
+    });
   }
 
-  return { points, markers, balance_end: usdRound(bal) };
+  return {
+    points,
+    markers,
+    spend_usd: usdRound(cumSpend),
+    fuel_bought_usd: usdRound(cumFuel),
+    net_burn_usd: usdRound(Math.max(0, cumSpend - cumFuel)),
+  };
 }
 
 async function payload() {
   const startAt = cashStartIso();
-  const startUsd = cashStartUsd();
+  const budget = budgetUsd();
   const fuel = await liveFuelPurchases(startAt);
-  const fuelBought = usdRound(fuel.reduce((a, x) => a + x.usd, 0));
   const hasKey = !!env("RUNPOD_API_KEY");
 
   let source = "estimated";
-  let accountBalance = null;
-  let spendPerHr = null;
-  let topups = [];
   let spendDays = [];
   let podIds = [];
   let spendByPod = {};
+  let spendPerHr = null;
   let note = null;
 
   if (hasKey) {
     try {
-      const [acct, ids] = await Promise.all([runpodAccount(), tapestryPodIds()]);
-      accountBalance = acct.account_balance;
-      spendPerHr = acct.spend_per_hr;
-      podIds = ids;
-      topups = acct.reloads.filter((t) => onOrAfter(t.t, startAt));
+      podIds = await tapestryPodIds();
       const billed = await tapestryBillingDays(startAt, podIds);
       spendDays = billed.spendDays;
       spendByPod = billed.byPod;
-      source = "runpod";
-      note =
-        "Chart is Infinite Tapestry only (spend filtered to tapestry pod id(s) since GPU_CASH_START). "
-        + "account_balance_usd is the whole RunPod account and cannot be split per project, so the "
-        + "chart ends at the reconstructed project balance (starting credit + post-start top-ups + fuel − tapestry spend).";
+      spendPerHr = await podCostPerHr(POD() || podIds[0]);
+      if (spendDays.length) {
+        source = "runpod";
+        note = "Cumulative Infinite Tapestry GPU spend from RunPod pod billing since GPU_CASH_START. No account balance is read or shown.";
+      } else {
+        // Billing empty (API quirk / new pods) — fall back to ledger, still no balance.
+        spendDays = await estimatedSpendByDay(startAt);
+        source = "estimated";
+        note = "RunPod pod billing returned no rows for tapestry pods; spend estimated from the tapestry fuel ledger. No account balance is read or shown.";
+      }
     } catch (e) {
       console.warn("gpu-cash: runpod failed, estimating:", e.message || e);
+      spendDays = await estimatedSpendByDay(startAt);
       source = "estimated";
+      note = "Estimated from tapestry fuel ledger (RunPod billing unavailable). No account balance is read or shown.";
     }
-  }
-
-  if (source === "estimated") {
+  } else {
     spendDays = await estimatedSpendByDay(startAt);
-    topups = [];
-    note =
-      "Estimated from tapestry fuel ledger burn + live Stripe fuel purchases (RUNPOD_API_KEY missing or RunPod unreachable).";
+    note = "Estimated from tapestry fuel ledger + live Stripe fuel (RUNPOD_API_KEY missing).";
   }
 
-  const ownerTopups = usdRound(topups.reduce((a, x) => a + x.usd, 0));
-  // Project spend = sum of tapestry-pod billing (or ledger estimate). Do NOT derive from
-  // account balance — that includes unrelated projects.
-  const spendTotal = usdRound(spendDays.reduce((a, x) => a + x.usd, 0));
-
-  const { points, markers, balance_end } = buildSeries({
-    startUsd,
-    startAt,
-    spendDays,
-    fuel,
-    topups,
-  });
+  const series = buildSeries({ startAt, budget, spendDays, fuel });
 
   return {
-    starting_credit_usd: startUsd,
+    budget_usd: budget,
     start_at: startAt,
-    spend_usd: spendTotal,
-    fuel_bought_usd: fuelBought,
-    owner_topups_usd: ownerTopups,
-    balance_usd: balance_end, // tapestry project balance (reconstructed)
-    account_balance_usd: accountBalance, // whole RunPod account; not chart endpoint
-    spend_per_hr_usd: spendPerHr,
+    spend_usd: series.spend_usd,
+    fuel_bought_usd: series.fuel_bought_usd,
+    net_burn_usd: series.net_burn_usd,
+    spend_per_hr_usd: spendPerHr, // pod costPerHr only; null if unknown
     source,
     estimated: source !== "runpod",
     pod_ids: podIds,
     spend_by_pod_usd: spendByPod,
     note,
-    points,
-    markers,
+    points: series.points,
+    markers: series.markers, // fuel purchase markers only
     fuel,
-    topups,
     updated_at: new Date().toISOString(),
   };
 }
@@ -349,21 +335,19 @@ module.exports = async (req, res) => {
   } catch (e) {
     console.error("gpu-cash", e.message || e);
     const startAt = cashStartIso();
-    const startUsd = cashStartUsd();
+    const budget = budgetUsd();
     return res.status(200).json({
-      starting_credit_usd: startUsd,
+      budget_usd: budget,
       start_at: startAt,
       spend_usd: null,
       fuel_bought_usd: 0,
-      owner_topups_usd: 0,
-      balance_usd: null,
-      account_balance_usd: null,
+      net_burn_usd: null,
+      spend_per_hr_usd: null,
       source: "unavailable",
       estimated: true,
-      points: [{ t: startAt, balance: startUsd, kind: "start" }],
+      points: [{ t: startAt, spend: 0, net: 0, fuel: 0, budget, kind: "start" }],
       markers: [],
       fuel: [],
-      topups: [],
       error: "unavailable",
       updated_at: new Date().toISOString(),
     });
