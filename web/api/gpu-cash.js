@@ -211,7 +211,13 @@ function buildSeries({ startAt, budget, spendDays, fuel }) {
     dayFuel.sort((a, b) => new Date(a.t) - new Date(b.t));
 
     // Fuel at purchase time (bumps remaining up); day's GPU spend at end-of-day (lowers it).
+    // Emit a same-timestamp vertical step so the fuel bump reads clearly on the chart.
     for (const e of dayFuel) {
+      const netBefore = usdRound(Math.max(0, cumSpend - cumFuel));
+      const remBefore = remainingOf(budget, cumSpend, cumFuel);
+      points.push({
+        t: e.t, spend: cumSpend, net: netBefore, fuel: cumFuel, remaining: remBefore, budget, kind: "pre-fuel",
+      });
       cumFuel = usdRound(cumFuel + e.usd);
       const net = usdRound(Math.max(0, cumSpend - cumFuel));
       const remaining = remainingOf(budget, cumSpend, cumFuel);
