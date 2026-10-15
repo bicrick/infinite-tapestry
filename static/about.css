@@ -32,8 +32,9 @@ section { padding:120px 0; }
 main { position:relative; z-index:1; }
 .hero-cv, .hero > #refl { position:absolute; left:0; top:0; z-index:0; pointer-events:none; }
 .hero-cv { width:100%; height:calc(100% + var(--bh) * 1.05); }
-.hero.cv-on .band .reel { visibility:hidden; animation:none; }
+.hero.cv-on .band .reel, .band.stipple-on .reel { visibility:hidden; animation:none; }
 .band-below { flex:none; height:calc(var(--bh) * .42); }
+.stipple-host { position:absolute; inset:0; }
 .band .live { position:absolute; left:28px; bottom:20px; z-index:2; color:#fff; font-size:12px; display:flex; gap:8px; align-items:center; text-shadow:0 1px 8px rgba(0,0,0,.6); }
 .dot { width:6px; height:6px; border-radius:50%; background:#6ee7a8; box-shadow:0 0 10px #6ee7a8; animation:pulse 2.4s ease-in-out infinite; }
 .band .cap { position:absolute; right:28px; bottom:20px; z-index:2; color:rgba(255,255,255,.88); font-size:12px; text-shadow:0 1px 8px rgba(0,0,0,.6); }
