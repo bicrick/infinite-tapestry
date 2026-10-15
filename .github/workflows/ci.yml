@@ -48,6 +48,62 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: bash scripts/publish_worker.sh
 
+  # PR-only Vercel preview (no domain aliases). Posts the URL on the PR.
+  deploy-preview:
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_wWQb6uWytPTAvJCeSYirxFb5
+      VERCEL_PROJECT_ID: prj_e5dEKiID5ny43SV89OWxDOvSgjrG
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Resolve live pod WebSocket URL from Supabase pod_state.pod_id
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bash scripts/resolve_ws_url.sh >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
+          SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
+          TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
+        run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
+      - name: Deploy Vercel preview and comment on the PR
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_BYPASS: ${{ secrets.VERCEL_BYPASS }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/web"
+          URL=$(npx -y vercel@latest deploy --yes --token "$VERCEL_TOKEN" | tee /tmp/vercel-out.txt | grep -oE 'https://[a-z0-9.-]+\.vercel\.app' | tail -1)
+          echo "preview $URL"
+          echo "PREVIEW_URL=$URL" >> "$GITHUB_ENV"
+          echo "### Vercel preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Lab: $URL/strip-reveal-lab.html" >> "$GITHUB_STEP_SUMMARY"
+          # Smoke through protection bypass when present.
+          if [ -n "${VERCEL_BYPASS:-}" ]; then
+            curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
+            curl -sf --retry 3 "$URL/strip-reveal.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'TapestryStripReveal'
+          fi
+          BODY=$(printf 'Vercel preview: %s\n\nStrip reveal lab: %s/strip-reveal-lab.html\nLive viewer: %s/?nointro=1' "$URL" "$URL" "$URL")
+          # Upsert a single bot comment (edit if one already exists for this marker).
+          MARK='<!-- vercel-preview-bot -->'
+          EXISTING=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" --jq ".[] | select(.body|contains(\"$MARK\")) | .id" | head -1 || true)
+          if [ -n "$EXISTING" ]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$EXISTING" -f body="$MARK"$'\n'"$BODY" >/dev/null
+          else
+            gh api -X POST "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" -f body="$MARK"$'\n'"$BODY" >/dev/null
+          fi
+
   deploy-web:
     needs: test
     concurrency:
