@@ -5,35 +5,51 @@
 (() => {
   "use strict";
   const T = window.Tapestry;
-  let pr, uR, uV, uT, uA, buf, ap, bpr, bLoc, bbuf;
+  let pr, uR, uV, uT, uA, uO, buf, ap, bpr, bLoc, bbuf;
+  const ops = []; // this frame's draws (display list), replayed by the reflection pass into its small FBO
   const MINB = () => (matchMedia("(pointer: coarse)").matches ? 10 : 12);
   const pxPerUnit = (l) => 64 / Math.pow(4, l - 1);
   function levelFor(sDev) { if (sDev > 80) return 0; let l = 1; while (l < 7 && pxPerUnit(l + 1) >= sDev) l++; return l; }
   const sh = (gl, t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); return o; };
   function setup(gl) {
     pr = gl.createProgram();
-    gl.attachShader(pr, sh(gl, gl.VERTEX_SHADER, `attribute vec2 p; uniform vec4 r; uniform vec2 v; varying vec2 uv;
-      void main(){ uv=p; vec2 q=r.xy+p*r.zw; gl_Position=vec4(q.x/v.x*2.-1., 1.-q.y/v.y*2., 0., 1.); }`));
+    gl.attachShader(pr, sh(gl, gl.VERTEX_SHADER, `attribute vec2 p; uniform vec4 r; uniform vec2 v; uniform vec2 o; varying vec2 uv;
+      void main(){ uv=p; vec2 q=r.xy+p*r.zw-o; gl_Position=vec4(q.x/v.x*2.-1., 1.-q.y/v.y*2., 0., 1.); }`));
     gl.attachShader(pr, sh(gl, gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; uniform float al;
       void main(){ gl_FragColor=vec4(texture2D(t, uvt.xy+uv*uvt.zw).rgb, al); }`));
     gl.linkProgram(pr);
     buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
     ap = gl.getAttribLocation(pr, "p");
-    uR = gl.getUniformLocation(pr, "r"); uV = gl.getUniformLocation(pr, "v"); uT = gl.getUniformLocation(pr, "uvt"); uA = gl.getUniformLocation(pr, "al");
+    uR = gl.getUniformLocation(pr, "r"); uV = gl.getUniformLocation(pr, "v"); uT = gl.getUniformLocation(pr, "uvt"); uA = gl.getUniformLocation(pr, "al"); uO = gl.getUniformLocation(pr, "o");
     // Batched program (atlas strips): per-vertex position, uv, alpha.
     bpr = gl.createProgram();
-    gl.attachShader(bpr, sh(gl, gl.VERTEX_SHADER, `attribute vec2 p; attribute vec2 q; attribute float a; uniform vec2 v; varying vec2 uv; varying float al;
-      void main(){ uv=q; al=a; gl_Position=vec4(p.x/v.x*2.-1., 1.-p.y/v.y*2., 0., 1.); }`));
+    gl.attachShader(bpr, sh(gl, gl.VERTEX_SHADER, `attribute vec2 p; attribute vec2 q; attribute float a; uniform vec2 v; uniform vec2 o; varying vec2 uv; varying float al;
+      void main(){ uv=q; al=a; vec2 pp=p-o; gl_Position=vec4(pp.x/v.x*2.-1., 1.-pp.y/v.y*2., 0., 1.); }`));
     gl.attachShader(bpr, sh(gl, gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv; varying float al; uniform sampler2D t; void main(){ gl_FragColor=vec4(texture2D(t, uv).rgb, al); }`));
     gl.linkProgram(bpr);
-    bLoc = { p: gl.getAttribLocation(bpr, "p"), q: gl.getAttribLocation(bpr, "q"), a: gl.getAttribLocation(bpr, "a"), v: gl.getUniformLocation(bpr, "v") };
+    bLoc = { p: gl.getAttribLocation(bpr, "p"), q: gl.getAttribLocation(bpr, "q"), a: gl.getAttribLocation(bpr, "a"), v: gl.getUniformLocation(bpr, "v"), o: gl.getUniformLocation(bpr, "o") };
     bbuf = gl.createBuffer();
   }
   const layout = { bandY: 0, sLive: 100 };
-  const covered = [];
+  const covered = [], sharpL = [];
   let bg = [0.02, 0.02, 0.024], verts = new Float32Array(6 * 5 * 64), cols = new Float32Array(0);
   const pass = {
     name: "tiles", order: 10, layout, levelFor,
+    // Replay this frame's band into the bound framebuffer: band [y0, y0+h] maps to the target's full height.
+    replay(gl, W, y0, h) {
+      if (!pr) return;
+      gl.useProgram(pr); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform2f(uV, W, h); gl.uniform2f(uO, 0, y0); gl.activeTexture(gl.TEXTURE0);
+      for (const o of ops) if (!o.verts) { gl.bindTexture(gl.TEXTURE_2D, o.t); gl.uniform4f(uT, ...o.uvt); gl.uniform1f(uA, o.al); gl.uniform4f(uR, ...o.r); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+      if (ops.some((o) => o.verts)) {
+        gl.useProgram(bpr); gl.uniform2f(bLoc.v, W, h); gl.uniform2f(bLoc.o, 0, y0); gl.bindBuffer(gl.ARRAY_BUFFER, bbuf); gl.disableVertexAttribArray(ap);
+        for (const a of ["p", "q", "a"]) gl.enableVertexAttribArray(bLoc[a]);
+        for (const o of ops) if (o.verts) { gl.bindTexture(gl.TEXTURE_2D, o.t); gl.bufferData(gl.ARRAY_BUFFER, o.verts, gl.STREAM_DRAW);
+          gl.vertexAttribPointer(bLoc.p, 2, gl.FLOAT, false, 20, 0); gl.vertexAttribPointer(bLoc.q, 2, gl.FLOAT, false, 20, 8); gl.vertexAttribPointer(bLoc.a, 1, gl.FLOAT, false, 20, 16); gl.drawArrays(gl.TRIANGLES, 0, o.verts.length / 5); }
+        for (const a of ["p", "q", "a"]) gl.disableVertexAttribArray(bLoc[a]);
+      }
+      return ops.length;
+    },
     setBg(c) { bg = c; },
     band(c) { const h = Math.max(MINB(), 4 * c.s); return { y: layout.bandY - h / 2, h }; },
     draw(gl, f) {
@@ -42,12 +58,12 @@
       const tiles = f.tiles, M = tiles.manifest; if (!M) { f.band = { y: 0, h: 0 }; return; }
       gl.useProgram(pr); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.activeTexture(gl.TEXTURE0);
-      gl.uniform2f(uV, f.W, f.H);
+      gl.uniform2f(uV, f.W, f.H); gl.uniform2f(uO, 0, 0); ops.length = 0;
       const c = f.cam, s = c.s, dpr = f.dpr, W = f.W, head = f.head;
       const b = pass.band(c), bandH = Math.round(b.h * dpr) / dpr, y0 = Math.round(b.y * dpr) / dpr;
       const u0 = c.centerTime - W / 2 / s, u1 = c.centerTime + W / 2 / s;
       const X = (u) => Math.round((u - u0) * s * dpr) / dpr;
-      covered.length = 0; let quads = 0;
+      covered.length = 0; sharpL.length = 0; let quads = 0;
       // [ua, ub] of a texture whose image spans [ia, ib] in units
       const quad = (e, ia, ib, ua, ub) => {
         ub = Math.min(ub, head); if (ub <= ua) return;
@@ -56,7 +72,8 @@
         const hx = 0.5 / e.w, hy = 0.5 / e.h, k = (1 - 2 * hx) / (ib - ia);
         gl.uniform4f(uT, hx + (ua - ia) * k, hy, (ub - ua) * k, 1 - 2 * hy);
         gl.uniform1f(uA, e.alpha); gl.uniform4f(uR, xa, y0, xb - xa, bandH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); quads++;
-        covered.push(Math.max(0, xa), Math.min(W, xb));
+        ops.push({ t: e.t, uvt: [hx + (ua - ia) * k, hy, (ub - ua) * k, 1 - 2 * hy], r: [xa, y0, xb - xa, bandH], al: e.alpha, lv: e.level });
+        covered.push(Math.max(0, xa), Math.min(W, xb)); sharpL.push(e.level <= Math.max(1, L) ? 1 : 0);
         if (e.alpha < 1) f.needFrames = true;
       };
       tiles.requestCoarse(head);
@@ -86,13 +103,17 @@
       }
       if (L === 0) { // strips, batched per atlas page
         const g0 = Math.max(0, Math.floor(u0) - 1), g1 = Math.min(head - 1, Math.floor(u1) + 1), byPage = new Map(), loose = [];
-        for (let g = g0; g <= g1; g++) { const e = tiles.peek(0, g); if (!e) continue; (e.page ? (byPage.get(e.page) || byPage.set(e.page, []).get(e.page)) : loose).push([g, e]); }
+        // Runs of consecutive strips on the same atlas page, in g order (later strips paint their overlap over earlier
+        // ones, so draw order must follow g even across pages: a new batch starts whenever the page changes).
+        const runs = []; for (let g = g0; g <= g1; g++) { const e = tiles.peek(0, g); if (!e) continue; if (!e.page) { loose.push([g, e]); continue; }
+          const r = runs[runs.length - 1]; if (r && r[0] === e.page) r[1].push([g, e]); else runs.push([e.page, [[g, e]]]); }
+        for (const r of runs) byPage.set(r, r);
         for (const [g, e] of loose) { const core = e.h / 4, ov = Math.max(0, e.w - core) / core; quad(e, g - ov, g + 1, g - ov, g + 1); }
         if (byPage.size) {
-          gl.useProgram(bpr); gl.uniform2f(bLoc.v, f.W, f.H); gl.bindBuffer(gl.ARRAY_BUFFER, bbuf);
+          gl.useProgram(bpr); gl.uniform2f(bLoc.v, f.W, f.H); gl.uniform2f(bLoc.o, 0, 0); gl.bindBuffer(gl.ARRAY_BUFFER, bbuf);
           gl.disableVertexAttribArray(ap);
           for (const a of ["p", "q", "a"]) gl.enableVertexAttribArray(bLoc[a]);
-          for (const [page, list] of byPage) {
+          for (const [page, list] of byPage.values()) {
             if (verts.length < list.length * 60) verts = new Float32Array(list.length * 120);
             let n = 0;
             for (const [g, e] of list) {
@@ -106,12 +127,13 @@
               const segs = ov > 0 && nb ? [[ua, um, 0, al], [um, ub, al, al]] : [[ua, ub, al, al]];
               for (const [sa, sb, aa, ab] of segs) { if (sb <= sa) continue; const xa = X(sa), xb = X(sb), ua2 = uAt(sa), ub2 = uAt(sb);
                 for (const [x, y, u, v, a] of [[xa, ya, ua2, V0, aa], [xb, ya, ub2, V0, ab], [xa, yb, ua2, V1, aa], [xa, yb, ua2, V1, aa], [xb, ya, ub2, V0, ab], [xb, yb, ub2, V1, ab]]) { verts[n++] = x; verts[n++] = y; verts[n++] = u; verts[n++] = v; verts[n++] = a; } }
-              covered.push(Math.max(0, X(ua)), Math.min(W, X(ub)));
+              covered.push(Math.max(0, X(ua)), Math.min(W, X(ub))); sharpL.push(1);
             }
             gl.bindTexture(gl.TEXTURE_2D, page.t);
             gl.bufferData(gl.ARRAY_BUFFER, verts.subarray(0, n), gl.STREAM_DRAW);
             gl.vertexAttribPointer(bLoc.p, 2, gl.FLOAT, false, 20, 0); gl.vertexAttribPointer(bLoc.q, 2, gl.FLOAT, false, 20, 8); gl.vertexAttribPointer(bLoc.a, 1, gl.FLOAT, false, 20, 16);
             gl.drawArrays(gl.TRIANGLES, 0, n / 5); quads++;
+            ops.push({ t: page.t, verts: verts.slice(0, n) });
           }
           for (const a of ["p", "q", "a"]) gl.disableVertexAttribArray(bLoc[a]);
           gl.useProgram(pr); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
@@ -123,7 +145,9 @@
       let x = xmin; for (const [p, q] of iv) { if (q <= x) continue; if (p > x + 0.5) gaps.push([x, Math.min(p, xmax)]); x = Math.max(x, q); if (x >= xmax) break; }
       if (x < xmax - 0.5) gaps.push([x, xmax]);
       if (cols.length !== Math.ceil(W)) cols = new Float32Array(Math.ceil(W));
-      cols.fill(1); for (const [a, bb] of gaps) cols.fill(0, Math.floor(a), Math.ceil(bb));
+      // per-CSS-column state: 0 empty (no level), 0.5 coarse only, 1 sharp (the wanted level or full-res strips)
+      cols.fill(0); for (let i = 0; i < covered.length; i += 2) { const a = Math.max(0, Math.floor(covered[i])), bb = Math.min(cols.length, Math.ceil(covered[i + 1])), v = sharpL[i / 2] ? 1 : 0.5; for (let x2 = a; x2 < bb; x2++) if (cols[x2] < v) cols[x2] = v; }
+      for (let x2 = 0; x2 < Math.min(cols.length, Math.floor(xmin)); x2++) cols[x2] = 1; for (let x2 = Math.ceil(xmax); x2 < cols.length; x2++) cols[x2] = 1; // outside history: nothing to fill
       tiles.setCoverage(gaps, { y: y0, h: bandH }, cols);
       f.band = { y: y0, h: bandH }; f.gaps = gaps; f.level = L; f.X = X;
     },

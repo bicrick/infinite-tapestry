@@ -211,7 +211,23 @@ const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);
     const U = upt(l);
     for (let t = Math.floor(sp[0] / U); t * U < sp[1]; t++) { const d = tileFor(l, t); if (d) { const r = compositeInto(d, srcE, sp[0], sp[1]); if (r) cascade(d, r[0], r[1]); } }
   }
-  function recomposite(dst) { // a server tile landed: redraw the tip sources it overlaps (it was built before them)
+  // ROOT CAUSE of the bare spots at full zoom-out: a tip source cascading up while the coarser server tile it should
+  // land in was still loading (tileFor -> null) was simply dropped, and nothing redid it when that tile arrived, so
+  // e.g. units 60,500..61,440 stayed empty at L5..L7 whenever a p3 chunk beat the L5 tile 14 download (a race, ~1 in 3).
+  // Fix: when a server tile lands, also pull the tip spans from the level below it (and cascade on up).
+  function pullFromBelow(dst) {
+    const l = dst.level - 1; if (l < 1 || dst.u1 <= M.units) return;
+    const realEnd = dst.u0 + dst.w / ppu(dst.level), U = upt(l);
+    if (!tileFor(dst.level, Math.round(dst.u0 / upt(dst.level)))) return; // widen the partial server tile first
+    for (let t = Math.floor(Math.max(dst.u0, realEnd - U) / U); t * U < dst.u1; t++) {
+      const c = tex.get(l + "/" + t); if (!c || c.state !== "ready" || !c.spans) continue;
+      const srcE = { t: c.t, level: l, chunk: 9, u0: c.u0, u1: c.u0 + c.w / ppu(l) };
+      for (const [a, b] of c.spans) { if (b <= realEnd) continue; const r = compositeInto(dst, srcE, Math.max(a, realEnd), b); if (r) cascade(dst, r[0], r[1]); }
+    }
+  }
+  function recomposite(dst) {
+    if (!M || dst.u1 <= M.units) return;
+    pullFromBelow(dst); if (!tileFor(dst.level, Math.round(dst.u0 / upt(dst.level)))) return; // widened before any tip draw // a server tile landed: redraw the tip sources it overlaps (it was built before them)
     if (!M || dst.u1 <= M.units) return;
     for (const s of tipSrc.values()) if (s.state === "ready" && s.t && s.u1 > dst.u0 && s.u0 < dst.u1 && (s.level === 0 ? dst.level === 1 : s.chunk === dst.level)) { const r = compositeInto(dst, s); if (r) cascade(dst, r[0], r[1]); }
   }

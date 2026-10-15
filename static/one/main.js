@@ -7,7 +7,7 @@
   const Q = new URLSearchParams(location.search), API = Q.get("api") || "";
   const cv = $("one-c"), gl = T.renderer.init(cv); if (!gl) { document.body.classList.add("no-gl"); return; }
   const cam = T.camera, tiles = T.tiles, tp = T.passes.tiles;
-  T.renderer.addPass(tp); T.renderer.addPass(T.passes.head); T.renderer.addPass(T.passes.grain); T.passes.grain.warm(gl, devicePixelRatio || 1);
+  T.renderer.addPass(tp); T.renderer.addPass(T.passes.reflection); T.renderer.addPass(T.passes.head); T.renderer.addPass(T.passes.grain); T.passes.grain.warm(gl, devicePixelRatio || 1);
   let M = null, hours = [];
   const Z_EVENTS = -6; // events/markers only zoomed out past ~hours (span >= ~1 h at desktop width); off by default (phase 4)
   T.config = { Z_EVENTS, eventsDefault: false };
@@ -119,6 +119,7 @@
   function theme() {
     const c = getComputedStyle(document.body).backgroundColor.match(/\d+(\.\d+)?/g);
     if (c && (c[3] == null || +c[3] !== 0)) tp.setBg(c.slice(0, 3).map((x) => x / 255));
+    T.passes.reflection.light = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "light" : matchMedia("(prefers-color-scheme: light)").matches;
     T.renderer.invalidate();
   }
   addEventListener("tapestry:theme", theme); matchMedia("(prefers-color-scheme: light)").addEventListener("change", theme);

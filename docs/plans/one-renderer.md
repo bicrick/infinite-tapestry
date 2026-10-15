@@ -1,6 +1,6 @@
 # One renderer, one camera, one UI (PLAN)
 
-Status: phases 0-2 built on branch `one-renderer` (2026-10-15). Hidden page `/one-3c9d1f.html`. Supersedes `unified-viewer.md` (two renderers + crossover). Nothing here is built.
+Status: phases 0-3 built on branch `one-renderer` (2026-10-15). Hidden page `/one-3c9d1f.html`. Supersedes `unified-viewer.md` (two renderers + crossover). Nothing here is built.
 Base: `main` @ e0dd089 (low-res fallback + `TapestryTimeline.hasAnyTexture`). Grain = PR #91.
 
 ## 0. The idea in one paragraph
@@ -246,3 +246,49 @@ faint line at the edge. `Tapestry.edge.last` exposes the latest values for debug
 | Live | 33.3-33.4 / 33-50 / 2-16 | 16.7 / 16.8 / 0 |
 Desktop @2x live frames are software fill (2880x1800 every frame while following live) - needs real-GPU runs.
 Open: in 1 of 3 desktop runs, zoom-out/scrub at all-time showed Grain gaps (46-187 frames); not reproduced when settled.
+
+## 12. Phase 3 (built 2026-10-15)
+- `passes/reflection.js`: refl.js's shader (maths and constants unchanged) on the shared context. The tiles pass keeps
+  a per-frame display list; reflection replays it into 512x64 -> 128x16 mipmapped thumbnail (no 2D readback), renders
+  the mirror + glow (refl.js's bloom term) into a 1/4-res FBO (1/6 phones) at <= 30 Hz (15 Hz while zooming, only on
+  change), then composites it every frame, scissored to the rows the mirror can reach. Fades out as the band thins.
+  One canvas in the DOM. Needs Patrick's side-by-side sign-off vs prod.
+- Grain reads `tiles.coverage()` per CSS column (0 empty, 0.5 coarse only, 1 sharp) and draws only on runs of 0.
+- Strip draw order: atlas batches follow strip order across pages (a page switch starts a new batch); fixes a seam where
+  a strip on an earlier-drawn page lost its overlap cross-fade.
+- **Root cause of bare spots at full zoom-out:** a tip source cascading up while the coarser server tile it should land
+  in was still downloading (`tileFor` -> null) was dropped and never redone, so L5..L7 kept a hole over units
+  60,500..61,440 whenever a p3 chunk beat the L5 tile download (race, ~1 in 3 runs). Fix: when a server tile lands
+  it widens itself and pulls the tip spans from the level below, then cascades up (`pullFromBelow`). Also fixed:
+  tip compositing into a partial (short) server tile now widens it first (previously spans could claim pixels past
+  the texture edge). After the fix: 0 gap frames in zoom-out/scrub on 4 of 4 runs.
+
+### Phase 3 perf (SwiftShader; p95 / max / >33 ms)
+| Segment | phone 390x844 @3 | desktop 1440x900 @2x |
+|---|---|---|
+| live 10 s | 16.8 / 33.4 / 3 | 150-217 / 150-300 / 83-111 (software fill) |
+| zoom out | 16.8 / 33.4 / 0 | 50-66 / 117-200 / 11-15 |
+| scrub | 16.7 / 16.8 / 0 | 16.7 / 16.8 / 0 |
+| Play | 16.8 / 16.8 / 0 | 33-150 / 50-183 / 10-41 |
+| Live | 16.7 / 16.8 / 0 | 16.8-33.4 / 33-67 / 2-11 |
+Desktop @2x is dominated by software rasterisation of a 2880x1800 target (renderer JS p95 0.2-5 ms) and was noisy
+(other jobs on the box). The reflection added fill cost there; on a real GPU this is small, but the MacBook/iPhone
+runs (`GPU=1`, Safari) are now the gating check before phase 4.
+
+## 13. Pyramid lag diagnosis (2026-10-15, no infra changed)
+Two pyramids exist:
+1. `tm/lod2` in Supabase Storage, built by the Vercel cron `/api/tm?job=all` every 5 min (web/lib/tmtiles.js), served via
+   `/api/tm?manifest=1|tile=`. Manifest: units 61,761, `built` 2026-10-15T05:10:46Z (10:10 PM PT Oct 14) and not
+   written since, while the index (`/api/about?kind=tm`, same cron) is current (07:50Z, sdxl b = 67,807 -> N = 69,077).
+2. `tm/lod` on R2, built only by `scripts/tm/build_pyramid.py`, which needs R2 credentials and is not scheduled
+   anywhere (its GitHub workflow was removed in e338cc6). Last written 00:53Z Oct 15 (units 60,500). The one-renderer
+   page reads this one (and prod `/` falls back to it when the API manifest is not `full.done`).
+Root cause of the cron stall (from the code; Vercel logs not checked): in the incremental branch of `runTiles`, the
+inner `for (let t = a; t < b; t++)` loop over L1 tiles never checks the time budget (only the per-level loop does),
+and `man.units` is only advanced if the whole gap finishes inside the budget. Once one run fell behind (gap larger
+than one invocation can build: each L1 tile = 16 strip/pod-tile fetches + sharp), every later run tries to build the
+whole gap (now ~460 L1 tiles), is killed by `maxDuration: 60` before its `finally` writes the manifest, and saves
+nothing durable to the manifest (tiles it wrote are redone next time). The gap only grows, so it never recovers.
+Suggested fix (not applied): check the budget inside the tile loop and persist progress (`man.units` = last fully
+built unit, or a resumable cursor like `full`), build L1 for a bounded batch then the matching parents, and have the
+client read lod2 via `/api/tm`. Optionally schedule build_pyramid.py or retire the R2 copy.
