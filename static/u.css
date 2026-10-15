@@ -55,3 +55,9 @@ html body.u-tl label#ref-btn, html body.u-tl .cmd label.icon { display:none !imp
 body.u-tl .u-live-b { display:inline-flex !important; width:auto !important; padding:0 14px !important; }
 @media (max-width:560px) { body.u-tl .dock { width:min(300px, calc(100vw - 32px)); } }
 html body.u-tl:not(.u-x) .cmd #ref-btn:not(.hidden):not(.u-x) { display:none !important; }
+/* Perf (timeline only): no backdrop blur over the moving WebGL canvas. Glass becomes flat, near-opaque theme colour;
+   shadows over the canvas go too. Live mode keeps the production look exactly. */
+body.u-tl, body.u-tl * { -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
+body.u-tl { --glass:color-mix(in srgb, var(--bg) 90%, transparent); --glass-strong:color-mix(in srgb, var(--bg) 95%, transparent); }
+body.u-tl .dock, body.u-tl .dock *, body.u-tl .top, body.u-tl .top *, body.u-tl .pop { box-shadow:none !important; text-shadow:none !important; }
+body.u-tl .veil { display:none; }

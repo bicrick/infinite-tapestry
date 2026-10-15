@@ -160,7 +160,7 @@
     setText(uTitle, on ? sc.title : tip && TV.title ? TV.title() || "—" : "—");
     const e = eras.find((x) => cam.cx >= x.g0 && cam.cx < x.g0 + x.n) || eras[eras.length - 1];
     setText(uSub, (on && sc.user ? "an idea · " : "") + (t ? (t.getFullYear() === new Date().getFullYear() ? fmt : fmtY).format(t) : ""));
-    cv.setAttribute("aria-label", (t ? fmt.format(t) : "Timeline") + (on ? ", " + sc.title : ""));
+    const al = (t ? fmt.format(t) : "Timeline") + (on ? ", " + sc.title : ""); if (cv._al !== al) { cv._al = al; cv.setAttribute("aria-label", al); }
   }
   const pool = [], markHost = $("u-marks"); let groups = [], lastGroupS = 0, lastGroupCx = 0;
   function regroup() {
@@ -208,15 +208,15 @@
     const lm = liveMax(), span = W / cam.ts;
     cam.tcx = span >= lm / 0.8 ? lm / 2 : Math.min(lm - span * 0.3, Math.max(span * 0.3, cam.tcx));
   }
-  function zoomAt(f, sx) { const ux = cam.tcx + (sx - W / 2) / cam.ts; cam.ts *= f; clamp(); cam.tcx = ux - (sx - W / 2) / cam.ts; clamp(); kick(); }
+  let zoomDir = 0;
+  function zoomAt(f, sx) { if (f !== 1) zoomDir = f > 1 ? 1 : -1; const ux = cam.tcx + (sx - W / 2) / cam.ts; cam.ts *= f; clamp(); cam.tcx = ux - (sx - W / 2) / cam.ts; clamp(); kick(); }
   let snapT = 0, anchorX = 0;
   function scheduleSnap(sx) { anchorX = sx; clearTimeout(snapT); snapT = setTimeout(snap, 170); }
   function snap() {
-    if (mode !== "tl" || pinch) return;
-    const d = detents(); let best = 0, bd = 1e9; const z = Math.log(cam.ts);
-    d.forEach((s, i) => { const dd = Math.abs(Math.log(s) - z); if (dd < bd) { bd = dd; best = i; } });
-    if (best === 0) { const ux = cam.tcx + (anchorX - W / 2) / cam.ts; return toLive(ux); }
-    zoomAt(d[best] / cam.ts, anchorX);
+    // Free zoom: no detents while zooming out or between timeline levels. The only magnet is live: zooming IN
+    // close to the live scale settles into the live viewer.
+    if (mode !== "tl" || pinch || zoomDir <= 0) return;
+    if (cam.ts > sLive * 0.6) toLive(cam.tcx + (anchorX - W / 2) / cam.ts);
   }
   function stepDetent(dir, sx) {
     if (mode === "live") { if (dir > 0 && M) { const L = readLive(); if (L) { sLive = L.s; enterTimeline(detents()[1], sx); } } return; }
@@ -242,7 +242,7 @@
     if (!M) return;
     const L = readLive(); if (!L) return;
     sLive = L.s; entry = { y: L.y, s: L.s }; lineY = L.y; host.style.setProperty("--u-line", lineY + "px");
-    const TV = window.TapestryView; if (TV.live && TV.live() && window.TapestrySeek) { const c = Math.round(TV.center()); window.TapestrySeek(c - 4, c + 4); } // the viewer's own "Back to live" pill appears
+    // the live viewer stays live underneath (no seek: zero extra work while hidden)
     cam.cx = cam.tcx = L.g; cam.s = cam.ts = L.s; cam.vx = 0;
     mode = "tl"; resize(); clamp();
     if (targetS) zoomAt(targetS / cam.ts, sx ?? W / 2);
@@ -260,7 +260,7 @@
     const t0 = performance.now();
     (function wait() { if (!RM && Math.abs(Math.log(cam.s / sLive)) > 0.04 && performance.now() - t0 < 900) return setTimeout(wait, 30); handover(); })();
     function handover() {
-      if (atEdge) { const b = $("live-btn"); passLive = true; if (b) b.click(); passLive = false; }
+      if (atEdge) { const b = $("live-btn"); if (b && !(TV.live && TV.live())) { passLive = true; b.click(); passLive = false; } }
       else if (window.TapestrySeek && g >= SDXL0()) window.TapestrySeek(Math.round(g - SDXL0() - 4), Math.round(g - SDXL0() + 4));
       mode = "live"; entry = null; setTimelineUi(false); setPlay(false); urlSoon();
     }
@@ -269,12 +269,15 @@
   // ---------- frame loop (on demand) ----------
   let last = 0, dragging = false, lastHud = 0, ewma = 0.016, slow = 0, dprCap = 2;
   const perf = { frames: [], on: false };
+  const held = new Set();
   function step(dt) {
+    if (held.size) { if (held.has("w")) zoomAt(Math.exp(2.2 * dt), W / 2); if (held.has("s")) zoomAt(Math.exp(-2.2 * dt), W / 2);
+      const dir = (held.has("d") ? 1 : 0) - (held.has("a") ? 1 : 0); if (dir) { cam.tcx += dir * 1100 / cam.ts * dt; clamp(); } }
     if (playing && !dragging) { cam.tcx += rateAt(cam.tcx) * dt; if (cam.tcx >= liveMax() - 1) setPlay(false); }
     if (!dragging && Math.abs(cam.vx) > 0.01) { cam.tcx += cam.vx * dt; cam.vx *= Math.exp(-4 * dt); clamp(); }
     const k = RM ? 1 : 1 - Math.exp(-14 * dt), ls = Math.log(cam.s), lt = Math.log(cam.ts);
     cam.s = Math.exp(ls + (lt - ls) * k); cam.cx += (cam.tcx - cam.cx) * (playing ? 1 : k);
-    return playing || Math.abs(lt - Math.log(cam.s)) > 1e-4 || Math.abs(cam.tcx - cam.cx) * cam.s > 0.05 || Math.abs(cam.vx) * cam.s > 1;
+    return held.size > 0 || playing || Math.abs(lt - Math.log(cam.s)) > 1e-4 || Math.abs(cam.tcx - cam.cx) * cam.s > 0.05 || Math.abs(cam.vx) * cam.s > 1;
   }
   function frameNow() { now = performance.now(); if (uploads.length) flushUploads(4); draw(); dirty = false; hud(); }
   function frame(ts) {
@@ -351,7 +354,7 @@
   cv.addEventListener("pointermove", (e) => {
     if (!ptrs.has(e.pointerId)) return;
     const px = ptrs.get(e.pointerId); ptrs.set(e.pointerId, e.clientX);
-    if (ptrs.size === 2 && pinch) { const [a, b] = [...ptrs.values()], mid = (a + b) / 2; const ux = cam.tcx + (pinch.mid - W / 2) / cam.ts; cam.ts = pinch.s * (Math.abs(a - b) || 1) / pinch.d; clamp(); cam.tcx = ux - (mid - W / 2) / cam.ts; pinch.mid = mid; pinch.s = cam.ts; pinch.d = Math.abs(a - b) || 1; clamp(); }
+    if (ptrs.size === 2 && pinch) { const [a, b] = [...ptrs.values()], mid = (a + b) / 2; const ux = cam.tcx + (pinch.mid - W / 2) / cam.ts; const nts = pinch.s * (Math.abs(a - b) || 1) / pinch.d; if (nts !== cam.ts) zoomDir = nts > cam.ts ? 1 : -1; cam.ts = nts; clamp(); cam.tcx = ux - (mid - W / 2) / cam.ts; pinch.mid = mid; pinch.s = cam.ts; pinch.d = Math.abs(a - b) || 1; clamp(); }
     else if (ptrs.size === 1) { cam.tcx -= (e.clientX - px) / cam.ts; cam.cx = cam.tcx; clamp(); lastMove.push([performance.now(), e.clientX]); if (lastMove.length > 6) lastMove.shift(); }
     kick();
   });
@@ -370,7 +373,13 @@
 
   addEventListener("keydown", (e) => {
     if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (mode === "live") { if (e.key === "-" || e.key === "_") { e.preventDefault(); e.stopImmediatePropagation(); stepDetent(1); } return; }
+    const k = e.key.length === 1 ? e.key.toLowerCase() : "";
+    if (mode === "live") {
+      if (e.key === "-" || e.key === "_" || k === "s") { e.preventDefault(); e.stopImmediatePropagation(); if (!M) return; const L = readLive(); if (L) { sLive = L.s; enterTimeline(L.s * 0.92); } if (k === "s") { held.add("s"); kick(); } return; }
+      if (k === "a" || k === "d") { e.preventDefault(); e.stopImmediatePropagation(); document.dispatchEvent(new KeyboardEvent("keydown", { key: k === "a" ? "ArrowLeft" : "ArrowRight", code: k === "a" ? "ArrowLeft" : "ArrowRight", bubbles: true, repeat: e.repeat })); }
+      return;
+    }
+    if ("wasd".includes(k) && k) { held.add(k); setPlay(false); cam.vx = 0; if (k === "s" || k === "w") clearTimeout(snapT); e.preventDefault(); e.stopImmediatePropagation(); kick(); return; }
     if (e.key === "ArrowRight") cam.vx = 900 / cam.ts; else if (e.key === "ArrowLeft") cam.vx = -900 / cam.ts;
     else if (e.key === "+" || e.key === "=") stepDetent(-1); else if (e.key === "-" || e.key === "_") stepDetent(1);
     else if (e.key === "0" || e.key === "End") toLive(liveMax());
@@ -381,6 +390,12 @@
     else return;
     e.preventDefault(); e.stopImmediatePropagation(); kick();
   }, true);
+  addEventListener("keyup", (e) => {
+    const k = e.key.length === 1 ? e.key.toLowerCase() : "";
+    if (k === "a" || k === "d") { if (mode === "live") document.dispatchEvent(new KeyboardEvent("keyup", { key: k === "a" ? "ArrowLeft" : "ArrowRight", code: k === "a" ? "ArrowLeft" : "ArrowRight", bubbles: true })); }
+    if (held.delete(k) && k === "w") scheduleSnap(W / 2);
+  }, true);
+  addEventListener("blur", () => held.clear());
 
   // ---------- controls: folded into the live viewer's own chrome (same components, classes, sizes) ----------
   const el = (tag, cls, html) => { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; };
