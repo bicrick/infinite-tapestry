@@ -108,9 +108,11 @@ Plain HTML over the canvas, created once, never swapped or auto-hidden. Every el
 `change` and writes CSS custom properties only (`--zp: zoomProgress`) so motion is compositor-only.
 - Header + real wall clock (always wall time).
 - Chat always visible at every zoom.
-- "Where next?" bar: same box, size, position. Contents interpolate on `--zp`: prompt text field (zp 0) ↔ scrub
-  controls (⏮ / Play / ⏭ / calendar). The right-hand white circle is Send at live, Live when `!followLive`.
-  UI Tapestry owns the curve shapes (`ui/bar.js` exposes `bar.setCurve(name, fn(zp)->0..1)`).
+- "Where next?" bar (`ui/bar.js`, Patrick's pick: variant C "Reflow"): one dock, live-page composer CSS. Progress =
+  `max(zoomProgress, away)` seeks one set of paused Web Animations (transform/opacity only) from a non-drawing
+  renderer pass, so it reverses wherever the zoom does. The pill retargets its width; zoom − / + / ⏮ / Play / ⏭ /
+  calendar and a plain-text "Live →" scale up from the send circle's centre. `away` springs to 1 once the camera
+  moves in time (pan, drag, play, jump), so the prompt box exists only at live.
 - Caption: date on one line, tabular numbers (`font-variant-numeric: tabular-nums`), title below.
 - Hints bottom-right, subtle grey, fade after first use.
 - Events/markers only when `zoom < Z_EVENTS` (≈-3).
