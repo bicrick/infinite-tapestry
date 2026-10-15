@@ -199,8 +199,15 @@ module.exports = async (req, res) => {
     }
     if (kind === "tm") { // Time Machine v3: eras + global unit offsets (every strip one equal-width unit)
       res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=300");
+      const part = q.get("part");
+      if (part === "landmarks" || part === "scenes") return res.status(200).json(await idxJSON(part + ".json"));
       const st = await idxJSON("state.json");
-      return res.status(200).json({ eras: st.eras, months: st.months, updated: st.updated });
+      if (part === "hours") { // compact unit<->time map: [g_first, g_last, t0_ms, t1_ms]
+        const g0 = Object.fromEntries(st.eras.map((e) => [e.id, e.g0]));
+        const ms = await Promise.all(st.months.map((m) => idxJSON(m + ".json")));
+        return res.status(200).json({ hours: ms.flatMap((m) => m.hours).map((h) => [g0[h.era] + h.a, g0[h.era] + h.b, Date.parse(h.t0), Date.parse(h.t1)]).sort((a, b) => a[0] - b[0]) });
+      }
+      return res.status(200).json({ eras: st.eras, months: st.months, last: st.last, updated: st.updated });
     }
     return res.status(400).json({ error: "kind" });
   } catch (e) { return res.status(500).json({ error: "unavailable" }); }

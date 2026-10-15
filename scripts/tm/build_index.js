@@ -5,7 +5,7 @@
 //   node scripts/tm/build_index.js --rebuild  from the very first strip of the OG era
 // Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY; optional R2_ENDPOINT/R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY.
 const crypto = require("crypto");
-const { ERAS, V, fold, compact, hourKey } = require("../../web/lib/tmindex");
+const { ERAS, V, fold, compact, hourKey, landmarks } = require("../../web/lib/tmindex");
 const SB = process.env.SUPABASE_URL.replace(/\/$/, ""), KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const H = { apikey: KEY, authorization: "Bearer " + KEY };
 const PFX = "tm/idx/";
@@ -82,7 +82,25 @@ async function rowsAfter(session, after) {
     bytes += await put(m + ".json", mf);
     if (!state.months.includes(m)) state.months.push(m);
   }
-  state.months.sort(); state.updated = new Date().toISOString();
+  state.months.sort();
+  // landmarks + titled scenes (for prompt stepping), rebuilt each run from the (small) month files
+  for (const m of state.months) await loadMonth(m);
+  const all = [...months.values()].flatMap((mf) => mf.hours);
+  const q = (p) => fetch(`${SB}/rest/v1/${p}`, { headers: H }).then((r) => r.json()).catch(() => []);
+  const [ideas, reacts] = await Promise.all([
+    q("ideas?select=handle,created_at,start_strip,end_strip&status=eq.played&start_strip=not.is.null&order=start_strip.asc&limit=5000"),
+    q("strip_reactions?select=strip,lol,fire,mind,love,dead&order=strip.desc&limit=5000"),
+  ]);
+  bytes += await put("landmarks.json", landmarks(state, all, { ideas, reacts }));
+  const g0 = Object.fromEntries(state.eras.map((e) => [e.id, e.g0]));
+  const scenes = []; // [g, len, title, user?1:0]  titled runs, merged across hours
+  for (const h of all.slice().sort((a, b) => g0[a.era] + a.a - (g0[b.era] + b.a))) for (const r of h.runs) {
+    if (!r[0]) continue; const g = g0[h.era] + r[1], last = scenes[scenes.length - 1];
+    if (last && last[2] === r[0] && last[0] + last[1] >= g - 1) last[1] = g0[h.era] + r[2] - last[0] + 1;
+    else scenes.push([g, r[2] - r[1] + 1, r[0], r[3] === "user" ? 1 : 0]);
+  }
+  bytes += await put("scenes.json", { v: 1, scenes: scenes.filter((x) => x[1] >= 6 || x[3]) });
+  state.updated = new Date().toISOString();
   bytes += await put("state.json", state);
   console.log(`tm index: +${added} strips, ${dirty.size} month file(s), ${bytes} B written, ${Date.now() - t} ms; last ${JSON.stringify(state.last)}`);
 })().catch((e) => { console.error(e); process.exit(1); });

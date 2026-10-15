@@ -12,18 +12,24 @@ const ERAS = [
   { id: "og", session: "live", label: "OG era · SD 1.5" },
   { id: "sdxl", session: "live-sdxl", label: "SDXL" },
 ];
-const V = 1;
+const V = 2;
+const GAP_MS = 10 * 60e3;
 const hourKey = (t) => new Date(t).toISOString().slice(0, 13);
 
 // Fold strip rows (ascending idx, one session) into the hour list (mutates, returns hours touched).
 function fold(hours, era, rows) {
   const byH = new Map(hours.map((h) => [h.era + "|" + h.h, h]));
   const touched = new Set();
+  let prev = hours.filter((h) => h.era === era).reduce((m, h) => (!m || h.b > m.b ? h : m), null);
+  let prevT = prev ? +new Date(prev.t1) : null;
   for (const s of rows) {
     const k = hourKey(s.created_at);
     let h = byH.get(era + "|" + k);
     if (!h) { h = { h: k, era, a: s.idx, b: s.idx, t0: s.created_at, t1: s.created_at, times: [], runs: [], n: 0 }; hours.push(h); byH.set(era + "|" + k, h); }
     if (s.idx <= h.b && h.n) continue; // already folded
+    const t = +new Date(s.created_at);
+    if (prevT && t - prevT >= GAP_MS) (h.gaps = h.gaps || []).push([s.idx, new Date(prevT).toISOString(), s.created_at]); // downtime notch
+    prevT = t;
     h.b = s.idx; h.t1 = s.created_at;
     if (s.idx % 64 === 0) h.times.push([s.idx, s.created_at]);
     const sc = s.scene || {}, title = sc.title || null, last = h.runs[h.runs.length - 1];
@@ -89,4 +95,41 @@ function historyFrom(hours, { tz, session, eraT0, ideas, reacts }) {
   return { session, live_edge: edge, tz, days: [...days.values()].reverse() };
 }
 
-module.exports = { ERAS, V, hourKey, fold, compact, historyFrom, isOwner };
+// ---------- Time Machine v3 landmarks (global units: era.g0 + idx) ----------
+// Titles only: user ideas are labelled with the scene title they became, credited "Someone"; never a handle.
+const RELEASES = [["v1.0", "2026-10-14T06:02:34Z"], ["v1.1", "2026-10-14T08:01:48Z"]];
+const MILESTONES = [1000, 5000, 10000, 25000, 50000, 75000, 100000, 150000, 200000, 250000, 500000, 750000, 1e6, 2e6, 5e6];
+function landmarks(state, hours, { ideas = [], reacts = [] } = {}) {
+  const g0 = Object.fromEntries(state.eras.map((e) => [e.id, e.g0]));
+  const H = hours.map((h) => ({ ...h, ga: g0[h.era] + h.a, gb: g0[h.era] + h.b, t0m: +new Date(h.t0), t1m: +new Date(h.t1) })).sort((a, b) => a.ga - b.ga);
+  const total = state.eras.reduce((n, e) => Math.max(n, e.g0 + (e.n || 0)), 0);
+  const out = [];
+  const atTime = (ms) => { let best = null; for (const h of H) if (h.t0m <= ms) best = h; if (!best) return null; return Math.round(best.ga + Math.min(1, (ms - best.t0m) / Math.max(1, best.t1m - best.t0m)) * (best.gb - best.ga)); };
+  const sd = state.eras.find((e) => e.id === "sdxl");
+  const titleAt = (g) => { for (const h of H) if (g >= h.ga && g <= h.gb) { const r = h.runs.find((r) => g0[h.era] + r[1] <= g && g <= g0[h.era] + r[2]); return r && r[0]; } return null; };
+  for (const e of state.eras) if (e.n) out.push({ k: "era", g: e.g0, label: e.label, p: 6 });
+  for (const [v, t] of RELEASES) { const g = atTime(Date.parse(t)); if (g != null) out.push({ k: "release", g, label: "Release " + v, p: 5 }); }
+  for (const m of MILESTONES) if (m <= total) out.push({ k: "milestone", g: m - 1, label: m.toLocaleString("en-US") + " strips", p: 4 });
+  const full = H.filter((h) => h.t1m - h.t0m > 50 * 60e3);
+  for (const h of full.slice().sort((a, b) => (b.gb - b.ga) - (a.gb - a.ga)).slice(0, 3)) out.push({ k: "busiest", g: Math.round((h.ga + h.gb) / 2), label: `Busiest hour · ${(h.gb - h.ga + 1).toLocaleString("en-US")} strips`, p: 2 });
+  for (const h of H) for (const [idx, a, b] of h.gaps || []) { const min = Math.round((Date.parse(b) - Date.parse(a)) / 60e3); out.push({ k: "downtime", g: g0[h.era] + idx, label: min >= 120 ? `Paused ${Math.round(min / 60)} h` : `Paused ${min} min`, p: 3 }); }
+  // long Auto stories: the longest auto scenes, at most 2 per UTC day
+  const byDay = new Map();
+  for (const h of H) for (const r of h.runs) if (r[0] && r[3] === "auto" && r[2] - r[1] >= 30) { const d = h.h.slice(0, 10); (byDay.get(d) || byDay.set(d, []).get(d)).push({ k: "story", g: g0[h.era] + r[1], len: r[2] - r[1] + 1, label: r[0], p: 2 }); }
+  for (const l of byDay.values()) out.push(...l.sort((a, b) => b.len - a.len).slice(0, 2));
+  // ideas (SDXL timeline; ideas older than SDXL point at a different timeline)
+  const rx = new Map((reacts || []).map((r) => [r.strip, r.lol + r.fire + r.mind + r.love + r.dead]));
+  const ids = [];
+  for (const i of ideas || []) {
+    if (i.start_strip == null || !sd || new Date(i.created_at) < new Date(sd.t0)) continue;
+    const g = sd.g0 + i.start_strip, end = sd.g0 + (i.end_strip || i.start_strip + 10);
+    let r = 0; for (let k = i.start_strip; k <= end - sd.g0; k++) r += rx.get(k) || 0;
+    ids.push({ k: "idea", g, label: titleAt(g) || "An idea", by: isOwner(i.handle) ? null : "Someone", rx: r, p: 1 });
+  }
+  const top = ids.filter((x) => x.rx > 0).sort((a, b) => b.rx - a.rx).slice(0, 12);
+  for (const x of top) { x.p = 3; x.top = 1; }
+  out.push(...ids);
+  return { v: 1, total, items: out.sort((a, b) => a.g - b.g) };
+}
+
+module.exports = { ERAS, V, hourKey, fold, compact, historyFrom, isOwner, landmarks };
