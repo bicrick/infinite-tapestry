@@ -42,8 +42,6 @@ main { position:relative; z-index:1; }
 @keyframes pulse { 50% { opacity:.45; } }
 @media (prefers-reduced-motion: reduce) {
   .band .reel { animation-duration:2400s; }
-  .reveal { opacity:1 !important; transform:none !important; transition:none !important; filter:none !important; }
-  .step[data-parallax], .how-fuel[data-parallax] { transform:none !important; }
 }
 
 /* ---------- Built using logo wall ---------- */
@@ -62,8 +60,8 @@ main { position:relative; z-index:1; }
 .steps { display:grid; grid-template-columns:repeat(3, 1fr); gap:28px; margin-top:52px; }
 .step .n { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
 .shot { position:relative; border-radius:14px; overflow:hidden; aspect-ratio:4/3; background:#111; }
-.shot img { width:100%; height:100%; object-fit:cover; display:block; transform:scale(1.02); transition:transform 1.6s var(--ease); }
-.shot:hover img { transform:scale(1.06); }
+.shot img { width:100%; height:100%; object-fit:cover; display:block; scale:1.02; transition:scale 1.6s var(--ease); }
+.shot:hover img { scale:1.06; }
 .ui-over { position:absolute; inset:auto 14px 14px 14px; color:#fff; font-size:12.5px; }
 /* Mock overlays use the live viewer's glass (style.css --glass / --glass-strong / --line, .cmd and .drawer). */
 .glass { background:rgba(18,18,20,.42); -webkit-backdrop-filter:blur(24px) saturate(1.5); backdrop-filter:blur(24px) saturate(1.5);
@@ -83,7 +81,7 @@ main { position:relative; z-index:1; }
 .feat { grid-column:span 2; } .feat.wide { grid-column:span 3; }
 .feat .shot { aspect-ratio:16/11; }
 .thumbchip { position:absolute; left:28px; bottom:28px; display:flex; gap:8px; align-items:center; padding:6px 10px 6px 6px; }
-.thumbchip img { width:30px; height:30px; border-radius:6px; object-fit:cover; transform:none; }
+.thumbchip img { width:30px; height:30px; border-radius:6px; object-fit:cover; scale:none; }
 .alive { display:grid; grid-template-columns:1.1fr 1fr; gap:64px; align-items:start; }
 .stats { display:grid; grid-template-columns:repeat(3, 1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden; margin:30px 0 18px; }
 .stat { background:var(--bg); padding:18px; } .stat b { display:block; font-size:26px; font-weight:500; letter-spacing:-.03em; font-variant-numeric:tabular-nums; }
@@ -110,10 +108,6 @@ main { position:relative; z-index:1; }
 .fc-legend { margin:0; font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:12px 18px; align-items:center; }
 .fc-key { display:inline-block; width:14px; height:2px; margin-right:6px; vertical-align:middle; background:var(--fg); }
 .fc-key.fuel { width:8px; height:8px; border-radius:50%; background:#c9a46a; }
-.fc-chart #fc-line { will-change: stroke-dashoffset; }
-.fc-fuel-mark { opacity:0; transition:opacity .55s var(--ease) .85s; }
-.how-fuel.in .fc-fuel-mark { opacity:1; }
-@media (prefers-reduced-motion: reduce) { .fc-fuel-mark { opacity:1; transition:none; } }
 .fuel-side { display:flex; flex-direction:column; gap:18px; min-width:0; }
 .fuel-heroes { padding:18px 16px 8px; border:1px solid var(--line); border-radius:4px; background:var(--bg); }
 .fh-head h3 { margin:0 0 6px; font-size:15px; }
@@ -144,13 +138,6 @@ main { position:relative; z-index:1; }
   .fc-stat:nth-child(1), .fc-stat:nth-child(2) { border-bottom:1px solid var(--line); }
   .fuel-cta { width:100%; justify-content:center; }
 }
-.reveal { opacity:0; transform:translateY(22px); filter:blur(2px);
-  transition:opacity 1.05s var(--ease), transform 1.05s var(--ease), filter .9s var(--ease); }
-.reveal.in { opacity:1; transform:translate3d(0, var(--py, 0px), 0); filter:none; }
-.step[data-parallax], .how-fuel[data-parallax] { will-change: transform; }
-.step.reveal { transform:translateY(28px) scale(.985); }
-.step.reveal.in { transform:translate3d(0, var(--py, 0px), 0) scale(1); }
-.built-item.reveal { transform:translateY(12px); }
 @media (max-width: 860px) {
   .wrap { width:calc(100vw - 40px); }
   .built { padding:60px 0 0; }
@@ -175,7 +162,7 @@ main { position:relative; z-index:1; }
 .drawer p { color:rgba(255,255,255,.88); margin:8px 0 0; } .drawer p i { font-style:normal; opacity:.55; margin-right:6px; }
 .story { padding:10px 12px; } .small-l { font-size:11.5px; opacity:.85; }
 .pips { display:flex; gap:5px; margin-top:8px; } .pips i { flex:1; height:3px; border-radius:2px; background:rgba(255,255,255,.25); } .pips i.on { background:#fff; }
-.cal { padding:10px 12px; width:max-content; } .cal .m { font-size:11.5px; opacity:.85; margin-bottom:6px; }
+.cal { padding:10px 12px; width:max-content; } .cal .mo { font-size:11.5px; opacity:.85; margin-bottom:6px; }
 .cal .g { display:grid; grid-template-columns:repeat(7, 18px); gap:3px; font-size:10px; text-align:center; } .cal .g i { font-style:normal; opacity:.75; line-height:18px; }
 .cal .g i.on { background:#fff; color:#000; border-radius:50%; opacity:1; }
 .share { display:grid; grid-template-columns:1.2fr 1fr; gap:56px; align-items:center; } .share .shot { aspect-ratio:16/10; }
@@ -187,3 +174,83 @@ main { position:relative; z-index:1; }
 /* Live band counter under the CTA */
 .tcount { margin-top:18px; font-size:13.5px; color:var(--muted); }
 .tcount b { color:var(--fg); font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+
+/* ---------- Scroll assembly ----------
+   Everything is visible by default. Motion exists only under no-preference: scroll-driven where
+   animation-timeline is supported, otherwise about.js adds html.m-io and toggles .in.
+   Keyframes set only a `from` on the individual translate/scale/rotate properties, so the resting
+   state is the element's own styles and hover transforms keep working. */
+.m, .it-foot-in > * { --tx:0px; --ty:32px; --s:1; --r:0deg; --b:0px; --o:0; --k:1; --a:cover 0%; --z:cover 32%; }
+.m-up { --ty:28px; }
+.m-left { --tx:-36px; --ty:0px; --b:4px; }
+.m-right { --tx:56px; --ty:14px; --b:4px; --z:cover 38%; }
+.m-focus { --ty:26px; --s:.965; --b:12px; --z:cover 36%; }
+.m-late { --a:cover 6%; --z:cover 40%; }
+.m-rise { --ty:80px; --s:.94; --z:cover 36%; }
+.m-zoom { --ty:0px; --s:.82; --b:14px; }
+.m-card { --ty:96px; --z:cover 42%; }
+.m-card:nth-child(1) { --tx:-56px; --r:-3deg; }
+.m-card:nth-child(2) { --ty:140px; --s:.92; --a:cover 3%; }
+.m-card:nth-child(3) { --tx:56px; --r:3deg; --a:cover 6%; }
+.m-feat { --ty:110px; --s:.93; --z:cover 42%; --a:cover calc(var(--i, 0) * 3%); }
+.m-feat:nth-child(1) { --tx:-28px; --r:-2.5deg; }
+.m-feat:nth-child(2) { --ty:150px; }
+.m-feat:nth-child(3) { --tx:28px; --r:2.5deg; }
+.m-scatter { --s:.5; --b:10px; --a:cover calc(2% + var(--i, 0) * 3%); --z:cover calc(28% + var(--i, 0) * 3%); }
+.m-scatter:nth-child(1) { --tx:-150px; --ty:80px; --r:-26deg; }
+.m-scatter:nth-child(2) { --tx:-70px; --ty:150px; --r:16deg; }
+.m-scatter:nth-child(3) { --tx:0px; --ty:190px; --r:-10deg; --s:.35; }
+.m-scatter:nth-child(4) { --tx:80px; --ty:140px; --r:22deg; }
+.m-scatter:nth-child(5) { --tx:160px; --ty:70px; --r:-18deg; }
+.m-li { --tx:28px; --ty:0px; --a:cover calc(4% + var(--i, 0) * 2.5%); --z:cover calc(24% + var(--i, 0) * 2.5%); }
+.closing .m { --a:entry 0%; --z:cover 22%; }
+.closing .m-late { --a:entry 40%; --z:cover 26%; }
+.it-foot-in > * { --ty:22px; --b:4px; --a:entry 0%; --z:entry 70%; }
+.it-foot-in > :nth-child(2) { --i:1; --a:entry 12%; --z:entry 82%; }
+.it-foot-in > :nth-child(3) { --i:2; --a:entry 24%; --z:entry 94%; }
+@media (max-width: 860px) { .m, .it-foot-in > * { --k:.45; } }
+
+@keyframes m-in { from { opacity:var(--o); translate:calc(var(--tx) * var(--k)) var(--ty); scale:var(--s); rotate:var(--r); filter:blur(var(--b)); } }
+@keyframes m-par { from { translate:0 -5%; } to { translate:0 5%; } }
+@keyframes m-lag { from { opacity:0; translate:0 28px; } }
+@keyframes m-out { to { opacity:0; translate:0 -56px; scale:.97; } }
+@keyframes fc-draw { from { stroke-dashoffset:1; } to { stroke-dashoffset:0; } }
+@keyframes fc-pop { from { opacity:0; scale:0; } }
+@keyframes hi-in { from { opacity:0; translate:0 22px; filter:blur(8px); } }
+
+@media (prefers-reduced-motion: no-preference) {
+  .hi { animation:hi-in 1.1s var(--ease) both; animation-delay:calc(120ms + var(--i, 0) * 110ms); }
+
+  @supports (animation-timeline: view()) {
+    .m, .it-foot-in > * { animation:m-in linear both; animation-timing-function:cubic-bezier(.25,.6,.3,1);
+      animation-timeline:view(); animation-range-start:var(--a); animation-range-end:var(--z); }
+    .it-foot { view-timeline:--foot block; }
+    .it-foot-in > * { animation-timeline:--foot; }
+
+    .hero-copy { animation:m-out linear both; animation-timeline:view(); animation-range:exit 0% exit 100%; }
+
+    /* Art drifts inside its frame; the UI overlay lands a beat after the card. */
+    .shot { view-timeline:--shot block; }
+    .shot img { scale:1.12; animation:m-par linear both; animation-timeline:--shot; animation-range:cover 0% cover 100%; }
+    .shot:hover img { scale:1.16; }
+    .shot .ui-over, .shot .caption { animation:m-lag linear both; animation-timing-function:cubic-bezier(.25,.6,.3,1);
+      animation-timeline:--shot; animation-range:entry 55% cover 48%; }
+
+    /* Budget line draws left to right; each fuel dot pops as the line reaches it (--f = x fraction). */
+    .fc-chart-wrap { view-timeline:--fc block; }
+    #fc-line { stroke-dasharray:1; animation:fc-draw linear both; animation-timeline:--fc; animation-range:cover 8% cover 42%; }
+    .fc-fuel-mark { transform-box:fill-box; transform-origin:center; animation:fc-pop linear both; animation-timeline:--fc;
+      animation-timing-function:cubic-bezier(.3,1.6,.5,1);
+      animation-range:cover calc(8% + var(--f, 1) * 34%) cover calc(14% + var(--f, 1) * 34%); }
+  }
+
+  html.m-io :is(.m, .it-foot-in > *) { transition:opacity .9s var(--ease), translate 1.1s var(--ease), scale 1.1s var(--ease),
+    rotate 1.1s var(--ease), filter .9s var(--ease), transform .4s var(--ease), color .3s var(--ease);
+    transition-delay:calc(var(--i, 0) * 80ms); }
+  html.m-io :is(.m, .it-foot-in > *):not(.in) { opacity:var(--o); translate:calc(var(--tx) * var(--k)) var(--ty);
+    scale:var(--s); rotate:var(--r); filter:blur(var(--b)); }
+  html.m-io #fc-line { stroke-dasharray:1; stroke-dashoffset:1; transition:stroke-dashoffset 1.6s var(--ease) .3s; }
+  html.m-io .fuel-cash.in #fc-line { stroke-dashoffset:0; }
+  html.m-io .fc-fuel-mark { opacity:0; transition:opacity .5s var(--ease) calc(.3s + var(--f, 1) * 1.6s); }
+  html.m-io .fuel-cash.in .fc-fuel-mark { opacity:1; }
+}
