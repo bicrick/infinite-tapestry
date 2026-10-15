@@ -146,6 +146,15 @@
      "value": "noindex, nofollow, noarchive"
     }
    ]
+  },
+  {
+   "source": "/classic-7f3e21.html",
+   "headers": [
+    {
+     "key": "X-Robots-Tag",
+     "value": "noindex, nofollow, noarchive"
+    }
+   ]
   }
  ],
  "rewrites": [
