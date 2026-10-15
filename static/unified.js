@@ -292,25 +292,29 @@
   // ---------- input ----------
   const typing = (t) => t && (t.closest && t.closest("input,textarea,select,[contenteditable],#drawer,.sheet,.pop,#chat"));
   let wheelZoomAcc = 0;
+  // Zoom delta from a wheel event. With Shift held, macOS (Chrome and Safari) moves a vertical wheel/trackpad delta
+  // into deltaX, so use whichever axis is larger; normalise line/page modes to pixels.
+  const zoomDelta = (e) => { const u = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? Hh : 1; return (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * u; };
+  const zoomRate = (e) => (e.ctrlKey && !e.shiftKey ? 0.012 : 0.004);
+  const liveUi = (t) => t && t.closest && (typing(t) || t.closest("button,a,header,.cmd,.top,#now,.drawer,.pop,.sheet"));
   addEventListener("wheel", (e) => {
     if (!M) return;
     const zoomGesture = e.shiftKey || e.ctrlKey;
     if (mode === "live") {
-      if (!zoomGesture || e.target !== liveCv) return; // plain wheel: the live viewer's own scrub, untouched
-      e.preventDefault(); e.stopImmediatePropagation();
-      const dy = (e.deltaY || e.deltaX) * (e.deltaMode ? 16 : 1);
-      if (dy <= 0) return; // already at the live zoom
-      wheelZoomAcc += dy; if (wheelZoomAcc < 12) return; wheelZoomAcc = 0;
+      if (!zoomGesture || (e.target !== liveCv && liveUi(e.target))) return; // plain wheel: the live viewer's own scrub, untouched
+      e.preventDefault(); e.stopImmediatePropagation(); // the live viewer never sees a shift/ctrl wheel on this page
+      const dy = zoomDelta(e);
+      if (dy <= 0) { wheelZoomAcc = 0; return; } // already at the live zoom
+      wheelZoomAcc += dy; if (wheelZoomAcc < 8) return; wheelZoomAcc = 0;
       enterTimeline(null, e.clientX);
-      zoomAt(Math.exp(-dy * (e.ctrlKey ? 0.012 : 0.004)), e.clientX); scheduleSnap(e.clientX);
+      zoomAt(Math.exp(-dy * zoomRate(e)), e.clientX); scheduleSnap(e.clientX);
       return;
     }
     if (!host.contains(e.target) || e.target.closest(".u-sheet")) return;
-    e.preventDefault();
-    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? Hh : 1;
-    if (zoomGesture) { const dy = (e.deltaY || e.deltaX) * unit; zoomAt(Math.exp(-dy * (e.ctrlKey ? 0.012 : 0.004)), e.clientX); scheduleSnap(e.clientX); return; }
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (zoomGesture) { zoomAt(Math.exp(-zoomDelta(e) * zoomRate(e)), e.clientX); scheduleSnap(e.clientX); return; } // never scrubs
     setPlay(false);
-    const dx = e.deltaX * unit, dy = e.deltaY * unit;
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? Hh : 1, dx = e.deltaX * unit, dy = e.deltaY * unit;
     // Vertical wheel scrubs (down = back in time, like the live viewer); trackpad sideways moves with the fingers.
     cam.tcx += (Math.abs(dx) > Math.abs(dy) ? dx : -dy) / cam.ts; cam.vx = 0; clamp(); kick();
   }, { passive: false, capture: true });
