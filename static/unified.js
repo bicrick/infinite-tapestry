@@ -257,11 +257,13 @@
     // Zoom back toward the live scale first (short), then hand over to the live viewer at that moment.
     const atEdge = g >= lm - Math.max(40, W / sLive);
     cam.ts = sLive; cam.tcx = atEdge ? lm - W / 2 / sLive * 0.35 : g; clamp(); kick();
-    setTimeout(() => {
+    const t0 = performance.now();
+    (function wait() { if (!RM && Math.abs(Math.log(cam.s / sLive)) > 0.04 && performance.now() - t0 < 900) return setTimeout(wait, 30); handover(); })();
+    function handover() {
       if (atEdge) { const b = $("live-btn"); passLive = true; if (b) b.click(); passLive = false; }
       else if (window.TapestrySeek && g >= SDXL0()) window.TapestrySeek(Math.round(g - SDXL0() - 4), Math.round(g - SDXL0() + 4));
       mode = "live"; entry = null; setTimelineUi(false); setPlay(false); urlSoon();
-    }, RM ? 0 : 200);
+    }
   }
 
   // ---------- frame loop (on demand) ----------
@@ -391,9 +393,10 @@
   const bPrev = mk("u-prev", "Previous prompt ([)", '<path d="M15 6l-6 6 6 6"/>'), bNext = mk("u-next", "Next prompt (])", '<path d="M9 6l6 6-6 6"/>');
   const PLAY = '<path d="M8 6l10 6-10 6z"/>', PAUSE = '<path d="M8 6v12M16 6v12"/>';
   const bPlay = mk("u-play", "Play from here (space)", PLAY), bCal = mk("u-cal-b", "Calendar and events", '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>');
-  const bLive = mk("u-live-b", "Back to live (0)", '<circle cx="7" cy="12" r="2.2"/><path d="M12 7l5 5-5 5"/>');
+  const bLive = el("button", "icon text u-only u-live-b", '<span class="u-dot"></span>Live <span aria-hidden="true">→</span>'); bLive.type = "button"; bLive.title = "Back to live (0)";
   bLive.onclick = () => toLive(liveMax());
-  const anchor = $("hide-btn"); if (anchor) for (const b of [bOut, bIn, bPrev, bPlay, bNext, bCal, bLive]) anchor.before(b);
+  const anchor = $("hide-btn"); if (anchor) for (const b of [bOut, bIn, bPrev, bPlay, bNext, bCal]) anchor.before(b);
+  $("cmd").appendChild(bLive); // far right, where send sits in live mode
   const calPop = el("div", "pop hidden u-pop", '<div class="pop-title">Jump to a day</div><div id="u-cal"></div><div class="pop-title">Show events</div><div class="pop-row u-cats" id="u-cats"></div><p class="fine">Events are off unless you turn them on here.</p>');
   $("cmd").after(calPop);
   bCal.onclick = (e) => { e.stopPropagation(); calPop.classList.toggle("hidden"); };

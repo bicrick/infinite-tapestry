@@ -46,3 +46,7 @@ body.u-tl .cmd { justify-content:center; }
 #chat { transition:opacity .2s linear; }
 body.u-tl #chat { opacity:0 !important; pointer-events:none !important; }
 @media (max-width:560px) { body.u-tl .dock { width:200px; } }
+.u-live-b { margin-left:auto; font-weight:500; gap:6px; align-items:center; white-space:nowrap; color:var(--fg); }
+.u-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:#ff4d3d; }
+body.u-tl .dock { width:min(400px, calc(100vw - 32px)); }
+@media (max-width:560px) { body.u-tl .dock { width:240px; } }
