@@ -154,7 +154,7 @@
     // Same slots as the live viewer: the clock by the mark shows the moment under the needle, the caption above the
     // composer shows its scene. Content changes, location doesn't.
     const t = unitTime(cam.cx), today = t && t.toDateString() === new Date().toDateString();
-    tlClock = t ? (today ? "" : fmtD.format(t) + ", ") + fmtT.format(t) : ""; if (document.body.classList.contains("u-tl")) (uClock.textContent !== tlClock && (uClock.textContent = tlClock));
+    tlClock = t ? (today ? "" : fmtD.format(t) + ", ") + fmtT.format(t) : "";
     const i = bs(scenes, cam.cx) - 1, sc = scenes[i], on = sc && cam.cx < sc.g + sc.len + 2;
     const TV = window.TapestryView, tip = !on && cam.cx > (scenes.length ? scenes[scenes.length - 1].g : 0);
     setText(uTitle, on ? sc.title + (sc.user ? " · an idea" : "") : tip && TV.title ? TV.title() || "—" : "—");
@@ -233,7 +233,7 @@
   let revealT = 0, instant = false;
   function setTimelineUi(on) {
     clearTimeout(revealT);
-    if (on && instant) { instant = false; document.body.classList.add("u-tl"); if (tlClock) (uClock.textContent !== tlClock && (uClock.textContent = tlClock)); return; }
+    if (on && instant) { instant = false; document.body.classList.add("u-tl"); return; }
     if (!on) { document.body.classList.remove("u-tl"); wallClock(); calPop.classList.add("hidden"); return; }
     const t0 = performance.now();
     (function reveal() { // keep the live canvas on screen until the timeline can show the same strips (<= 450 ms)
@@ -257,14 +257,16 @@
   // Return to live, continuous: zoom the timeline to the live scale at the user's own position (or, near the front,
   // follow the live viewer's moving centre), then hand the live viewer that exact position (1:1 drag API, no seek
   // animation), uncover it, hold still ~0.8 s, and only then release it so its own spring eases live motion back in.
-  let followLive = false, handing = false;
+  let followLive = false, handing = false, lockLive = false;
   function toLive(g) {
     if (mode !== "tl" || handing) return;
     handing = true; setPlay(false); cam.vx = 0; held.clear();
     const TV = window.TapestryView, L0 = readLive();
     const atEdge = !L0 || g >= L0.g - Math.max(24, W / sLive);
     if (L0) lineYT = L0.y; // band eases onto the live band's height (matters after a cold timeline deep link)
-    followLive = atEdge; cam.ts = sLive; if (!atEdge) cam.tcx = g; clamp(); kick();
+    // At the edge, target the live viewer's centre NOW: otherwise the first wait() check sees cx === tcx, hands off at
+    // once, and the cross-fade blends two frames ~W px apart (the "flash").
+    followLive = atEdge; cam.ts = sLive; cam.tcx = atEdge && L0 ? L0.g : g; clamp(); kick();
     document.body.classList.add("u-hold");
     // History: move the hidden live viewer to the target NOW (1:1 drag API, no seek), so its full-res strips fetch and
     // decode during the zoom. The cover stays until it is aligned AND fully loaded: never a black hand-off.
@@ -288,11 +290,12 @@
       const loaded = (!TV.coverage || TV.coverage() >= 0.98) && (!atEdge || !TV.live || TV.live() || (TV.max() - (readLive() || {g: 0}).g) * sLive < W);
       if (loaded && aligned && !loadedAt) loadedAt = el;
       if (!RM && !(zoomed && aligned && loaded) && el < 8000) return requestAnimationFrame(wait);
+      if (followLive) { const L = readLive(); if (L) cam.tcx = L.g; lockLive = true; } // track the moving live centre 1:1 through the fade
       cam.s = cam.ts; cam.cx = cam.tcx; frameNow();
       if (!pos && TV.wheelStart) { const L = readLive(); TV.wheelStart(); if (L) TV.wheelMove(-(cam.cx - L.g) * sLive); }
       window.__u.lastHandoff = { ms: Math.round(el), waitedForLoad: Math.round(Math.max(0, el - (loadedAt || el))), edge: atEdge, coverage: TV.coverage ? +TV.coverage().toFixed(3) : null };
       requestAnimationFrame(() => requestAnimationFrame(() => { // the viewer has drawn the aligned frame: uncover
-        followLive = false; handing = false;
+        followLive = false; handing = false; lockLive = false;
         mode = "live"; entry = null; setTimelineUi(false); urlSoon();
         setTimeout(() => { document.body.classList.remove("u-hold"); if (TV.wheelEnd && !atEdge) TV.wheelEnd(true); if (atEdge && TV.live && !TV.live()) { const b = $("live-btn"); if (b) { passLive = true; b.click(); passLive = false; } } }, RM ? 0 : 800);
       }));
@@ -300,17 +303,18 @@
   }
 
   // ---------- frame loop (on demand) ----------
-  let last = 0, dragging = false, lastHud = 0, ewma = 0.016, slow = 0, dprCap = 2;
+  let last = 0, dragging = false, arming = false, lastHud = 0, ewma = 0.016, slow = 0, dprCap = 2;
   const perf = { frames: [], on: false };
   function step(dt) {
     if (followLive) { const TV = window.TapestryView; const L = readLive(); if (L) cam.tcx = L.g; }
     if (lineYT != null && Math.abs(lineYT - lineY) > 0.3) { lineY += (lineYT - lineY) * (1 - Math.exp(-12 * dt)); dirty = true; } else if (lineYT != null) { lineY = lineYT; lineYT = null; }
     if (held.size) { if (held.has("w")) zoomAt(Math.exp(2.2 * dt), W / 2); if (held.has("s")) zoomAt(Math.exp(-2.2 * dt), W / 2);
       const dir = (held.has("d") ? 1 : 0) - (held.has("a") ? 1 : 0); if (dir) { cam.tcx += dir * 1100 / cam.ts * dt; clamp(); } }
-    if (playing && !dragging) { cam.tcx += rateAt(cam.tcx) * dt; if (cam.tcx >= liveMax() - 1) setPlay(false); }
+    if (arming && Math.abs(Math.log(cam.s / cam.ts)) < 2e-3) arming = false;
+    if (playing && !arming && !dragging) { cam.tcx += rateAt(cam.tcx) * dt; if (cam.tcx >= liveMax() - 1) setPlay(false); }
     if (!dragging && Math.abs(cam.vx) > 0.01) { cam.tcx += cam.vx * dt; cam.vx *= Math.exp(-4 * dt); clamp(); }
     const k = RM ? 1 : 1 - Math.exp(-14 * dt), ls = Math.log(cam.s), lt = Math.log(cam.ts);
-    cam.s = Math.exp(ls + (lt - ls) * k); cam.cx += (cam.tcx - cam.cx) * (playing ? 1 : k);
+    cam.s = Math.exp(ls + (lt - ls) * k); cam.cx += (cam.tcx - cam.cx) * ((playing && !arming) || lockLive ? 1 : k);
     return held.size > 0 || playing || Math.abs(lt - Math.log(cam.s)) > 1e-4 || Math.abs(cam.tcx - cam.cx) * cam.s > 0.05 || Math.abs(cam.vx) * cam.s > 1;
   }
   function frameNow() { now = performance.now(); if (uploads.length) flushUploads(4); draw(); dirty = false; hud(); }
@@ -405,17 +409,21 @@
   };
   cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
 
+  // Arrow keys ARE WASD (Up=W, Down=S, Left=A, Right=D): same handler, speed, easing, magnet and hold. Only trusted
+  // events are mapped, so the arrows this file re-dispatches to the live viewer for A/D pass through untouched.
+  const ARROW = { ArrowUp: "w", ArrowDown: "s", ArrowLeft: "a", ArrowRight: "d" };
+  const keyOf = (e) => (e.isTrusted && ARROW[e.key]) || (e.key.length === 1 ? e.key.toLowerCase() : "");
   addEventListener("keydown", (e) => {
     if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
-    const k = e.key.length === 1 ? e.key.toLowerCase() : "";
+    const k = keyOf(e);
     if (mode === "live") {
       if (e.key === "-" || e.key === "_" || k === "s") { e.preventDefault(); e.stopImmediatePropagation(); if (!M) return; const L = readLive(); if (L) { sLive = L.s; enterTimeline(L.s * 0.92); } if (k === "s") { held.add("s"); kick(); } return; }
       if (k === "a" || k === "d") { e.preventDefault(); e.stopImmediatePropagation(); document.dispatchEvent(new KeyboardEvent("keydown", { key: k === "a" ? "ArrowLeft" : "ArrowRight", code: k === "a" ? "ArrowLeft" : "ArrowRight", bubbles: true, repeat: e.repeat })); }
+      if (k === "w" && ARROW[e.key]) { e.preventDefault(); e.stopImmediatePropagation(); } // W does nothing in live; neither does Up
       return;
     }
     if ("wasd".includes(k) && k) { held.add(k); setPlay(false); cam.vx = 0; if (k === "s" || k === "w") clearTimeout(snapT); e.preventDefault(); e.stopImmediatePropagation(); kick(); return; }
-    if (e.key === "ArrowRight") cam.vx = 900 / cam.ts; else if (e.key === "ArrowLeft") cam.vx = -900 / cam.ts;
-    else if (e.key === "+" || e.key === "=") stepDetent(-1); else if (e.key === "-" || e.key === "_") stepDetent(1);
+    if (e.key === "+" || e.key === "=") stepDetent(-1); else if (e.key === "-" || e.key === "_") stepDetent(1);
     else if (e.key === "0" || e.key === "End") toLive(liveMax());
     else if (e.key === "Home") fly(0, cam.ts);
     else if (e.key === "]" || e.key === ".") stepPrompt(1); else if (e.key === "[" || e.key === ",") stepPrompt(-1);
@@ -425,7 +433,8 @@
     e.preventDefault(); e.stopImmediatePropagation(); kick();
   }, true);
   addEventListener("keyup", (e) => {
-    const k = e.key.length === 1 ? e.key.toLowerCase() : "";
+    const k = keyOf(e);
+    if (ARROW[e.key] && e.isTrusted) e.stopImmediatePropagation();
     if (k === "a" || k === "d") { if (mode === "live") document.dispatchEvent(new KeyboardEvent("keyup", { key: k === "a" ? "ArrowLeft" : "ArrowRight", code: k === "a" ? "ArrowLeft" : "ArrowRight", bubbles: true })); }
     if (held.delete(k) && k === "w") scheduleSnap(W / 2);
   }, true);
@@ -433,11 +442,10 @@
 
   // ---------- controls: folded into the live viewer's own chrome (same components, classes, sizes) ----------
   const el = (tag, cls, html) => { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; };
-  // One header: the live page's own #top-clock shows the time under the needle in the timeline, wall time in live.
+  // #top-clock always shows the real wall time (mobile.js ticks it); the timeline position lives in the caption.
   const uClock = $("top-clock") || el("span"), wallFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
   let tlClock = "";
   const wallClock = () => { uClock.textContent = wallFmt.format(new Date()); };
-  setInterval(() => { if (document.body.classList.contains("u-tl")) { if (tlClock && uClock.textContent !== tlClock) uClock.textContent = tlClock; } }, 1000);
   const nowRow = document.querySelector(".dock .now"), uNow = el("div", "now u-now");
   const uTitle = el("span"), uSub = el("span", "now-time"); uTitle.id = "u-now-title"; uNow.append(uSub, uTitle); nowRow && nowRow.after(uNow); // date line (fixed), then the title line
   const ICON = (d) => `<svg viewBox="0 0 24 24">${d}</svg>`;
@@ -466,7 +474,8 @@
   }
   function setPlay(on) {
     playing = on; bPlay.innerHTML = ICON(on ? PAUSE : PLAY); bPlay.classList.toggle("on", on); bPlay.title = on ? "Pause (space)" : "Play from here (space)";
-    if (on) { cam.vx = 0; const d = detents(); cam.ts = Math.max(cam.ts, d[1] || cam.ts); clamp(); kick(); }
+    arming = on; // play starts once the zoom-in (same cam.s easing as W) has settled; no snap, no hand-off to live
+    if (on) { cam.vx = 0; held.clear(); clearTimeout(snapT); cam.ts = sLive; clamp(); kick(); }
   }
   bPrev.onclick = () => stepPrompt(-1); bNext.onclick = () => stepPrompt(1); bPlay.onclick = () => setPlay(!playing);
   bIn.onclick = () => stepDetent(-1); bOut.onclick = () => stepDetent(1);
