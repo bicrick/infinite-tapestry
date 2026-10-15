@@ -12,11 +12,13 @@
 //   r.draw(rects, viewport, now?)      every rect in one batched point draw, into the caller's framebuffer
 //   r.setColorSource(key, image)       colour sample for a key when you have no GL texture (see `key` below)
 //   r.releaseColor(key)
+//   r.setPitch(px, dpr?)               lattice pitch (and dpr) for later draws, e.g. finer for a thin band
 //   r.dispose()
 //
 // opts = { pitch (framebuffer px between lattice nodes, default 5.5 * dpr), dpr (default devicePixelRatio, max 2),
 //          underlay (default true), theme ("dark" | "light", default follows prefers-color-scheme),
-//          reducedMotion (default follows prefers-reduced-motion) }
+//          reducedMotion (default follows prefers-reduced-motion),
+//          restoreBlendFunc (default true; false: see GL state below) }
 //
 // rect = {
 //   x, y, w, h,          framebuffer px, y down, relative to `viewport` (the same units as your gl.viewport)
@@ -47,8 +49,11 @@
 // vertex array bindings, the active texture unit and the TEXTURE_2D bindings it uses, BLEND (enable, func,
 // equation) and DEPTH_TEST. It reads the bound framebuffer, scissor and colour mask but never changes them, so it
 // draws into whatever you have bound. Atlas copies also save and restore the framebuffer binding, viewport and
-// SCISSOR_TEST. Requires instancing and vertex array objects (WebGL2, or ANGLE_instanced_arrays +
-// OES_vertex_array_object) and vertex texture fetch; otherwise `renderer.supported` is false and draw() is a no-op.
+// SCISSOR_TEST. Reading the blend func/equation back costs synchronous GPU round trips every draw, so a caller that
+// sets its own blend func before blending (or never blends) should pass restoreBlendFunc: false; draw() then leaves
+// the blend func at (ONE, ONE_MINUS_SRC_ALPHA) and the equation at FUNC_ADD, and restores everything else as above.
+// Requires instancing and vertex array objects (WebGL2, or ANGLE_instanced_arrays + OES_vertex_array_object) and
+// vertex texture fetch; otherwise `renderer.supported` is false and draw() is a no-op.
 (() => {
   const DURATION = 900;
   const ATLAS = 1024, CELL = 64, PER_ROW = ATLAS / CELL;
@@ -107,7 +112,7 @@ void main(){
   float wireA = (uLight > .5 ? .5 : .46) * sh;
   float aH = mix(wireA * wire, mix(1., .95, ce), tone) * unlock, aW = wireA * wire * (1. - tone);
   float sp = uPitch / sqrt(max(density, .02));
-  float wsz = 3. * uDpr;
+  float wsz = min(3. * uDpr, max(uDpr, uPitch * .55));
   float size = mix(wsz, sp * (.05 + pow(max(ink, 0.), .85)) * (1. + .4 * sin(3.14159 * ce)) * (1. + 1.7 * merge), tone);
   if (aW > aH) { size = wsz; col = wc; }
   float a = max(aH, aW) * fade * iT.w;
@@ -147,8 +152,8 @@ void main(){ vec4 c = vec4(0.);
   function lattice() {
     const n = NODES * NODES, N = new Float32Array(n * 4), R = new Float32Array(n * 2);
     let h = 0x9e3779b9; const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return (h >>> 0) / 4294967296; };
-    let k = 0;
-    for (let i = 0; i < NODES; i++) for (let j = 0; j < NODES; j++, k++) {
+    let k = 0;   // row-major, so the first r * NODES points are the first r rows (short rects draw fewer)
+    for (let j = 0; j < NODES; j++) for (let i = 0; i < NODES; i++, k++) {
       N[k * 4] = i; N[k * 4 + 1] = j; N[k * 4 + 2] = (rnd() - 0.5) * 0.25; N[k * 4 + 3] = (rnd() - 0.5) * 0.25;
       // Same hierarchy as the intro: every 4th node first (1/16), then every 2nd (1/4), then the rest.
       const lv = i % 4 === 0 && j % 4 === 0 ? 0 : i % 2 === 0 && j % 2 === 0 ? 1 : 2;
@@ -159,7 +164,7 @@ void main(){ vec4 c = vec4(0.);
   }
 
   function createRenderer(gl, opts = {}) {
-    const dead = { supported: false, draw() {}, dispose() {}, setColorSource() {}, releaseColor() {} };
+    const dead = { supported: false, pitch: 0, draw() {}, dispose() {}, setColorSource() {}, releaseColor() {}, setPitch() {} };
     if (!gl) return dead;
     const gl2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
     const inst = gl2 ? null : gl.getExtension("ANGLE_instanced_arrays");
@@ -191,8 +196,9 @@ void main(){ vec4 c = vec4(0.);
     const U = loc(P, ["uView", "uPitch", "uT", "uLight", "uMaxPt", "uDpr", "uReduce", "uAtlas", "uVp"]);
     const UU = loc(PU, ["uView", "uS"]), UC = loc(PC, ["uSrc", "uSub"]);
 
-    const dpr = opts.dpr || Math.min((typeof devicePixelRatio === "number" && devicePixelRatio) || 1, 2);
-    const pitch = opts.pitch || 5.5 * dpr;
+    let dpr = opts.dpr || Math.min((typeof devicePixelRatio === "number" && devicePixelRatio) || 1, 2);
+    let pitch = opts.pitch || 5.5 * dpr;
+    const keepBlend = opts.restoreBlendFunc !== false;
     const maxPt = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1] || 64;
     const buffers = [], vaos = [];
     const saved = save();
@@ -232,16 +238,19 @@ void main(){ vec4 c = vec4(0.);
     let frameNo = 0;
     restore(saved);
 
+    // Bindings and enable flags are answered from the browser's client-side cache. Blend func/equation and the
+    // viewport are synchronous GPU round trips (a pipeline stall mid-frame), so they are read only when needed.
     function save() {
       return {
         prog: gl.getParameter(gl.CURRENT_PROGRAM), buf: gl.getParameter(gl.ARRAY_BUFFER_BINDING), vao: gl.getParameter(G.VAO_BINDING),
         unit: gl.getParameter(gl.ACTIVE_TEXTURE), fb: gl.getParameter(gl.FRAMEBUFFER_BINDING), tex: [],
         blend: gl.isEnabled(gl.BLEND), depth: gl.isEnabled(gl.DEPTH_TEST), scissor: gl.isEnabled(gl.SCISSOR_TEST),
-        bf: [gl.BLEND_SRC_RGB, gl.BLEND_DST_RGB, gl.BLEND_SRC_ALPHA, gl.BLEND_DST_ALPHA].map((k) => gl.getParameter(k)),
-        be: [gl.getParameter(gl.BLEND_EQUATION_RGB), gl.getParameter(gl.BLEND_EQUATION_ALPHA)],
-        vp: gl.getParameter(gl.VIEWPORT),
+        bf: keepBlend ? [gl.BLEND_SRC_RGB, gl.BLEND_DST_RGB, gl.BLEND_SRC_ALPHA, gl.BLEND_DST_ALPHA].map((k) => gl.getParameter(k)) : null,
+        be: keepBlend ? [gl.getParameter(gl.BLEND_EQUATION_RGB), gl.getParameter(gl.BLEND_EQUATION_ALPHA)] : null,
+        vp: null,
       };
     }
+    const saveVp = (s) => { if (!s.vp) s.vp = gl.getParameter(gl.VIEWPORT); };
     function saveUnit(s, u) {
       if (s.tex[u] !== undefined) return;
       gl.activeTexture(gl.TEXTURE0 + u); s.tex[u] = gl.getParameter(gl.TEXTURE_BINDING_2D);
@@ -250,11 +259,11 @@ void main(){ vec4 c = vec4(0.);
       for (let u = 0; u < s.tex.length; u++) if (s.tex[u] !== undefined) { gl.activeTexture(gl.TEXTURE0 + u); gl.bindTexture(gl.TEXTURE_2D, s.tex[u]); }
       gl.activeTexture(s.unit);
       G.bindVao(s.vao); gl.bindBuffer(gl.ARRAY_BUFFER, s.buf); gl.useProgram(s.prog);
-      gl.bindFramebuffer(gl.FRAMEBUFFER, s.fb); gl.viewport(s.vp[0], s.vp[1], s.vp[2], s.vp[3]);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, s.fb); if (s.vp) gl.viewport(s.vp[0], s.vp[1], s.vp[2], s.vp[3]);
       s.blend ? gl.enable(gl.BLEND) : gl.disable(gl.BLEND);
       s.depth ? gl.enable(gl.DEPTH_TEST) : gl.disable(gl.DEPTH_TEST);
       s.scissor ? gl.enable(gl.SCISSOR_TEST) : gl.disable(gl.SCISSOR_TEST);
-      gl.blendFuncSeparate(s.bf[0], s.bf[1], s.bf[2], s.bf[3]); gl.blendEquationSeparate(s.be[0], s.be[1]);
+      if (s.bf) { gl.blendFuncSeparate(s.bf[0], s.bf[1], s.bf[2], s.bf[3]); gl.blendEquationSeparate(s.be[0], s.be[1]); }
     }
     function cellUv(c) { const x = (c % PER_ROW) * CELL, y = Math.floor(c / PER_ROW) * CELL; return [x / ATLAS, y / ATLAS, (x + CELL) / ATLAS, (y + CELL) / ATLAS]; }
     function takeCell() {
@@ -270,7 +279,7 @@ void main(){ vec4 c = vec4(0.);
       let e = cells.get(key);
       if (!e) {
         e = { cell: takeCell(), used: frameNo }; cells.set(key, e);
-        saveUnit(s, 0); gl.activeTexture(gl.TEXTURE0);
+        saveUnit(s, 0); saveVp(s); gl.activeTexture(gl.TEXTURE0);
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
         const x = (e.cell % PER_ROW) * CELL, y = Math.floor(e.cell / PER_ROW) * CELL;
         gl.viewport(x, y, CELL, CELL); gl.disable(gl.SCISSOR_TEST); gl.disable(gl.BLEND);
@@ -297,7 +306,7 @@ void main(){ vec4 c = vec4(0.);
       const s = save();
       const tile = NODES * pitch, red = reduced();
       // Pack per-tile instances, culling rects and tiles outside the viewport.
-      let n = 0, nu = 0;
+      let n = 0, nu = 0, rows = 0;
       const hand = [];
       for (const r of rects) {
         if (!(r.w > 0 && r.h > 0) || r.x > vw || r.y > vh || r.x + r.w < 0 || r.y + r.h < 0) continue;
@@ -313,6 +322,7 @@ void main(){ vec4 c = vec4(0.);
           if (underlay && r.texture && ia > 0.002) hand.push([r, ia]);
           if (p >= 1) continue;
         }
+        rows = Math.max(rows, r.h >= tile ? NODES : Math.min(NODES, Math.ceil(r.h / pitch) + 2));
         const tx0 = Math.max(0, Math.floor(-r.x / tile)), ty0 = Math.max(0, Math.floor(-r.y / tile));
         const tx1 = Math.min(Math.ceil(r.w / tile), Math.ceil((vw - r.x) / tile)), ty1 = Math.min(Math.ceil(r.h / tile), Math.ceil((vh - r.y) / tile));
         for (let tx = tx0; tx < tx1; tx++) for (let ty = ty0; ty < ty1; ty++) {
@@ -361,7 +371,7 @@ void main(){ vec4 c = vec4(0.);
         gl.uniform1f(U.uPitch, pitch); gl.uniform1f(U.uDpr, dpr); gl.uniform1f(U.uMaxPt, maxPt);
         gl.uniform1f(U.uT, ((now != null ? now : performance.now()) - t0) / 1000);
         gl.uniform1f(U.uLight, light() ? 1 : 0); gl.uniform1f(U.uReduce, red ? 1 : 0);
-        G.drawInst(gl.POINTS, 0, L.n, n);
+        G.drawInst(gl.POINTS, 0, rows * NODES, n);
       }
       restore(s);
       // Release colour cells nobody has drawn for a while (~2 s at 60 fps).
@@ -395,7 +405,10 @@ void main(){ vec4 c = vec4(0.);
       gl.deleteTexture(atlas); gl.deleteFramebuffer(fbo);
       cells.clear();
     }
-    return { supported: true, pitch, draw, dispose, setColorSource, releaseColor: (key) => { const e = cells.get(key); if (e) { cells.delete(key); free.push(e.cell); } } };
+    return {
+      supported: true, get pitch() { return pitch; }, setPitch: (px, d) => { if (px > 0) pitch = px; if (d > 0) dpr = d; },
+      draw, dispose, setColorSource, releaseColor: (key) => { const e = cells.get(key); if (e) { cells.delete(key); free.push(e.cell); } },
+    };
   }
 
   window.StippleFill = { createRenderer, imageAlpha, DURATION, PHASES: W };

@@ -40,7 +40,7 @@
     gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true, antialias: false }) ||
       canvas.getContext("webgl", { premultipliedAlpha: true, alpha: true, antialias: false });
     const dpr = Math.min(devicePixelRatio || 1, 2);
-    renderer = SF.createRenderer(gl, { underlay: false, dpr, pitch: cfg.pitch ? cfg.pitch * dpr : 0 });
+    renderer = SF.createRenderer(gl, { underlay: false, dpr, pitch: cfg.pitch ? cfg.pitch * dpr : 0, restoreBlendFunc: false });
     if (!renderer.supported) canvas.remove();
     return renderer.supported;
   }
