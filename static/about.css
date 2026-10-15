@@ -24,19 +24,23 @@ section { padding:120px 0; }
 .band { margin-top:auto; flex:none; height:var(--bh); overflow:hidden; position:relative; }
 .band .reel { position:absolute; inset:0 auto 0 0; display:flex; height:100%; width:max-content; animation:drift 260s linear infinite; will-change:transform; }
 .band img { height:100%; width:auto; display:block; max-width:none; }
-/* Reflection under the ribbon, matching the live viewer (alpha .55 at the edge, exp falloff, lifted exposure).
-   Pre-baked: a 1/8-res flipped, blurred copy (5 KB) drifting in lockstep with the art; no runtime filters. */
-.band-refl { flex:none; height:calc(var(--bh) * .42); overflow:hidden; position:relative; pointer-events:none;
-  -webkit-mask-image:linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.2) 35%, transparent); mask-image:linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.2) 35%, transparent); }
-.band-refl .reel { position:absolute; top:0; left:0; display:flex; height:var(--bh); width:max-content; animation:drift 260s linear infinite; will-change:transform; }
-.band-refl img { height:100%; width:auto; aspect-ratio:6712/600; display:block; max-width:none; }
+/* Canvas ribbon + production reflection (about-hero.js, refl.js). The canvas runs past the hero bottom so the
+   mirror's falloff below the band is never cut off; content stacks above it. */
+.hero { position:relative; }
+.hero .wrap { position:relative; z-index:1; }
+.band { z-index:1; }
+main { position:relative; z-index:1; }
+.hero-cv, .hero > #refl { position:absolute; left:0; top:0; z-index:0; pointer-events:none; }
+.hero-cv { width:100%; height:calc(100% + var(--bh) * 1.05); }
+.hero.cv-on .band .reel { visibility:hidden; animation:none; }
+.band-below { flex:none; height:calc(var(--bh) * .42); }
 .band .live { position:absolute; left:28px; bottom:20px; z-index:2; color:#fff; font-size:12px; display:flex; gap:8px; align-items:center; text-shadow:0 1px 8px rgba(0,0,0,.6); }
 .dot { width:6px; height:6px; border-radius:50%; background:#6ee7a8; box-shadow:0 0 10px #6ee7a8; animation:pulse 2.4s ease-in-out infinite; }
 .band .cap { position:absolute; right:28px; bottom:20px; z-index:2; color:rgba(255,255,255,.88); font-size:12px; text-shadow:0 1px 8px rgba(0,0,0,.6); }
 @keyframes drift { to { transform:translateX(-50%); } }
 @keyframes pulse { 50% { opacity:.45; } }
 @media (prefers-reduced-motion: reduce) {
-  .band .reel, .band-refl .reel { animation-duration:2400s; }
+  .band .reel { animation-duration:2400s; }
   .reveal { opacity:1 !important; transform:none !important; transition:none !important; filter:none !important; }
   .step[data-parallax], .how-fuel[data-parallax] { transform:none !important; }
 }
@@ -176,30 +180,7 @@ section { padding:120px 0; }
 @media (max-width: 860px) { .share { grid-template-columns:1fr; gap:28px; } .drawer { width:56%; } }
 
 
-/* Tapestry lights: soft colour glow spilling above the band, a few twinkling motes, a slow sheen. Opacity/transform only. */
-.band { overflow:hidden; overflow:clip visible; }
-.band .glow { position:absolute; left:0; right:0; bottom:100%; height:140px; pointer-events:none; overflow:hidden; opacity:.5;
-  -webkit-mask-image:linear-gradient(to top, #000, transparent); mask-image:linear-gradient(to top, #000, transparent); }
-.band .glow i { position:absolute; bottom:-90px; width:46vw; height:180px; border-radius:50%; will-change:transform;
-  background:radial-gradient(closest-side, rgba(255,176,82,.55), transparent); animation:ab-drift 38s ease-in-out infinite alternate; }
-.band .glow i:nth-child(1) { left:-6vw; } .band .glow i:nth-child(2) { left:28vw; background:radial-gradient(closest-side, rgba(70,110,255,.45), transparent); animation-duration:47s; animation-delay:-12s; }
-.band .glow i:nth-child(3) { left:60vw; animation-duration:42s; animation-delay:-25s; }
-.band .lights { position:absolute; inset:0; overflow:hidden; pointer-events:none; mix-blend-mode:screen; }
-.band .lights i { position:absolute; width:110px; height:110px; margin:-55px; border-radius:50%; opacity:0; will-change:opacity, transform;
-  background:radial-gradient(closest-side, rgba(255,214,150,.55), rgba(255,170,80,.12) 45%, transparent); animation:twinkle 9s ease-in-out infinite; }
-.band .lights i:nth-child(1) { left:8%; top:30%; } .band .lights i:nth-child(2) { left:21%; top:68%; animation-delay:-2s; animation-duration:11s; }
-.band .lights i:nth-child(3) { left:36%; top:22%; animation-delay:-5s; } .band .lights i:nth-child(4) { left:49%; top:58%; animation-delay:-7s; animation-duration:12s; }
-.band .lights i:nth-child(5) { left:62%; top:35%; animation-delay:-3s; animation-duration:10s; } .band .lights i:nth-child(6) { left:74%; top:72%; animation-delay:-8s; }
-.band .lights i:nth-child(7) { left:86%; top:26%; animation-delay:-1s; animation-duration:13s; } .band .lights i:nth-child(8) { left:94%; top:60%; animation-delay:-6s; }
-.band .sheen { position:absolute; inset:0; overflow:hidden; pointer-events:none; }
-.band .sheen::before { content:""; position:absolute; top:0; bottom:0; left:0; width:30%; will-change:transform;
-  background:linear-gradient(100deg, transparent, rgba(255,240,215,.07) 45%, rgba(255,240,215,.1) 50%, transparent); animation:sheen 14s ease-in-out infinite; transform:translateX(-120%); }
-@keyframes twinkle { 0%,100% { opacity:0; transform:scale(.7); } 50% { opacity:.85; transform:scale(1); } }
-@keyframes sheen { 0%,55% { transform:translateX(-120%); } 100% { transform:translateX(420%); } }
-@keyframes ab-drift { from { transform:translate3d(-4vw,0,0) scale(1); } to { transform:translate3d(5vw,8%,0) scale(1.12); } }
-@media (prefers-color-scheme: light) { .band .glow { opacity:.38; } }
-@media (prefers-reduced-motion: reduce) { .band .glow i, .band .lights i, .band .sheen::before { animation:none; } .band .lights i { opacity:.35; } }
-@media (max-width: 860px) { .hero { --bh:clamp(300px, 52svh, 520px); } .band .glow { height:90px; } }
+@media (max-width: 860px) { .hero { --bh:clamp(300px, 52svh, 520px); } }
 
 /* Live band counter under the CTA */
 .tcount { margin-top:18px; font-size:13.5px; color:var(--muted); }
