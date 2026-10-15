@@ -61,3 +61,22 @@ body.u-tl, body.u-tl * { -webkit-backdrop-filter:none !important; backdrop-filte
 body.u-tl { --glass:color-mix(in srgb, var(--bg) 90%, transparent); --glass-strong:color-mix(in srgb, var(--bg) 95%, transparent); }
 body.u-tl .dock, body.u-tl .dock *, body.u-tl .top, body.u-tl .top *, body.u-tl .pop { box-shadow:none !important; text-shadow:none !important; }
 body.u-tl .veil { display:none; }
+/* Timeline never auto-hides its UI (idle hiding is for live watching only). */
+body.u-tl.idle .ui, body.u-tl.idle .dock, body.u-tl.idle .top .top-right, body.u-tl.idle .snd-btn, body.u-tl.idle #account-btn { opacity:1 !important; pointer-events:auto !important; translate:none !important; }
+body.u-hold #live-btn { opacity:0 !important; pointer-events:none !important; }
+/* Control hints: static text, opacity-only fades (with the live UI's idle fade in live; always on in the timeline). */
+.u-hints { position:fixed; right:28px; bottom:34px; display:flex; gap:18px; font-size:11px; letter-spacing:.01em; color:var(--muted); opacity:.55; pointer-events:none; white-space:nowrap; z-index:1; }
+.u-coarse { display:none; }
+@media (pointer: coarse) { .u-fine { display:none; } .u-coarse { display:inline; } }
+body.idle:not(.u-tl) .u-hints, body:has(#drawer.open) .u-hints, body.chat-open .u-hints, body.intro .u-hints, body.saver .u-hints { opacity:0 !important; }
+body.u-tl.idle .u-hints { opacity:.55 !important; }
+@media (max-width:1100px) { .u-hints { display:none; } body.u-tl .u-hints { display:flex; right:50%; transform:translateX(50%); top:calc(58px + env(safe-area-inset-top)); bottom:auto; } }
+html body.u-tl.idle .top.ui, html body.u-tl.idle .top .top-right, html body.u-tl.idle .top .fs-btn, html body.u-tl.idle .top-fs, html body.u-tl.idle .panel-btn,
+html body.u-tl.idle .top .status, html body.u-tl.idle .top .fuel-chip, html body.u-tl.idle .chat-toggle, html body.u-tl.idle .top .snd-btn { opacity:1 !important; pointer-events:auto !important; translate:none !important; }
+html body.u-tl.ambient .ui, html body.u-tl.saver .ui { opacity:1 !important; }
+/* Caption: the date on its own fixed line (tabular figures, never shifts while scrubbing), the title below. */
+html body.u-tl .dock .now.u-now { flex-direction:column; align-items:center; justify-content:flex-end; gap:3px; height:38px; padding:0 6px 10px; overflow:hidden; }
+.u-now .now-time { display:block; width:16ch; text-align:center; font-variant-numeric:tabular-nums; color:var(--muted); font-size:11px; line-height:14px; height:14px; white-space:nowrap; }
+#u-now-title { display:block; max-width:100%; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:16px; height:16px; }
+html body.u-tl .dock .now.u-now { height:46px; padding:0 6px 8px; }
+#u-now-title { line-height:19px; height:19px; }

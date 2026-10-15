@@ -157,9 +157,9 @@
     setText(uClock, t ? (today ? "" : fmtD.format(t) + ", ") + fmtT.format(t) : "");
     const i = bs(scenes, cam.cx) - 1, sc = scenes[i], on = sc && cam.cx < sc.g + sc.len + 2;
     const TV = window.TapestryView, tip = !on && cam.cx > (scenes.length ? scenes[scenes.length - 1].g : 0);
-    setText(uTitle, on ? sc.title : tip && TV.title ? TV.title() || "—" : "—");
+    setText(uTitle, on ? sc.title + (sc.user ? " · an idea" : "") : tip && TV.title ? TV.title() || "—" : "—");
     const e = eras.find((x) => cam.cx >= x.g0 && cam.cx < x.g0 + x.n) || eras[eras.length - 1];
-    setText(uSub, (on && sc.user ? "an idea · " : "") + (t ? (t.getFullYear() === new Date().getFullYear() ? fmt : fmtY).format(t) : ""));
+    setText(uSub, (t ? (t.getFullYear() === new Date().getFullYear() ? fmt : fmtY).format(t) : ""));
     const al = (t ? fmt.format(t) : "Timeline") + (on ? ", " + sc.title : ""); if (cv._al !== al) { cv._al = al; cv.setAttribute("aria-label", al); }
   }
   const pool = [], markHost = $("u-marks"); let groups = [], lastGroupS = 0, lastGroupCx = 0;
@@ -227,6 +227,7 @@
     zoomAt(d[n] / cam.ts, sx ?? W / 2);
   }
 
+  const held = new Set();
   // ---------- mode switching ----------
   let revealT = 0;
   function setTimelineUi(on) {
@@ -251,26 +252,47 @@
     dirty = true; frameNow(); setTimelineUi(true); kick(); urlSoon();
   }
   let passLive = false;
+  // Return to live, continuous: zoom the timeline to the live scale at the user's own position (or, near the front,
+  // follow the live viewer's moving centre), then hand the live viewer that exact position (1:1 drag API, no seek
+  // animation), uncover it, hold still ~0.8 s, and only then release it so its own spring eases live motion back in.
+  let followLive = false, handing = false;
   function toLive(g) {
-    if (mode !== "tl") return;
-    const lm = liveMax(), TV = window.TapestryView;
-    // Zoom back toward the live scale first (short), then hand over to the live viewer at that moment.
-    const atEdge = g >= lm - Math.max(40, W / sLive);
-    cam.ts = sLive; cam.tcx = atEdge ? lm - W / 2 / sLive * 0.35 : g; clamp(); kick();
+    if (mode !== "tl" || handing) return;
+    handing = true; setPlay(false); cam.vx = 0; held.clear();
+    const TV = window.TapestryView, L0 = readLive();
+    const atEdge = !L0 || g >= L0.g - Math.max(24, W / sLive);
+    followLive = atEdge; cam.ts = sLive; if (!atEdge) cam.tcx = g; clamp(); kick();
     const t0 = performance.now();
-    (function wait() { if (!RM && Math.abs(Math.log(cam.s / sLive)) > 0.04 && performance.now() - t0 < 900) return setTimeout(wait, 30); handover(); })();
-    function handover() {
-      if (atEdge) { const b = $("live-btn"); if (b && !(TV.live && TV.live())) { passLive = true; b.click(); passLive = false; } }
-      else if (window.TapestrySeek && g >= SDXL0()) window.TapestrySeek(Math.round(g - SDXL0() - 4), Math.round(g - SDXL0() + 4));
-      mode = "live"; entry = null; setTimelineUi(false); setPlay(false); urlSoon();
-    }
+    (function wait() {
+      const done = Math.abs(Math.log(cam.s / sLive)) < 0.01 && Math.abs(cam.tcx - cam.cx) * cam.s < 0.75;
+      if (!RM && !done && performance.now() - t0 < 1400) return requestAnimationFrame(wait);
+      cam.s = cam.ts; cam.cx = cam.tcx; frameNow();
+      const L = readLive();
+      // 1:1 drag to the exact unit (the drag API's px scale can differ from the band's by the ribbon factor: measure
+      // the gain from the first move and correct on the next frames, still under the cover)
+      let gain = 1, req = 0, from = L ? L.g : 0;
+      if (TV.wheelStart) { TV.wheelStart(); if (L) { req = cam.cx - L.g; TV.wheelMove(-req * sLive); } }
+      document.body.classList.add("u-hold"); // the live viewer is briefly "rewound" while it holds: no pill flash
+      const t1 = performance.now();
+      (function aligned() { // uncover only once the live viewer draws the same strip under the needle
+        const L2 = readLive();
+        if (L2 && Math.abs(L2.g - cam.cx) * sLive > 1 && performance.now() - t1 < 500) {
+          if (req && Math.abs(L2.g - from) > 1e-3) { gain = (L2.g - from) / req; req = 0; }
+          if (!req && TV.wheelMove) { const d = (cam.cx - L2.g) / (gain || 1); from = L2.g; req = d; TV.wheelMove(-d * sLive); gain = gain || 1; }
+          return requestAnimationFrame(aligned);
+        }
+        followLive = false; handing = false;
+        mode = "live"; entry = null; setTimelineUi(false); urlSoon();
+        setTimeout(() => { document.body.classList.remove("u-hold"); if (TV.wheelEnd) TV.wheelEnd(true); }, RM ? 0 : 800);
+      })();
+    })();
   }
 
   // ---------- frame loop (on demand) ----------
   let last = 0, dragging = false, lastHud = 0, ewma = 0.016, slow = 0, dprCap = 2;
   const perf = { frames: [], on: false };
-  const held = new Set();
   function step(dt) {
+    if (followLive) { const L = readLive(); if (L) cam.tcx = L.g; }
     if (held.size) { if (held.has("w")) zoomAt(Math.exp(2.2 * dt), W / 2); if (held.has("s")) zoomAt(Math.exp(-2.2 * dt), W / 2);
       const dir = (held.has("d") ? 1 : 0) - (held.has("a") ? 1 : 0); if (dir) { cam.tcx += dir * 1100 / cam.ts * dt; clamp(); } }
     if (playing && !dragging) { cam.tcx += rateAt(cam.tcx) * dt; if (cam.tcx >= liveMax() - 1) setPlay(false); }
@@ -401,7 +423,7 @@
   const el = (tag, cls, html) => { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; };
   const clock = $("top-clock"), uClock = el("span", "top-clock u-only-i"); uClock.setAttribute("aria-label", "Time on the timeline"); clock && clock.after(uClock);
   const nowRow = document.querySelector(".dock .now"), uNow = el("div", "now u-now");
-  const uTitle = el("span"), uSub = el("span", "now-time"); uTitle.id = "u-now-title"; uNow.append(uTitle, uSub); nowRow && nowRow.after(uNow);
+  const uTitle = el("span"), uSub = el("span", "now-time"); uTitle.id = "u-now-title"; uNow.append(uSub, uTitle); nowRow && nowRow.after(uNow); // date line (fixed), then the title line
   const ICON = (d) => `<svg viewBox="0 0 24 24">${d}</svg>`;
   const mk = (id, title, svg, extra) => { const b = el("button", "icon sec u-only" + (extra ? " " + extra : ""), ICON(svg)); b.type = "button"; b.id = id; b.title = title; b.setAttribute("aria-label", title); return b; };
   const bOut = mk("u-zout", "Zoom out (−)", '<path d="M5 12h14"/>', "u-desk"), bIn = mk("u-zin", "Zoom in (+)", '<path d="M5 12h14M12 5v14"/>', "u-desk");
