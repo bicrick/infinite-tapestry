@@ -292,3 +292,50 @@ nothing durable to the manifest (tiles it wrote are redone next time). The gap o
 Suggested fix (not applied): check the budget inside the tile loop and persist progress (`man.units` = last fully
 built unit, or a resumable cursor like `full`), build L1 for a bounded batch then the matching parents, and have the
 client read lod2 via `/api/tm`. Optionally schedule build_pyramid.py or retire the R2 copy.
+
+## 14. Visual parity + hooks for UI Tapestry (2026-10-15)
+
+### Mismatched blocks / seams: root cause
+- **Server pyramid (tm/lod L1, built by scripts/tm/build_pyramid.py)** made each L1 unit from the pod's `live-sdxl/lod/1`
+  tiles sliced per unit, falling back to a **core-only crop** of the strip. A pod tile's first strip has its left
+  inpainting overlap outside that tile, so slicing drops it: you get **a hard edge every 16 strips, and wherever the fallback ran**.
+  That's what shows until full-res loads, and every coarser level inherits it. Example: tile 1/003125 at u≈50005.
+- **OG era (units 0–1268, Oct 12 ~12:59–1:41 AM PT)**: the strips have overlap 0, so they genuinely abut with hard edges.
+  Prod shows the same thing (Patrick's screenshot at Oct 12 1:02 AM is this era).
+- **Client fixes:**
+  - Exact tile UVs, clamped to the outermost texel centres of the *filled* span (no LINEAR bleed into unfilled/black texels).
+  - Use L0 whenever L1 would be upscaled (was: only above 80 px/unit).
+- **Pyramid fix (committed, NOT run):** L1 composites full strips with their overlap in g order, plus the next tile's first strip.
+  Pod slices are only a fallback. Applying it needs `build_pyramid.py --full`, which rewrites R2 tm/lod. **Needs Patrick's OK.**
+- **Same class at the live edge:** the pod's own p1/p2/p3 chunk tiles (live-sdxl/lod/n) lose the overlap at chunk boundaries. Not fixed yet.
+
+### Automated visual test
+- `scripts/visual/render.mjs <base> <out>` renders `/one-3c9d1f.html?t=s<g>&z=<z>`:
+  - Every position × zoom (0…-6), in coarse-only (strips/chunks blocked) and sharp mode.
+  - Env vars: `DPR=2`, `POS`, `ZS`.
+- `scripts/visual/compare.py <out>` builds ground truth from the R2 sources:
+  - L0 strips placed like the classic renderer (`x0 = g*core - overlap`, in g order), or L1 tiles for wide spans.
+  - Fails on any of: MAE > 12, worst 32-px block MAE > 30, or a column edge sharper than the reference has within ±3 px.
+  - Writes `*_vs_ref.png` (ours on top, reference below) and report.json.
+
+### Hooks / mount points for UI Tapestry (renderer side only)
+- **DOM:**
+  - `<canvas id="one-c">`
+  - `.one-ui` overlay root (pointer-events none; markers mount here)
+  - `#one-perf`
+  - CSS vars `--band-y`, `--band-h0`, `--zp`
+- **Camera (`Tapestry.camera`):**
+  - `get()` returns `{centerTime, zoom, s, span, head, followLive, playing, zoomProgress, target}`
+  - Events: `on("change"|"live"|"settle"|"play")`
+  - Controls: `goLive()`, `play()`, `pause()`, `target({centerTime, zoom})`, `set()`, `nudge()`
+- **Renderer (`Tapestry.renderer`):**
+  - `onTick(fn(dt, now) -> needsFrames)`, `kick()`, `invalidate()`, `addPass()`
+  - `lastCtx.band` (the band rect in CSS px)
+  - `perf.start/stop`
+- **Live edge:** `Tapestry.edge.register(fn)`, see §12.
+- **Ingest (`Tapestry.ingest`):**
+  - `on("boot"|"head"|"strip"|"caption"|"clock"|"msg"|"config"|"ws")`
+  - `send(obj)`, `wsUrl()`, `maxUnit()`
+- **Tiles (`Tapestry.tiles`):** `loadState()`, `coverage`, `hasAnyTexture()`
+- `Tapestry.config.Z_EVENTS`
+- The ui/* files on this branch (bar, composer, caption, events, chrome, shim) are a wiring reference only. UI Tapestry owns them from here.
