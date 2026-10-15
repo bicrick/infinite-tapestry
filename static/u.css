@@ -11,7 +11,7 @@ body.u-tl #view, body.u-tl > canvas#refl, body.u-tl #amb { visibility:hidden; }
 body.u-tl .u-only { display:inline-flex !important; }
 body.u-tl .u-only-i { display:inline !important; }
 body.u-tl .u-now { display:flex !important; }
-body.u-tl #top-clock, body.u-tl .dock .now:not(.u-now), body.u-tl #speed-btn, body.u-tl #skip, body.u-tl #speed-pop { display:none !important; }
+body.u-tl .dock .now:not(.u-now), body.u-tl #speed-btn, body.u-tl #skip, body.u-tl #speed-pop { display:none !important; }
 #u-now-title { color:var(--fg); overflow:hidden; text-overflow:ellipsis; }
 .icon.u-only.on { color:var(--fg); }
 .u-pop { width:300px; max-height:56vh; overflow:auto; }

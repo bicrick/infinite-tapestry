@@ -154,7 +154,7 @@
     // Same slots as the live viewer: the clock by the mark shows the moment under the needle, the caption above the
     // composer shows its scene. Content changes, location doesn't.
     const t = unitTime(cam.cx), today = t && t.toDateString() === new Date().toDateString();
-    setText(uClock, t ? (today ? "" : fmtD.format(t) + ", ") + fmtT.format(t) : "");
+    tlClock = t ? (today ? "" : fmtD.format(t) + ", ") + fmtT.format(t) : ""; if (document.body.classList.contains("u-tl")) (uClock.textContent !== tlClock && (uClock.textContent = tlClock));
     const i = bs(scenes, cam.cx) - 1, sc = scenes[i], on = sc && cam.cx < sc.g + sc.len + 2;
     const TV = window.TapestryView, tip = !on && cam.cx > (scenes.length ? scenes[scenes.length - 1].g : 0);
     setText(uTitle, on ? sc.title + (sc.user ? " · an idea" : "") : tip && TV.title ? TV.title() || "—" : "—");
@@ -233,8 +233,8 @@
   let revealT = 0, instant = false;
   function setTimelineUi(on) {
     clearTimeout(revealT);
-    if (on && instant) { instant = false; document.body.classList.add("u-tl"); return; }
-    if (!on) { document.body.classList.remove("u-tl"); calPop.classList.add("hidden"); return; }
+    if (on && instant) { instant = false; document.body.classList.add("u-tl"); if (tlClock) (uClock.textContent !== tlClock && (uClock.textContent = tlClock)); return; }
+    if (!on) { document.body.classList.remove("u-tl"); wallClock(); calPop.classList.add("hidden"); return; }
     const t0 = performance.now();
     (function reveal() { // keep the live canvas on screen until the timeline can show the same strips (<= 450 ms)
       if (mode !== "tl") return;
@@ -433,7 +433,11 @@
 
   // ---------- controls: folded into the live viewer's own chrome (same components, classes, sizes) ----------
   const el = (tag, cls, html) => { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; };
-  const clock = $("top-clock"), uClock = el("span", "top-clock u-only-i"); uClock.setAttribute("aria-label", "Time on the timeline"); clock && clock.after(uClock);
+  // One header: the live page's own #top-clock shows the time under the needle in the timeline, wall time in live.
+  const uClock = $("top-clock") || el("span"), wallFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+  let tlClock = "";
+  const wallClock = () => { uClock.textContent = wallFmt.format(new Date()); };
+  setInterval(() => { if (document.body.classList.contains("u-tl")) { if (tlClock && uClock.textContent !== tlClock) uClock.textContent = tlClock; } }, 1000);
   const nowRow = document.querySelector(".dock .now"), uNow = el("div", "now u-now");
   const uTitle = el("span"), uSub = el("span", "now-time"); uTitle.id = "u-now-title"; uNow.append(uSub, uTitle); nowRow && nowRow.after(uNow); // date line (fixed), then the title line
   const ICON = (d) => `<svg viewBox="0 0 24 24">${d}</svg>`;
