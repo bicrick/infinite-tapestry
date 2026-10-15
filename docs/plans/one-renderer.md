@@ -1,6 +1,6 @@
 # One renderer, one camera, one UI (PLAN)
 
-Status: phases 0-1 built on branch `one-renderer` (2026-10-15). Hidden page `/one-3c9d1f.html`. Supersedes `unified-viewer.md` (two renderers + crossover). Nothing here is built.
+Status: phases 0-2 built on branch `one-renderer` (2026-10-15). Hidden page `/one-3c9d1f.html`. Supersedes `unified-viewer.md` (two renderers + crossover). Nothing here is built.
 Base: `main` @ e0dd089 (low-res fallback + `TapestryTimeline.hasAnyTexture`). Grain = PR #91.
 
 ## 0. The idea in one paragraph
@@ -212,3 +212,37 @@ the MacBook/iPhone rows still need running with `GPU=1` / Safari. Per segment: r
 
 One-renderer main-thread JS per frame p95: 0.1-1.5 ms (max 22 ms, one texture-upload frame under SwiftShader during
 zoom-out). Frames with bare background (true gaps) on the whole path: 0. Peak texture memory 85 MB (budget 192).
+
+## 11. Phase 2 (built 2026-10-15)
+- `static/one/live-ingest.js`: socket moved from client.js (protocol v2 unchanged): refs, binary strips, clock. Head =
+  eased live edge (server speed, clock corrections, never past the first non-resident strip; starts 2 strips back).
+- Tile store: L0 strips in 2048² atlas pages (one batched draw per page, overlap cross-fade ported from the classic
+  canvas); RGBA uploads; uploads + compositing share a per-frame budget (1 texture/frame while zooming fast).
+- Past the pyramid (the cron is ~8,000 strips behind right now: manifest 60,500 vs head ~69,100): complete live chunks
+  (p3/p2/p1) and the newest strips are composited client-side into L1..L7 via FBO and cascaded up level by level
+  (4x per step), with per-tile filled spans. Every level reaches the head; zoomed-out views include the newest minutes.
+- Camera: head = `ingest.headTime()`; at zoom 0 the head sits at the right screen edge (classic live framing), 80% when
+  zoomed out; followLive locks the centre to the head (no spring lag).
+- Grain programs compiled at boot (first gap frame was ~120 ms in SwiftShader). Adaptive dpr ignores boot/loading.
+
+### Edge hook (UI Tapestry owns the spawn-in visual)
+`Tapestry.edge.register(fn)`: ONE extra render pass on the shared context, called after tiles, before Grain.
+`fn(gl, strips, ctx) -> boolean (true = keep animating)`. BLEND is on (SRC_ALPHA, ONE_MINUS_SRC_ALPHA); restore it.
+`strips` (newest first; strips that arrived in the last 20 s and are near the screen):
+`{unit, world:{u0,u1} (units, u0 = g - overlap: the inpainted overlap that repaints the previous strip), rect / rectFb
+(that world rect on screen, CSS / framebuffer px), arrivedAt (performance.now ms), arrivedWall (epoch ms), texture
+(WebGLTexture atlas page or null before load), uv (whole strip image incl. overlap, or null), progress (0 announced,
+0.5 decoding, 1 resident), reveal (0..1, the tiles pass's own 600 ms fade)}`.
+`ctx = {headX, band {y,h}, worldToX(u), zoomProgress, live, dpr, W, H, t}`. Placeholder until registered: a 1 px
+faint line at the edge. `Tapestry.edge.last` exposes the latest values for debugging.
+
+### Phase 2 perf (SwiftShader, same harness; p95 / max / frames > 33 ms)
+| Segment | desktop 1440x900 @2x (3 runs) | phone 390x844 @3 |
+|---|---|---|
+| live 10 s | 100-133 / 117-183 / 109-118 (raster-bound: JS p95 0.4 ms) | 16.8 / 33.4 / 2 |
+| zoom out | 16.8 / 50-100 / 1-5 | 16.7 / 33.3 / 0 |
+| scrub | 16.8 / 16.8 / 0 | 16.7 / 16.8 / 0 |
+| Play | 16.8-33.4 / 33-50 / 0-7 | 16.8 / 16.8 / 0 |
+| Live | 33.3-33.4 / 33-50 / 2-16 | 16.7 / 16.8 / 0 |
+Desktop @2x live frames are software fill (2880x1800 every frame while following live) - needs real-GPU runs.
+Open: in 1 of 3 desktop runs, zoom-out/scrub at all-time showed Grain gaps (46-187 frames); not reproduced when settled.

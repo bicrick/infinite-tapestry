@@ -8,8 +8,7 @@
   const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const OMEGA = 16;           // rad/s: ~0.3 s to settle, no overshoot (critically damped)
   const Z_OUT = -1.5;         // zoomProgress reaches 1 here (UI morph is done)
-  const LIVE_MARGIN = 0.4;    // followLive: the head sits at 50% + 40% of the half-width = 70% across
-  const MAGNET_Z = 0.15;      // released within this zoom and near the head -> go live
+    const MAGNET_Z = 0.15;      // released within this zoom and near the head -> go live
   const ls = new Map();
   const emit = (n, a) => { const s = ls.get(n); if (s) for (const f of s) f(a); };
   // Critically damped spring, exact step: e = x - target.
@@ -27,9 +26,11 @@
   function clampT() {
     st.tz = Math.min(0, Math.max(st.zMin, st.tz));
     const sp = span(st.tz), h = st.head;
-    st.tc = sp >= h / 0.8 ? h / 2 : Math.min(h - sp * LIVE_MARGIN / 2, Math.max(sp * 0.3, st.tc));
+    st.tc = sp >= h / 0.8 ? h / 2 : Math.min(h - sp * rightK(st.tz), Math.max(sp * 0.3, st.tc));
   }
-  const liveCentre = () => st.head - span(st.tz) * LIVE_MARGIN / 2;
+  // The head sits at the right screen edge at zoom 0 (exactly like the classic live view) and at 80% when zoomed out.
+  const rightK = (z) => 0.5 - 0.2 * Math.min(1, Math.max(0, z / Z_OUT));
+  const liveCentre = () => st.head - span(st.tz) * rightK(st.tz);
   function leaveLive() { if (st.followLive) { st.followLive = false; emit("live", false); } } // instant, no rubber band
   const cam = {
     // Layout: called on resize / manifest. sLive = live px per unit (CSS), head = newest unit.
@@ -40,7 +41,7 @@
     setRate(fn) { st.rate = fn; },
     get() {
       const s = sOf(st.z);
-      return { centerTime: st.c, zoom: st.z, followLive: st.followLive, playing: st.playing, s, span: st.W / s,
+      return { head: st.head, centerTime: st.c, zoom: st.z, followLive: st.followLive, playing: st.playing, s, span: st.W / s,
         zoomProgress: Math.min(1, Math.max(0, st.z / Z_OUT)), velocity: st.vc, target: { centerTime: st.tc, zoom: st.tz } };
     },
     get zoomProgress() { return Math.min(1, Math.max(0, st.z / Z_OUT)); },
@@ -89,8 +90,11 @@
     goLive() { stopPlay(); st.anchor = null; st.tz = 0; st.followLive = true; st.tc = liveCentre(); clampT(); st.moving = true; emit("live", true); emit("change"); },
     magnet() { if (!st.followLive && st.tz > -MAGNET_Z && (st.head - st.tc) * sOf(0) < st.W) cam.goLive(); },
     // Advance one frame. Returns true while anything moves.
+    setHead(fn) { st.headFn = fn; },
     step(dt) {
-      if (st.followLive) st.tc = liveCentre();
+      let headMoved = false;
+      if (st.headFn) { const h = st.headFn(dt); if (h != null && h !== st.head) { st.head = h; headMoved = true; if (!st.followLive) clampT(); } }
+      if (st.followLive) { st.tc = liveCentre(); if (Math.abs(st.z - st.tz) < 1e-3 && !st.drag) { st.c = st.tc; st.vc = 0; } } // locked to the head: no spring lag
       if (st.playing && Math.abs(st.z - st.tz) < 0.01 && !st.drag) {
         st.tc += st.rate(st.tc) * dt; st.c = st.tc; st.vc = 0;
         if (st.tc >= liveCentre()) { cam.goLive(); }
@@ -101,7 +105,7 @@
       else if (!st.drag) [st.c, st.vc] = spring(st.c, st.vc, st.tc, dt);
       const s = sOf(st.z), still = Math.abs(st.z - st.tz) < 1e-4 && Math.abs(st.vz) < 1e-3 && Math.abs(st.c - st.tc) * s < 0.05 && Math.abs(st.vc) * s < 0.5;
       if (still) { st.z = st.tz; st.c = st.tc; st.vz = st.vc = 0; st.anchor = null; }
-      const moving = !still || st.playing || !!st.drag; // following live with a still head = idle (zero GPU)
+      const moving = !still || st.playing || !!st.drag || (st.followLive && headMoved); // following live with a still head = idle (zero GPU)
       if (st.moving && still && !st.playing) { st.moving = false; emit("settle"); }
       else if (!still) st.moving = true;
       return moving;

@@ -6,6 +6,8 @@
   T.passes = T.passes || {};
   T.passes.grain = {
     name: "grain", order: 20,
+    // Compile StippleFill's programs at boot (one 0-rect draw), not on the first frame that has a gap (~120 ms in SwiftShader).
+    warm(gl, dpr) { if (!r && window.StippleFill) { r = window.StippleFill.createRenderer(gl, { dpr: Math.min(2, dpr) }); try { r.draw([], { width: 1, height: 1 }, 0); } catch (_) {} } },
     draw(gl, f) {
       if (!window.StippleFill || !f.gaps || !f.gaps.length || !f.band || !f.band.h) return;
       if (!r) r = window.StippleFill.createRenderer(gl, { dpr: Math.min(2, f.dpr) });
