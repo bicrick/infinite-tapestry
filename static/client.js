@@ -305,10 +305,12 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     const sweepBlobs = (++evictTick % 60) === 0;
     for (const [i, e] of strips) {
       if (e.bitmap && (i < firstIdx - KEEP_DECODED || i > lastIdx + KEEP_DECODED)) {
+        if (e.reveal) { e.reveal.dispose(); e.reveal = null; }
         e.bitmap.close && e.bitmap.close();
         e.bitmap = null;
       }
       if (sweepBlobs && Math.abs(i - firstIdx) > KEEP_BLOBS && Math.abs(i - liveIdx) > KEEP_BLOBS) {
+        if (e.reveal) { e.reveal.dispose(); e.reveal = null; }
         if (e.bitmap) { e.bitmap.close && e.bitmap.close(); }
         strips.delete(i);
       }
@@ -695,6 +697,9 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     {
       let want = 0, have = 0;
       const stripLayer = zoom > 0.3;
+      const Reveal = window.TapestryStripReveal;
+      const revealOff = !Reveal || Reveal.reduce() || window.__noreveal;
+      const nowDraw = performance.now();
       for (let i = Math.max(firstIdx, 0); stripLayer && i <= Math.min(lastIdx, maxIndex); i++) {
         want++;
         const e = strips.get(i);
@@ -702,10 +707,31 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
-        if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) ? performance.now() : -1e9;
-        const fa = Math.min(1, (performance.now() - e.seenAt) / 1000);                                      // then crossfade it in over ~1 s
+        if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) ? nowDraw : -1e9;
+        const dx = i * SW() - e.overlap - left;
+        // Shared stipple self-assembly reveal (strip-reveal.js). Skipped under reduced-motion, fast scrub,
+        // during the page intro (canvas is hidden), or when the concurrent-reveal budget is full.
+        const canReveal = !revealOff && e.seenAt > 0 && !document.body.classList.contains("intro");
+        if (canReveal) {
+          if (!e.reveal && !e.revealDone && !fast) {
+            e.reveal = Reveal.start(e.bitmap, { now: nowDraw, seed: e.index * 2654435761 });
+            if (!e.reveal) e.revealDone = true;   // budget/skip: fall through to fade once
+          }
+          if (e.reveal && !e.reveal.done) {
+            if (fast) e.reveal.finish();
+            else {
+              e.reveal.tick(nowDraw);
+              e.reveal.draw(ctx, dx, 0);
+              fading = (e.reveal.phase === "settle" ? 12 : 6);
+              if (e.reveal.done) { e.revealDone = true; e.reveal.dispose(); e.reveal = null; }
+              continue;
+            }
+            e.revealDone = true; e.reveal.dispose(); e.reveal = null;
+          }
+        }
+        const fa = Math.min(1, (nowDraw - e.seenAt) / 1000);                                      // then crossfade it in over ~1 s
         if (fa < 1) { ctx.globalAlpha = fa * fa * (3 - 2 * fa); fading = (fa * 20 | 0) + 1; }
-        ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);   // no live-edge clip: the old particle-era clip hid the next strip's inpaint band until it popped in
+        ctx.drawImage(e.bitmap, dx, 0);   // no live-edge clip: the old particle-era clip hid the next strip's inpaint band until it popped in
         ctx.globalAlpha = 1;
       }
       coverage = want ? have / want : 0;
@@ -1174,7 +1200,19 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       document.body.classList.add("idle");
     }, typeof ms === "number" ? ms : 3500);
   }
-  window.addEventListener("tapestry:revealed", () => poke(6000));
+  // Intro just lifted: re-arm visible strips so the stipple reveal actually plays (sampling during the
+  // hidden intro would finish off-screen and the user would only ever see settled bitmaps).
+  window.addEventListener("tapestry:revealed", () => {
+    poke(6000);
+    const Reveal = window.TapestryStripReveal;
+    if (!Reveal || Reveal.reduce() || window.__noreveal) return;
+    for (const e of strips.values()) {
+      if (!e.bitmap || !(e.seenAt > 0)) continue;
+      if (e.reveal) { e.reveal.dispose(); e.reveal = null; }
+      e.revealDone = false;
+      e.seenAt = performance.now();
+    }
+  });
   ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"].forEach((e) =>
     window.addEventListener(e, () => poke(), { passive: true }));
   poke();
