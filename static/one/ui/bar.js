@@ -103,8 +103,8 @@
   });
   cam.on("play", (on) => { if (on) panned = true; });
   function atLive() {
-    const c = cam.get(); if (c.followLive) return true; if (panned || c.playing || !T.time) return false;
-    return (T.time.head() - c.target.centerTime) * (c.s / Math.pow(2, c.zoom)) < c.span * c.s;
+    const c = cam.get(); if (c.followLive) return true; if (panned || c.playing) return false;
+    return (c.head - c.target.centerTime) * (c.s / Math.pow(2, c.zoom)) < c.span * c.s;
   }
   const awayTarget = () => (booted() ? (atLive() ? 0 : 1) : new URLSearchParams(location.search).has("t") ? 1 : 0);
   let away = awayTarget(), vAway = 0, progress = -1;

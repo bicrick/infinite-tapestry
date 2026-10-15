@@ -50,17 +50,17 @@
     const dt = Math.min(0.1, last ? (ts - last) / 1000 : 1 / 60); if (perf.on && last) perf.frames.push(ts - last); last = ts;
     const tiles = T.tiles, cam = T.camera;
     // Adaptive resolution: sustained slow frames drop dpr (2 -> 1 -> 0.75), never raised mid-session.
-    if (dt < 0.1) { ewma = ewma * 0.9 + dt * 0.1; if (ewma > 0.022 && dprCap > 0.75 && ++slow > 30) { dprCap = dprCap > 1 ? 1 : 0.75; slow = 0; ewma = 0.016; R.resize(); } }
-    tiles && tiles.beginFrame(ts);
+    if (dt < 0.1 && ts > 4000 && !(tiles && tiles.busy())) { ewma = ewma * 0.9 + dt * 0.1; if (ewma > 0.022 && dprCap > 0.75 && ++slow > 90) { dprCap = dprCap > 1 ? 1 : 0.75; slow = 0; ewma = 0.016; R.resize(); } }
+    tiles && tiles.beginFrame(ts, cam && Math.abs(cam._st.vz) > 0.6); // fast zoom: 1 upload per frame
     let busy = false; for (const f of ticks) if (f(dt, ts)) busy = true;
     const moving = cam ? cam.step(dt) : false;
-    const up = tiles && tiles.manifest ? tiles.flush() : 0;
+    let up = 0; try { up = tiles && tiles.manifest ? tiles.flush() : 0; } catch (err) { console.error("tiles.flush", err); } // the loop must never die
     wantFrames = false;
     if (moving || dirty || up) {
       dirty = false;
-      frameCtx = { gl, cam: cam.get(), tiles, W, H, dpr, t: ts, quads: 0, needFrames: false, fbW: cv.width, fbH: cv.height };
+      const cg = cam.get(); frameCtx = { gl, cam: cg, head: cg.head, live: cg.followLive, tiles, W, H, dpr, t: ts, quads: 0, needFrames: false, fbW: cv.width, fbH: cv.height };
       gl.viewport(0, 0, cv.width, cv.height);
-      for (const p of passes) p.draw(gl, frameCtx);
+      for (const p of passes) { try { p.draw(gl, frameCtx); } catch (err) { if (!p._err) { p._err = 1; console.error("pass " + p.name, err); if (window.TapestryOps) TapestryOps.report("pass-error", 0, { pass: p.name }); } } }
       if (frameCtx.needFrames) wantFrames = true;
       if (perf.on) { perf.maxQuads = Math.max(perf.maxQuads, frameCtx.quads); perf.quads = frameCtx.quads; }
       if (frameCtx.needAt && !needT) needT = setTimeout(() => { needT = 0; R.invalidate(); }, frameCtx.needAt);

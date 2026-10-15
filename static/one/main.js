@@ -7,7 +7,7 @@
   const Q = new URLSearchParams(location.search), API = Q.get("api") || "";
   const cv = $("one-c"), gl = T.renderer.init(cv); if (!gl) { document.body.classList.add("no-gl"); return; }
   const cam = T.camera, tiles = T.tiles, tp = T.passes.tiles;
-  T.renderer.addPass(tp); T.renderer.addPass(T.passes.grain);
+  T.renderer.addPass(tp); T.renderer.addPass(T.passes.reflection); T.renderer.addPass(T.passes.head); T.renderer.addPass(T.passes.grain); T.passes.grain.warm(gl, devicePixelRatio || 1);
   let M = null, hours = [];
   const Z_EVENTS = -6; // events/markers only zoomed out past ~hours (span >= ~1 h at desktop width); off by default (phase 4)
   T.config = { Z_EVENTS, eventsDefault: false, api: API };
@@ -16,7 +16,7 @@
   function layout({ W, H }) {
     const portrait = H > W * 1.15, bandH0 = Math.round(H * (portrait ? 0.42 : 0.5));
     tp.layout.bandY = Math.round(H * 0.42); tp.layout.sLive = bandH0 / 4;
-    const head = M ? M.units : 1, minS = W / Math.max(1, head) * 0.9;
+    const head = Math.max(M ? M.units : 1, T.ingest.maxUnit() || 0), minS = W / Math.max(1, head) * 0.9;
     cam.layout({ W, H, sLive: bandH0 / 4, head, zMin: Math.min(0, Math.log2(minS / (bandH0 / 4))) });
     document.documentElement.style.setProperty("--band-y", tp.layout.bandY + "px");
     document.documentElement.style.setProperty("--band-h0", bandH0 + "px");
@@ -27,7 +27,7 @@
   function hourAt(u) { let lo = 0, hi = hours.length - 1; if (hi < 0) return null; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (hours[m][0] <= u) lo = m; else hi = m - 1; } return hours[lo]; }
   function unitTime(u) { const h = hourAt(u); if (!h) return null; const f = Math.max(0, Math.min(1, (u - h[0]) / Math.max(1, h[1] - h[0]))); return new Date(h[2] + f * (h[3] - h[2])); }
   function timeUnit(ms) { for (let i = hours.length - 1; i >= 0; i--) if (hours[i][2] <= ms) { const h = hours[i]; return h[0] + Math.min(1, (ms - h[2]) / Math.max(1, h[3] - h[2])) * (h[1] - h[0]); } return 0; }
-  T.time = { unitTime, timeUnit, ready: () => hours.length > 0, head: () => (M ? M.units : 0) };
+  T.time = { unitTime, timeUnit, ready: () => hours.length > 0 };
   cam.setRate((u) => { const h = hourAt(u); return h && h[3] > h[2] ? Math.max(0.05, Math.min(2, (h[1] - h[0]) / ((h[3] - h[2]) / 1000))) : 0.35; });
 
   // ---------- UI (clock + caption; the bar is ui/bar.js) ----------
@@ -45,7 +45,11 @@
   }
   cam.on("change", () => urlSoon());
   cam.on("live", ui); cam.on("settle", () => { ui(); urlSoon(); });
-  T.renderer.onTick((dt, ts) => { if (ts - lastUi > 100) { lastUi = ts; ui(); } return heldTick(dt); });
+  T.renderer.onTick((dt, ts) => {
+    if (ts - lastUi > 100) { lastUi = ts; ui(); }
+    const mu = T.ingest.maxUnit(); if (mu != null && M) for (let g = mu - 1; g >= mu - 8; g--) tiles.request(0, g, -5e5 + (mu - g)); // the head's strips, always
+    return heldTick(dt);
+  });
 
   // ---------- input: one handler for every zoom ----------
   const typing = (t) => t && t.closest && t.closest("input,textarea,select,[contenteditable]");
@@ -112,6 +116,7 @@
   function theme() {
     const c = getComputedStyle(document.body).backgroundColor.match(/\d+(\.\d+)?/g);
     if (c && (c[3] == null || +c[3] !== 0)) tp.setBg(c.slice(0, 3).map((x) => x / 255));
+    T.passes.reflection.light = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "light" : matchMedia("(prefers-color-scheme: light)").matches;
     T.renderer.invalidate();
   }
   addEventListener("tapestry:theme", theme); matchMedia("(prefers-color-scheme: light)").addEventListener("change", theme);
@@ -132,8 +137,14 @@
   function applyManifest(m) { M = m; tiles.setManifest(m); layout(T.renderer.size()); }
   manifest().then((m) => {
     tiles.init(gl, m, { apiBase: API, onDirty: () => T.renderer.invalidate() }); applyManifest(m); theme();
+    // Live: the head is the eased live edge (falls back to the pyramid's end until the socket/refs arrive).
+    cam.setHead((dt) => { const h = T.ingest.step(dt); return h == null ? M.units : h; });
+    T.ingest.on("head", () => { layout(T.renderer.size()); T.renderer.kick(); });
+    T.ingest.on("strip", () => T.renderer.kick());
+    T.ingest.start({ sdxlBase: m.strips.sdxl.g0, apiBase: API });
     const t = Q.get("t"), z = parseFloat(Q.get("z") || "0");
-    if (t) { cam.set({ centerTime: /^s\d+$/.test(t) ? +t.slice(1) : M.units - 1, zoom: Math.min(0, z) }); } // deep link: no intro, no animation
+    const deep = () => cam.set({ centerTime: /^s\d+$/.test(t) ? +t.slice(1) : M.units - 1, zoom: Math.min(0, z) });
+    if (t) { deep(); T.ingest.on("boot", () => { layout(T.renderer.size()); deep(); T.renderer.kick(); }); } // deep link: no intro, no animation (re-applied once the live head is known)
     else { cam.set({ zoom: 0, centerTime: M.units }); cam.goLive(); cam.set({ zoom: 0, centerTime: cam.get().target.centerTime }); }
     window.__one.ready = true; T.renderer.kick();
     J(`${API}/api/about?kind=tm&part=hours`).then((h) => { hours = h.hours || []; if (t && !/^s\d+$/.test(t)) cam.set({ centerTime: timeUnit(Date.parse(t)) }); ui(); }).catch(() => {});
