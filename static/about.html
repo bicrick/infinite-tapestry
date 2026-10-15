@@ -51,18 +51,31 @@
   </header>
 
   <main>
+    <section id="built" class="built" aria-label="Built using">
+      <div class="wrap">
+        <p class="eyebrow reveal">Built using</p>
+        <ul class="built-logos reveal-stagger" role="list">
+          <li class="built-item reveal"><span class="built-icon" style="--built-mask:url('/brand/built/vercel.svg')" aria-hidden="true"></span><span>Vercel</span></li>
+          <li class="built-item reveal"><span class="built-icon" style="--built-mask:url('/brand/built/cloudflare.svg')" aria-hidden="true"></span><span>Cloudflare</span></li>
+          <li class="built-item reveal"><span class="built-icon" style="--built-mask:url('/brand/built/stablediffusion.svg')" aria-hidden="true"></span><span>Stable Diffusion</span></li>
+          <li class="built-item reveal"><span class="built-icon" style="--built-mask:url('/brand/built/runpod.svg')" aria-hidden="true"></span><span>RunPod</span></li>
+          <li class="built-item reveal"><span class="built-icon" style="--built-mask:url('/brand/built/googlecloud.svg')" aria-hidden="true"></span><span>Google Cloud</span></li>
+        </ul>
+      </div>
+    </section>
+
     <section id="how">
       <div class="wrap">
         <p class="eyebrow reveal">How it works</p>
         <h2 class="reveal">Type a place. Watch the world walk into it.</h2>
         <p class="reveal" style="max-width:52ch">The tapestry never stops scrolling. Anyone watching can say where it goes next, and a few seconds later the painting turns toward it, seamlessly.</p>
-        <div class="steps">
-          <div class="step reveal">
+        <div class="steps reveal-stagger">
+          <div class="step reveal" data-parallax="0.04">
             <div class="shot"><img src="/about-img/step-type.webp" alt="A dog napping in warm sunlight" loading="lazy" decoding="async" />
               <div class="ui-over"><div class="glass composer"><span class="ph">dog naps in sunlight<span class="caret"></span></span><span class="send">↑</span></div></div></div>
             <h3><span class="n">01</span>&nbsp; Type an idea</h3><p>A place, a mood, something ridiculous. No account needed.</p>
           </div>
-          <div class="step reveal">
+          <div class="step reveal" data-parallax="0.06">
             <div class="shot"><img src="/about-img/step-queue.webp" alt="Cats wearing baseball hats" loading="lazy" decoding="async" />
               <div class="ui-over"><div class="glass queue">
                 <div class="tabs"><b>Queue</b><span>Fuel</span><span>Chat</span><span>You</span></div>
@@ -71,14 +84,14 @@
                 <div class="row"><span>minecraft dragon</span><i>♥ 2</i></div></div></div></div>
             <h3><span class="n">02</span>&nbsp; It joins the queue</h3><p>Sort by Up next, New or Most liked, and heart the ones you want to see. When it's busy, everyone takes turns.</p>
           </div>
-          <div class="step reveal">
+          <div class="step reveal" data-parallax="0.08">
             <div class="shot"><img src="/about-img/step-land.webp" alt="A comet tail over ice under a star field" loading="lazy" decoding="async" />
               <div class="caption">Comet Tail Over Ice<small>Auto · from the live archive</small></div></div>
             <h3><span class="n">03</span>&nbsp; Watch it land</h3><p>Your idea scrolls in for everyone watching, titled, with its own page you can share.</p>
           </div>
         </div>
 
-        <div id="fuel" class="how-fuel reveal">
+        <div id="fuel" class="how-fuel reveal" data-parallax="0.03">
           <div class="how-fuel-copy">
             <p class="eyebrow">04 · Fuel</p>
             <h3>People buy fuel. Fuel pays GPU inference costs. The tapestry keeps generating.</h3>
@@ -88,19 +101,17 @@
             <div class="fuel-cash" aria-labelledby="fc-headline">
               <p class="fc-headline" id="fc-headline">Loading GPU budget…</p>
               <div class="fc-totals" role="group" aria-label="GPU budget totals">
+                <div class="fc-stat"><b id="fc-left">—</b><span>remaining</span></div>
                 <div class="fc-stat"><b id="fc-budget">$100</b><span>budget</span></div>
                 <div class="fc-stat"><b id="fc-spend">—</b><span id="fc-spend-l">GPU spend</span></div>
                 <div class="fc-stat"><b id="fc-bought">—</b><span>fuel bought</span></div>
-                <div class="fc-stat"><b id="fc-net">—</b><span>net burn</span></div>
               </div>
               <figure class="fc-chart-wrap">
-                <svg id="fc-chart" class="fc-chart" viewBox="0 0 640 240" role="img" aria-label="GPU spend against $100 budget, with fuel offsetting net burn"></svg>
+                <svg id="fc-chart" class="fc-chart" viewBox="0 0 640 240" role="img" aria-label="Remaining GPU budget over time; fuel purchases bump the line up"></svg>
                 <figcaption id="fc-caption" class="fc-caption">Loading GPU budget…</figcaption>
               </figure>
               <p class="fc-legend" id="fc-legend" hidden>
-                <span class="fc-key line"></span>Cumulative spend
-                <span class="fc-key net"></span>Net burn
-                <span class="fc-key budget"></span>$100 budget
+                <span class="fc-key line"></span>Remaining budget
                 <span class="fc-key fuel"></span>Fuel purchase
               </p>
             </div>
