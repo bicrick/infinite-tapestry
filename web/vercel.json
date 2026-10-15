@@ -137,6 +137,15 @@
      "value": "public, max-age=3600"
     }
    ]
+  },
+  {
+   "source": "/u-9b600a56.html",
+   "headers": [
+    {
+     "key": "X-Robots-Tag",
+     "value": "noindex, nofollow, noarchive"
+    }
+   ]
   }
  ],
  "rewrites": [

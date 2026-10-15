@@ -1,0 +1,50 @@
+/* Unified viewer (hidden page): the timeline layer over the unchanged live viewer. Solid glass (no backdrop-filter:
+   it would re-blur the WebGL canvas every frame). Everything here is scoped to #u-tl / body.u-tl. */
+#u-tl { position:fixed; inset:0; z-index:60; opacity:0; visibility:hidden; transition:opacity .16s linear, visibility 0s linear .16s; contain:strict; }
+body.u-tl #u-tl { opacity:1; visibility:visible; transition:opacity .16s linear; }
+#u-tl canvas#u-c { position:absolute; inset:0; width:100%; height:100%; touch-action:none; display:block; }
+#u-tl #refl { position:absolute; }
+body.u-tl > :not(#u-tl):not(script):not(style) { visibility:hidden; }
+body.u-tl #view { visibility:hidden; }
+#u-tl { --fg:#f2f1ee; --muted:#8f8c87; --line:rgba(255,255,255,.12); --glass:rgba(20,20,22,.86); --glass-strong:rgba(34,34,38,.94); --accent:#f5d27a; color:var(--fg);
+  font-family:"Inter var",Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; font-size:13px; -webkit-user-select:none; user-select:none; }
+@media (prefers-color-scheme: light) { #u-tl { --fg:#141414; --muted:#6d6a66; --line:rgba(0,0,0,.10); --glass:rgba(255,255,255,.9); --glass-strong:rgba(255,255,255,.97); --accent:#9a6a00; } }
+:root[data-theme="dark"] #u-tl { --fg:#f2f1ee; --muted:#8f8c87; --line:rgba(255,255,255,.12); --glass:rgba(20,20,22,.86); --glass-strong:rgba(34,34,38,.94); --accent:#f5d27a; }
+:root[data-theme="light"] #u-tl { --fg:#141414; --muted:#6d6a66; --line:rgba(0,0,0,.10); --glass:rgba(255,255,255,.9); --glass-strong:rgba(255,255,255,.97); --accent:#9a6a00; }
+#u-tl button { font:inherit; color:inherit; }
+.u-hud { position:absolute; left:0; right:0; top:calc(18px + env(safe-area-inset-top)); display:flex; align-items:center; gap:10px; padding:0 20px; pointer-events:none; }
+.u-hud > * { pointer-events:auto; }
+.u-when { flex:1; min-width:0; display:flex; gap:10px; align-items:baseline; }
+#u-when { font-weight:600; font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+#u-era { color:var(--muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.u-tools { display:flex; gap:8px; }
+.u-pill { border:1px solid var(--line); background:var(--glass); border-radius:999px; padding:8px 14px; cursor:pointer; font-size:12px; white-space:nowrap; }
+.u-pill:hover { background:var(--glass-strong); }
+.u-pill.on { background:var(--fg); color:var(--bg, #000); border-color:var(--fg); }
+.u-ic { width:36px; padding:8px 0; font-size:16px; line-height:1; }
+.u-live { font-weight:600; }
+.u-live::before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:#ff4d3d; margin-right:7px; vertical-align:1px; }
+.u-dock { position:absolute; left:50%; transform:translateX(-50%); bottom:calc(20px + env(safe-area-inset-bottom)); display:flex; gap:4px; align-items:center;
+  padding:6px; border-radius:999px; border:1px solid var(--line); background:var(--glass); max-width:calc(100vw - 24px); }
+.u-dock .u-pill { background:transparent; border-color:transparent; } .u-dock .u-pill:hover { background:var(--glass-strong); }
+#u-title { max-width:min(36vw, 360px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--muted); padding:0 4px; }
+#u-title:empty { display:none; }
+#u-needle { position:absolute; left:50%; top:30%; bottom:30%; width:1px; background:var(--fg); opacity:.18; pointer-events:none; }
+#u-marks { position:absolute; left:0; top:0; width:0; height:0; pointer-events:none; }
+.mk { position:absolute; left:0; top:0; font-size:11px; white-space:nowrap; color:var(--fg); will-change:transform; display:none; }
+.mk b { font-weight:600; } .mk i { color:var(--muted); font-style:normal; margin-left:3px; }
+.mk::before { content:""; position:absolute; left:-.5px; top:16px; width:1px; height:var(--h, 40vh); background:currentColor; opacity:.3; }
+.mk.era, .mk.release { color:var(--accent); } .mk.milestone { color:#7fb8ff; } .mk.downtime { color:#ff7a6a; } .mk.idea { color:#b58cff; } .mk.busiest, .mk.story { color:#4fcf86; }
+.u-sheet { position:absolute; top:calc(64px + env(safe-area-inset-top)); right:16px; width:min(360px, calc(100vw - 32px)); max-height:62vh; overflow:auto;
+  background:var(--glass-strong); border:1px solid var(--line); border-radius:18px; padding:14px 16px; display:none; }
+.u-sheet.open { display:block; }
+.u-sheet h4 { margin:6px 0 8px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:500; }
+.u-sheet .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+.cal { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; margin-bottom:12px; }
+.cal div { text-align:center; padding:6px 0; border-radius:8px; font-size:12px; font-variant-numeric:tabular-nums; }
+.cal .d { background:var(--line); cursor:pointer; font-weight:600; } .cal .d:hover { background:var(--fg); color:var(--glass); } .cal .h { color:var(--muted); font-size:10px; }
+.u-toast { position:absolute; left:50%; bottom:calc(84px + env(safe-area-inset-bottom)); transform:translate(-50%, 6px); opacity:0; max-width:min(560px, 90vw);
+  background:var(--glass-strong); border:1px solid var(--line); padding:9px 14px; border-radius:12px; font-size:12px; pointer-events:none; transition:opacity .3s, transform .3s; }
+.u-toast.show { opacity:1; transform:translate(-50%, 0); }
+#u-perf { position:fixed; left:8px; bottom:90px; font:11px ui-monospace, monospace; background:#000a; color:#fff; padding:6px 8px; border-radius:6px; white-space:pre; display:none; pointer-events:none; z-index:99; }
+@media (max-width:560px) { .u-hud { padding:0 14px; } #u-era { display:none; } #u-title { max-width:26vw; } #u-zin, #u-zout { display:none; } .u-when { min-width:0; overflow:hidden; } .u-pill { padding:8px 11px; } }
