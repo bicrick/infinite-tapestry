@@ -207,7 +207,7 @@
     now = ts; const dt = Math.min(0.1, last ? (ts - last) / 1000 : 0.016); last = ts;
     if (perf.on) perf.frames.push(dt * 1000);
     // quality governor: if motion can't hold ~45 fps, drop the backing store to 1x (fill-rate bound on weak/throttled GPUs)
-    if (anim && last && dt < 0.1) { ewma = ewma * 0.9 + dt * 0.1; if (ewma > 0.022 && dprCap > 1 && ++slow > 20) { dprCap = 1; resize(); } }
+    if (anim && last && dt < 0.1) { ewma = ewma * 0.9 + dt * 0.1; if (ewma > 0.022 && dprCap > 0.75 && ++slow > 20) { dprCap = dprCap > 1 ? 1 : 0.75; slow = 0; ewma = 0.016; resize(); } }
     if (playing && !dragging) { cam.tcx += rateAt(cam.tcx) * dt; if (cam.tcx >= lastG() - 1) setPlay(false); }
     if (!dragging && Math.abs(cam.vx) > 0.01) { cam.tcx += cam.vx * dt; cam.vx *= Math.exp(-4 * dt); clamp(); }
     const k = 1 - Math.exp(-12 * dt), ls = Math.log(cam.s), lt = Math.log(cam.ts);
@@ -305,7 +305,7 @@
   }
 
   function resize() {
-    dpr = Math.min(dprCap, devicePixelRatio || 1); W = innerWidth; Hh = innerHeight;
+    dpr = Math.min(dprCap, devicePixelRatio || 1); // 0.75 = last-resort render scale on fill-rate-starved machines W = innerWidth; Hh = innerHeight;
     cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
     maxBand = Math.round(Math.min(Hh * 0.56, 1024)); lineY = Math.round(Hh * 0.44);
     dirty = true; if (M) { clamp(); lastGroupS = 0; regroup(); } kick();
