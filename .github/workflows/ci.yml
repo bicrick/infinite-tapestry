@@ -93,12 +93,13 @@ jobs:
             echo "### Vercel preview (not production)"
             echo "$URL"
             echo ""
-            echo "- Lab: $URL/strip-reveal-lab.html"
-            echo "- Viewer: $URL/?nointro=1"
+            echo "- Intro: $URL/"
+            echo "- Viewer without intro: $URL/?nointro=1"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ -n "${VERCEL_BYPASS:-}" ]; then
             curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
-            curl -sf --retry 3 "$URL/strip-reveal.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'TapestryStripReveal'
+            curl -sf --retry 3 "$URL/intro.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'Halftone bloom'
+            curl -sf --retry 3 "$URL/intro-levels.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'OffscreenCanvas'
           fi
       - name: Comment preview URL on PR
         if: success()
@@ -109,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           MARK='<!-- vercel-preview-bot -->'
-          BODY=$(printf '%s\nVercel preview (not production): %s\n\nStrip reveal lab: %s/strip-reveal-lab.html\nLive viewer: %s/?nointro=1' "$MARK" "$URL" "$URL" "$URL")
+          BODY=$(printf '%s\nVercel preview (not production): %s\n\nViewer without intro: %s/?nointro=1' "$MARK" "$URL" "$URL")
           EXISTING=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
             --jq '[.[] | select(.body | contains("vercel-preview-bot")) | .id][0] // empty' || true)
           if [[ "$EXISTING" =~ ^[0-9]+$ ]]; then
@@ -117,6 +118,29 @@ jobs:
           else
             gh api -X POST "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" -f body="$BODY" >/dev/null || true
           fi
+      # Headless Chrome on the runner has no GPU (SwiftShader), so frame numbers here are a floor, not real-GPU fps.
+      - name: Capture the intro on the preview
+        if: success()
+        continue-on-error: true
+        env:
+          VERCEL_BYPASS: ${{ secrets.VERCEL_BYPASS }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cap"
+          cp scripts/intro-capture.mjs "$RUNNER_TEMP/cap/"
+          cd "$RUNNER_TEMP/cap"
+          npm init -y >/dev/null
+          npm i --no-audit --no-fund playwright-core@1.64.1 >/dev/null
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable)" node intro-capture.mjs "$URL" "$RUNNER_TEMP/cap/out"
+      - name: Upload intro capture
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: intro-capture
+          path: ${{ runner.temp }}/cap/out
+          if-no-files-found: warn
 
   deploy-web:
     needs: test
