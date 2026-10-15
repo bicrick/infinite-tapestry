@@ -16,75 +16,27 @@
   });
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ---------- Scroll reveals + light parallax ---------- */
-  const reveals = document.querySelectorAll(".reveal");
-  reveals.forEach((el, i) => {
-    const staggerParent = el.closest(".reveal-stagger");
-    if (staggerParent) {
-      const kids = [...staggerParent.querySelectorAll(":scope > .reveal")];
-      const idx = kids.indexOf(el);
-      el.style.transitionDelay = Math.max(0, idx) * 90 + "ms";
-    } else {
-      el.style.transitionDelay = (i % 4) * 60 + "ms";
-    }
-  });
-
-  if (reduceMotion) {
-    reveals.forEach((el) => el.classList.add("in"));
-  } else {
+  /* ---------- Scroll assembly fallback ----------
+     about.css drives everything from scroll position where animation-timeline is supported.
+     Elsewhere, hide-until-seen only starts once this script runs, so content never stays hidden without JS. */
+  const MOTION = ".m, .it-foot-in > *";
+  let watch = () => {};
+  if (!reduceMotion && !(window.CSS && CSS.supports && CSS.supports("animation-timeline: view()")) && "IntersectionObserver" in window) {
+    document.documentElement.classList.add("m-io");
     const io = new IntersectionObserver((es) => es.forEach((e) => {
       if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
-    }), { rootMargin: "0px 0px -10% 0px", threshold: 0.08 });
-    reveals.forEach((el) => io.observe(el));
-
-    const parallaxEls = [...document.querySelectorAll("[data-parallax]")];
-    let ticking = false;
-    const updateParallax = () => {
-      ticking = false;
-      const vh = window.innerHeight || 1;
-      for (const el of parallaxEls) {
-        if (!el.classList.contains("in") && !el.querySelector(".in")) continue;
-        const amt = Number(el.dataset.parallax) || 0.04;
-        const r = el.getBoundingClientRect();
-        const mid = r.top + r.height / 2;
-        const offset = ((mid - vh / 2) / vh) * -amt * 80;
-        el.style.setProperty("--py", offset.toFixed(2) + "px");
-      }
+    }), { rootMargin: "0px 0px -5% 0px", threshold: 0 });
+    watch = (root) => root.querySelectorAll(MOTION).forEach((el) => io.observe(el));
+    watch(document);
+    // The footer can sit inside the trimmed bottom margin even at max scroll; reveal what's left there.
+    const atEnd = () => {
+      if (innerHeight + scrollY < document.documentElement.scrollHeight - 4) return;
+      document.querySelectorAll(MOTION).forEach((el) => { if (!el.classList.contains("in")) { el.classList.add("in"); io.unobserve(el); } });
     };
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(updateParallax);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    updateParallax();
+    addEventListener("scroll", atEnd, { passive: true });
   }
 
   /* ---------- Remaining-budget chart ---------- */
-  function pathLength(el) {
-    try { return el.getTotalLength(); } catch (_) { return 0; }
-  }
-
-  function drawLineOnView(path) {
-    if (!path || reduceMotion) return;
-    const len = pathLength(path);
-    if (!len) return;
-    path.style.strokeDasharray = String(len);
-    path.style.strokeDashoffset = String(len);
-    path.getBoundingClientRect(); // flush
-    const run = () => {
-      path.style.transition = "stroke-dashoffset 1.35s cubic-bezier(.2,.7,.2,1)";
-      path.style.strokeDashoffset = "0";
-    };
-    const io = new IntersectionObserver((es) => {
-      if (es.some((e) => e.isIntersecting)) {
-        run();
-        io.disconnect();
-      }
-    }, { threshold: 0.35 });
-    io.observe(path);
-  }
-
   function renderChart(d) {
     const svg = $("fc-chart");
     if (!svg) return;
@@ -164,15 +116,14 @@
     const dots = markers.map((m) => {
       const x = xOf(m.t), y = yOf(m.remaining);
       const title = `<title>${esc(m.handle || "Fuel")} · +${money(m.usd)} · ${esc(when(m.t))}</title>`;
-      return `<g class="fc-fuel-mark">${title}<circle cx="${x}" cy="${y}" r="3.5" fill="#c9a46a" stroke="var(--bg, #0b0b0c)" stroke-width="1.5"/></g>`;
+      const f = ((x - pad.l) / innerW).toFixed(3);
+      return `<g class="fc-fuel-mark" style="--f:${f}">${title}<circle cx="${x}" cy="${y}" r="3.5" fill="#c9a46a" stroke="var(--bg, #0b0b0c)" stroke-width="1.5"/></g>`;
     }).join("");
 
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
     svg.innerHTML = `${grid}`
-      + `<path id="fc-line" d="${path.trim()}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>`
+      + `<path id="fc-line" d="${path.trim()}" pathLength="1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>`
       + dots + xLabels;
-
-    drawLineOnView(svg.querySelector("#fc-line"));
   }
 
   function setHeadline(d) {
@@ -220,12 +171,13 @@
       const d = await (await fetch("/api/about?kind=heroes", { cache: "no-store" })).json();
       const h = (d.heroes || []).filter((x) => x && x.name).slice(0, 6);
       ol.innerHTML = h.length
-        ? h.map((x) => `<li>
+        ? h.map((x, i) => `<li class="m m-li" style="--i:${i}">
             <span class="fh-av" aria-hidden="true">${esc(x.name === "Someone" ? "✦" : x.name[0].toUpperCase())}</span>
             <b>${esc(x.name)}</b>
             <span class="fh-meta">${x.gifts > 1 ? x.gifts + " purchases · " : ""}${esc(when(x.at))}</span>
           </li>`).join("")
         : `<li class="fh-empty">No fuel purchases yet. Be the first on the Hall of Heroes.</li>`;
+      watch(ol);
     } catch (_) {
       ol.innerHTML = `<li class="fh-empty">Heroes are resting. Check back in a minute.</li>`;
     }
