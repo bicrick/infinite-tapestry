@@ -7,6 +7,10 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+  # Schedules only run from main; this lets a PR that edits the watchdog exercise the check (issue steps skip on PRs).
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/watchdog.yml]
 permissions:
   issues: write
   contents: read
@@ -29,7 +33,7 @@ jobs:
               sys.exit(f"STALL: no new strip for {age/60:.0f} min while the pod is running")
           PY
       - name: Open or update the stall issue
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -39,7 +43,7 @@ jobs:
           else gh label create watchdog -R "$GITHUB_REPOSITORY" -c B60205 2>/dev/null || true
                gh issue create -R "$GITHUB_REPOSITORY" -t "Watchdog: stall" -l watchdog -b "$MSG"; fi
       - name: Close the stall issue on recovery
-        if: success()
+        if: success() && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
