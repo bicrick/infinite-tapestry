@@ -58,6 +58,7 @@ def test_no_model_vendor_name_in_static():
     for f in (ROOT / "static").rglob("*"):
         if f.suffix in (".html", ".js", ".css"):
             t = f.read_text().lower().replace('x === "claude"', "")  # the handle filter that hides it
+            t = re.sub(r'<ul class="built-logos".*?</ul>', "", t, flags=re.S)  # the /about "Built using" credits may name it
             assert "claude" not in t, f
 
 
