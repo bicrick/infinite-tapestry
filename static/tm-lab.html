@@ -4,63 +4,40 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Time Machine lab · Infinite Tapestry</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: #0a0a0c; color: #e9e6df; font: 13px/1.35 system-ui, -apple-system, sans-serif; overflow: hidden; overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
-    canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
-    .bar { position: fixed; left: 0; right: 0; display: flex; gap: 8px; align-items: center; padding: 10px 12px; pointer-events: none; }
-    .bar > * { pointer-events: auto; }
-    #top { top: 0; padding-top: max(10px, env(safe-area-inset-top)); background: linear-gradient(#0a0a0cdd, #0a0a0c00); }
-    #bot { bottom: 0; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: linear-gradient(#0a0a0c00, #0a0a0cdd); justify-content: center; }
-    #when { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 15px; white-space: nowrap; }
-    #era { opacity: .65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-    .sp { flex: 1; }
-    button { background: #1b1b20e6; color: inherit; border: 1px solid #2c2c33; border-radius: 999px; padding: 7px 12px; font: inherit; cursor: pointer; white-space: nowrap; }
-    button.on { background: #f5d27a; color: #111; border-color: #f5d27a; }
-    #title { max-width: min(46vw, 420px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; opacity: .9; }
-    #needle { position: fixed; top: 17%; bottom: 17%; left: 50%; width: 1px; background: #fff5; pointer-events: none; }
-    #perf { position: fixed; left: 8px; bottom: 64px; font: 11px ui-monospace, monospace; background: #000a; padding: 6px 8px; border-radius: 6px; white-space: pre; display: none; pointer-events: none; }
-    #marks { position: fixed; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
-    .mk { position: absolute; left: 0; top: 0; font-size: 11px; white-space: nowrap; color: #e9e6df; will-change: transform; display: none; }
-    .mk b { font-weight: 600; } .mk i { opacity: .6; font-style: normal; }
-    .mk::before { content: ""; position: absolute; left: -1px; top: 16px; width: 2px; height: var(--h, 40vh); background: currentColor; opacity: .35; }
-    .mk.era, .mk.release { color: #f5d27a; } .mk.milestone { color: #9fd3ff; } .mk.downtime { color: #ff8a7a; } .mk.idea { color: #c9a7ff; } .mk.busiest, .mk.story { color: #9be8b3; }
-    #menu { position: fixed; top: 56px; right: 10px; width: min(360px, calc(100vw - 20px)); max-height: 70vh; overflow: auto; background: #141418f2; border: 1px solid #2c2c33; border-radius: 14px; padding: 12px; display: none; }
-    #menu.open { display: block; }
-    #menu h4 { margin: 4px 0 8px; font-size: 12px; opacity: .7; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
-    .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 12px; }
-    .cal div { text-align: center; padding: 6px 0; border-radius: 8px; font-size: 12px; }
-    .cal .d { background: #23232a; cursor: pointer; } .cal .d:hover { background: #33333c; } .cal .h { opacity: .5; font-size: 10px; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-    #toast { position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); background: #000c; padding: 6px 10px; border-radius: 8px; font-size: 12px; opacity: 0; transition: opacity .3s; pointer-events: none; }
-    @media (max-width: 520px) { #era { display: none; } button { padding: 7px 10px; } #title { max-width: 38vw; } }
-  </style>
+  <title>Time Machine · Infinite Tapestry</title>
+  <meta name="description" content="Everything the Infinite Tapestry has ever painted, as one line you can zoom." />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <!--chrome:head-->
+  <link rel="stylesheet" href="/tm-lab.css" />
+  <script src="/theme.js"></script>
 </head>
-<body>
-  <canvas id="c"></canvas>
-  <div id="marks"></div>
-  <div id="needle"></div>
-  <div id="top" class="bar">
-    <span id="when">…</span><span id="era"></span><span class="sp"></span>
-    <button id="all" title="Zoom out to all of history">All</button>
-    <button id="menuB" aria-expanded="false" title="Calendar and options">☰</button>
+<body class="tml">
+  <!--chrome:header overlay-->
+  <canvas id="c" aria-label="Every strip ever painted, as one zoomable line"></canvas>
+  <div id="marks" aria-hidden="true"></div>
+  <div id="needle" aria-hidden="true"></div>
+  <div id="hud" class="tml-hud">
+    <div class="tml-when"><span id="when">…</span><span id="era"></span></div>
+    <div class="tml-tools"><button id="all" class="tml-pill" type="button" title="Zoom out to all of history">All</button><button id="menuB" class="tml-pill" type="button" aria-expanded="false" title="Calendar and options">Calendar</button></div>
   </div>
-  <div id="menu" role="dialog" aria-label="Time Machine menu">
+  <div id="menu" class="tml-sheet" role="dialog" aria-label="Time Machine menu">
     <h4>Jump to a day</h4><div id="cal"></div>
     <h4>Step through</h4>
-    <div class="row"><button id="mScenes" class="on">All prompts</button><button id="mIdeas">Ideas only</button></div>
+    <div class="row"><button id="mScenes" class="tml-pill on" type="button">All prompts</button><button id="mIdeas" class="tml-pill" type="button">Ideas only</button></div>
     <h4>Show</h4>
-    <div class="row"><button id="mMarks" class="on">Landmarks</button><a href="/time-machine" style="color:#9fd3ff;align-self:center">Classic Time Machine</a></div>
+    <div class="row"><button id="mMarks" class="tml-pill on" type="button">Landmarks</button><span class="theme-toggle" data-theme-toggle><button type="button" data-t="">Auto</button><button type="button" data-t="light">Light</button><button type="button" data-t="dark">Dark</button></span></div>
+    <p class="tml-note"><a href="/time-machine">Classic calendar view</a></p>
   </div>
-  <div id="bot" class="bar">
-    <button id="prev" title="Previous prompt (,)">◀</button>
+  <div id="bot" class="tml-dock">
+    <button id="prev" class="tml-pill tml-ic" type="button" title="Previous prompt (,)" aria-label="Previous prompt">‹</button>
     <span id="title"></span>
-    <button id="next" title="Next prompt (.)">▶</button>
-    <button id="play" title="Play from here (space)">Play here</button>
-    <button id="live" title="Newest strips, a few minutes behind live">Live →</button>
+    <button id="next" class="tml-pill tml-ic" type="button" title="Next prompt (.)" aria-label="Next prompt">›</button>
+    <button id="play" class="tml-pill" type="button" title="Play from here (space)">Play here</button>
+    <button id="live" class="tml-pill" type="button" title="Newest strips, a few minutes behind live">Latest →</button>
   </div>
-  <div id="toast"></div>
+  <div id="toast" class="tml-toast" role="status"></div>
   <div id="perf"></div>
+  <!--chrome:scripts-->
   <script src="/tm-lab.js"></script>
 </body>
 </html>

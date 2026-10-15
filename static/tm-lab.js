@@ -10,7 +10,8 @@
   const cv = document.getElementById("c"), $ = (id) => document.getElementById(id);
   const gl = cv.getContext("webgl", { alpha: false, antialias: false, powerPreference: "low-power" });
   if (!gl) { document.body.textContent = "WebGL unavailable"; return; }
-  let M = null, eras = [], hours = [], marks = [], scenes = [], ideas = [], dpr = 1, W = 0, Hh = 0, bandH = 0, y0 = 0;
+  let M = null, eras = [], hours = [], marks = [], scenes = [], ideas = [], dpr = 1, W = 0, Hh = 0, bandH = 0, y0 = 0, maxBand = 0, lineY = 0, bg = [0.043, 0.043, 0.047];
+  let shimmerUntil = 0, ptrX = -1e4, light = false;
   const cam = { cx: 0, s: 1, tcx: 0, ts: 1, vx: 0 };
   let dirty = true, anim = false, now = 0, drawn = 0, playing = false, showMarks = true, ideasOnly = false;
 
@@ -23,6 +24,18 @@
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
   const ap = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
   const uR = gl.getUniformLocation(pr, "r"), uV = gl.getUniformLocation(pr, "v"), uT = gl.getUniformLocation(pr, "uvt");
+  // Glow + reflection: reuse the already-loaded coarse tiles (no second full render). mode 0 = halo around the
+  // line, 1 = mirrored reflection that fades out, with a shimmer that follows the pointer.
+  const fs2 = `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; uniform vec4 fx; uniform vec2 v;
+    void main(){ vec2 p=uv; float a;
+      if (fx.x < .5) { float d=abs(p.y-.5)*2.; a=fx.y*exp(-d*d*4.); p.y=.5; }
+      else { float ripple=sin(p.y*38.+fx.z*2.2)*.0025*p.y + sin(p.y*91.-fx.z*3.1)*.0012*p.y;
+             p.x+=ripple; p.y=1.-p.y*.85; a=fx.y*pow(1.-uv.y,2.2);
+             float px=(gl_FragCoord.x/v.x); a*=1.+.6*exp(-pow((px-fx.w)*7.,2.)); }
+      vec3 c=texture2D(t, uvt.xy+p*uvt.zw).rgb; gl_FragColor=vec4(c*a, a); }`;
+  const pr2 = gl.createProgram(); gl.attachShader(pr2, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr2, sh(gl.FRAGMENT_SHADER, fs2)); gl.linkProgram(pr2);
+  const u2 = { r: gl.getUniformLocation(pr2, "r"), v: gl.getUniformLocation(pr2, "v"), t: gl.getUniformLocation(pr2, "uvt"), fx: gl.getUniformLocation(pr2, "fx") };
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
 
   // ---------- loader worker: fetch + decode off the main thread ----------
   const workerSrc = `self.onmessage=async(e)=>{const {id,url}=e.data;try{const r=await fetch(url);if(!r.ok)throw 0;const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);}catch(_){self.postMessage({id,bm:null});}};`;
@@ -76,31 +89,55 @@
   const i8 = (i) => String(i).padStart(8, "0");
   function stripUrl(g) {
     const S = M.strips;
-    if (g < S.sdxl.g0) return `${R2}/${S.og.url.replace("{i8}", i8(g - S.og.g0))}`;
+    if (g < S.sdxl.g0) return `${location.origin}/api/about?kind=ogstrip&i=${g - S.og.g0}`;
     const k = g - S.sdxl.g0; return `${R2}/${S.sdxl.url.replace("{i8}", i8(k)).replace("{ext}", k >= S.sdxl.webp_from ? "webp" : "jpg")}`;
   }
-  function quad(e, x, w, cropCore) {
+  // Device-pixel snapping: every edge is computed from the same unit coordinate and rounded to a device pixel,
+  // so neighbouring tiles share exact edges (no cracks, no 1 px overlaps) at every zoom.
+  let U0 = 0;
+  const X = (u) => Math.round((u - U0) * cam.s * dpr) / dpr;
+  function quad(e, ua, ub, y, h, uvx0 = 0, uvx1 = 1) {
     gl.bindTexture(gl.TEXTURE_2D, e.t);
-    if (cropCore) { const cw = Math.min(e.w, e.h / 4) / e.w; gl.uniform4f(uT, 1 - cw, 0, cw, 1); } else gl.uniform4f(uT, 0, 0, 1, 1);
-    gl.uniform4f(uR, x, y0, w, bandH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); drawn++;
+    // half-texel inset: linear filtering never reads past the image edge (no bleed lines at tile seams)
+    const hx = 0.5 / e.w, hy = 0.5 / e.h, a = Math.max(uvx0, hx), b = Math.min(uvx1, 1 - hx);
+    gl.uniform4f(uT, a, hy, b - a, 1 - 2 * hy);
+    const xa = X(ua), xb = X(ub); gl.uniform4f(uR, xa, y, xb - xa, h); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); drawn++;
+  }
+  const tileUrl = (l, t, lv) => `${R2}/tm/lod/${l}/${String(t).padStart(6, "0")}.webp${t >= lv.tiles - 2 ? "?u=" + M.units : ""}`;
+  function tilesAt(l, u0, u1, fn) {
+    const lv = M.levels[l - 1], upt = lv.units_per_tile;
+    const t0 = Math.max(0, Math.floor(u0 / upt)), t1 = Math.min(lv.tiles - 1, Math.floor(u1 / upt));
+    if (t1 - t0 > 24) return;
+    for (let t = t0; t <= t1; t++) { const e = want(`${l}/${t}`, tileUrl(l, t, lv)); if (e) fn(e, t * upt, Math.min(M.units, (t + 1) * upt)); }
   }
   function draw() {
-    gl.viewport(0, 0, cv.width, cv.height); gl.clearColor(0.04, 0.04, 0.047, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.viewport(0, 0, cv.width, cv.height); gl.clearColor(bg[0], bg[1], bg[2], 1); gl.clear(gl.COLOR_BUFFER_BIT);
     if (!M) return;
-    gl.uniform2f(uV, W, Hh);
-    const u0 = cam.cx - W / 2 / cam.s, u1 = cam.cx + W / 2 / cam.s;
+    // true aspect: a strip unit is 1:4 (SDXL 256x1024, OG 128x512), so the band is 4 unit-widths tall; a hairline when zoomed out
+    bandH = Math.max(2, Math.min(maxBand, 4 * cam.s)); bandH = Math.round(bandH * dpr) / dpr;
+    y0 = Math.round((lineY - bandH / 2) * dpr) / dpr;
+    const u0 = cam.cx - W / 2 / cam.s, u1 = cam.cx + W / 2 / cam.s; U0 = u0;
     const L = levelFor(cam.s); drawn = 0;
-    for (let l = Math.min(7, Math.max(1, L) + 2); l >= Math.max(1, L); l--) { // coarse -> fine; finer covers parents once loaded
-      const lv = M.levels[l - 1], upt = lv.units_per_tile;
-      const t0 = Math.max(0, Math.floor(u0 / upt)), t1 = Math.min(lv.tiles - 1, Math.floor(u1 / upt));
-      if (t1 - t0 > 24) continue;
-      for (let t = t0; t <= t1; t++) {
-        const e = want(`${l}/${t}`, `${R2}/tm/lod/${l}/${String(t).padStart(6, "0")}.webp${t >= lv.tiles - 2 ? "?u=" + M.units : ""}`); if (!e) continue;
-        quad(e, (t * upt - u0) * cam.s, Math.min(upt, M.units - t * upt) * cam.s, false);
+    // glow + reflection from the coarse level (already resident as the fallback layer)
+    const CL = Math.min(7, Math.max(1, L) + 1);
+    gl.useProgram(pr2); gl.uniform2f(u2.v, W, Hh); gl.enable(gl.BLEND);
+    const tsec = (now % 600000) / 1000, glowH = Math.max(bandH * 2.2, 26), reflH = Math.max(bandH * 0.62, 18);
+    tilesAt(CL, u0, u1, (e, ua, ub) => {
+      gl.bindTexture(gl.TEXTURE_2D, e.t); gl.uniform4f(u2.t, 0, 0, 1, 1);
+      const xa = X(ua), xb = X(ub);
+      gl.uniform4f(u2.fx, 0, light ? 0.22 : 0.38, tsec, ptrX / W); gl.uniform4f(u2.r, xa, lineY - glowH / 2, xb - xa, glowH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.uniform4f(u2.fx, 1, light ? 0.22 : 0.3, tsec, ptrX / W); gl.uniform4f(u2.r, xa, y0 + bandH + Math.max(2, bandH * 0.04), xb - xa, reflH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    });
+    gl.disable(gl.BLEND); gl.useProgram(pr); gl.uniform2f(uV, W, Hh);
+    for (let l = Math.min(7, Math.max(1, L) + 2); l >= Math.max(1, L); l--) tilesAt(l, u0, u1, (e, ua, ub) => quad(e, ua, ub, y0, bandH)); // coarse -> fine
+    if (L === 0) { // full-res strips, composed exactly like the live viewer: each image starts `overlap` before its slot,
+      // later strips paint over earlier ones, so the result matches the pod's level-1 tiles pixel for pixel
+      const g0 = Math.max(0, Math.floor(u0) - 1), g1 = Math.min(M.units - 1, Math.floor(u1) + 1), ready = [];
+      for (let g = g0; g <= g1; g++) ready.push(want("s/" + g, stripUrl(g)));
+      for (let i = 0; i < ready.length; i++) {
+        const e = ready[i]; if (!e) continue; const g = g0 + i, core = e.h / 4, ov = Math.max(0, e.w - core) / core;
+        quad(e, g - ov, g + 1, y0, bandH);
       }
-    }
-    if (L === 0) for (let g = Math.max(0, Math.floor(u0)); g <= Math.min(M.units - 1, Math.floor(u1)); g++) {
-      const e = want("s/" + g, stripUrl(g)); if (e) quad(e, (g - u0) * cam.s, cam.s + 0.5, true);
     }
   }
 
@@ -151,7 +188,7 @@
   function placeMarks() {
     if (!showMarks) return;
     if (Math.abs(Math.log(cam.s / lastGroupS)) > 0.04 || Math.abs(cam.cx - lastGroupCx) * cam.s > W * 0.5) regroup();
-    const top = y0 - 18;
+    const top = Math.min(y0, lineY - 8) - 18;
     for (let i = 0; i < groups.length; i++) {
       const d = pool[i]; const x = (d._g - cam.cx) * cam.s + W / 2;
       d.style.transform = `translate3d(${x.toFixed(1)}px, ${(top - d._row * 15).toFixed(1)}px, 0)`;
@@ -160,7 +197,7 @@
   }
 
   // ---------- motion (time-based) ----------
-  const minS = () => W / M.units * 0.9, maxS = () => Math.max(8, bandH / 4) * 1.6;
+  const minS = () => W / M.units * 0.9, maxS = () => Math.max(8, maxBand / 4); // true aspect: a unit is 1:4, the band is 4 units-widths tall
   const clamp = () => { cam.ts = Math.min(maxS(), Math.max(minS(), cam.ts)); const pad = W / 2 / cam.ts; cam.tcx = Math.min(M.units + pad * 0.2, Math.max(-pad * 0.2, cam.tcx)); };
   let last = 0, dragging = false, lastHud = 0, ewma = 0.016, slow = 0, dprCap = 2;
   const perf = { frames: [], on: false };
@@ -173,7 +210,7 @@
     if (!dragging && Math.abs(cam.vx) > 0.01) { cam.tcx += cam.vx * dt; cam.vx *= Math.exp(-4 * dt); clamp(); }
     const k = 1 - Math.exp(-12 * dt), ls = Math.log(cam.s), lt = Math.log(cam.ts);
     cam.s = Math.exp(ls + (lt - ls) * k); cam.cx += (cam.tcx - cam.cx) * (playing ? 1 : k);
-    const moving = playing || Math.abs(lt - Math.log(cam.s)) > 1e-4 || Math.abs(cam.tcx - cam.cx) * cam.s > 0.05 || Math.abs(cam.vx) * cam.s > 1;
+    const moving = playing || ts < shimmerUntil || Math.abs(lt - Math.log(cam.s)) > 1e-4 || Math.abs(cam.tcx - cam.cx) * cam.s > 0.05 || Math.abs(cam.vx) * cam.s > 1;
     if (uploads.length) flushUploads(4);
     if (moving || dirty) { draw(); dirty = false; placeMarks(); if (ts - lastHud > 120) { hud(); lastHud = ts; } }
     if (moving || inflight || uploads.length || perf.on || dirty) requestAnimationFrame(frame); else { anim = false; last = 0; hud(); }
@@ -190,6 +227,7 @@
   }, { passive: false });
   const ptrs = new Map(); let pinch = null, lastMove = [], downAt = null;
   cv.addEventListener("pointerdown", (e) => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, e.clientX); dragging = true; cam.vx = 0; downAt = [e.clientX, performance.now()]; lastMove = [[performance.now(), e.clientX]]; if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.abs(a - b) || 1, s: cam.ts, mid: (a + b) / 2 }; } });
+  addEventListener("pointermove", (e) => { ptrX = e.clientX; shimmerUntil = performance.now() + 1600; kick(); }, { passive: true });
   cv.addEventListener("pointermove", (e) => {
     if (!ptrs.has(e.pointerId)) return;
     const px = ptrs.get(e.pointerId); ptrs.set(e.pointerId, e.clientX);
@@ -210,26 +248,26 @@
   cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
 
   // ---------- controls ----------
-  const toast = (t) => { const el = $("toast"); el.textContent = t; el.style.opacity = 1; clearTimeout(toast._t); toast._t = setTimeout(() => (el.style.opacity = 0), 1800); };
+  const toast = (t) => { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove("show"), 1800); };
   function step(dir) {
     const list = ideasOnly ? ideas : scenes; if (!list.length) return;
     let i = bs(list, cam.tcx + 0.5);
     i = dir > 0 ? i : Math.max(0, bs(list, cam.tcx - 1.5) - 1);
     const it = list[Math.min(list.length - 1, i)]; if (!it) return;
-    fly(it.g + Math.min(6, (it.len || 6) / 2), Math.max(cam.ts, bandH / 4 * 0.6));
+    fly(it.g + Math.min(6, (it.len || 6) / 2), Math.max(cam.ts, maxBand / 4 * 0.6));
     toast((ideasOnly ? "Idea · " : "") + (it.title || it.label));
   }
   function setPlay(on) {
     playing = on; const b = $("play"); b.textContent = on ? "Pause" : "Play here"; b.classList.toggle("on", on);
-    if (on) { cam.vx = 0; cam.ts = Math.max(cam.ts, bandH / 4 * 0.6); clamp(); kick(); }
+    if (on) { cam.vx = 0; cam.ts = Math.max(cam.ts, maxBand / 4 * 0.6); clamp(); kick(); }
   }
   $("prev").onclick = () => step(-1); $("next").onclick = () => step(1);
   $("play").onclick = () => setPlay(!playing);
   $("all").onclick = () => fly(M.units / 2, minS());
   $("live").onclick = () => { // newest strips with a ~3 min delay (tiles land a few minutes after painting)
     const delay = Math.round(rateAt(lastG() - 1) * 180);
-    fly(Math.max(0, lastG() - delay) - W / 2 / Math.max(cam.ts, 20) * 0.3, Math.max(cam.ts, bandH / 4 * 0.6));
-    toast("A few minutes behind live · live viewer at the home page");
+    fly(Math.max(0, lastG() - delay) - W / 2 / Math.max(cam.ts, 20) * 0.3, Math.max(cam.ts, maxBand / 4 * 0.6));
+    toast("The latest strips, a few minutes behind live. Live is one tap away (top right).");
   };
   const menu = $("menu");
   $("menuB").onclick = () => { const o = !menu.classList.contains("open"); menu.classList.toggle("open", o); $("menuB").setAttribute("aria-expanded", o); };
@@ -267,10 +305,17 @@
   function resize() {
     dpr = Math.min(dprCap, devicePixelRatio || 1); W = innerWidth; Hh = innerHeight;
     cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
-    bandH = Math.round(Math.min(Hh * 0.6, Math.max(160, W * 0.55))); y0 = Math.round((Hh - bandH) / 2);
+    maxBand = Math.round(Math.min(Hh * 0.56, 1024)); lineY = Math.round(Hh * 0.44);
     dirty = true; if (M) { clamp(); lastGroupS = 0; regroup(); } kick();
   }
   addEventListener("resize", resize);
+  function theme() {
+    light = matchMedia("(prefers-color-scheme: light)").matches;
+    const c = getComputedStyle(document.body).backgroundColor.match(/\d+(\.\d+)?/g);
+    if (c) bg = c.slice(0, 3).map((x) => x / 255);
+    dirty = true; kick();
+  }
+  addEventListener("tapestry:theme", theme);
 
   // ---------- perf harness ----------
   window.__tm = {
@@ -287,7 +332,7 @@
     marks = lm.items.filter((m) => m.g < M.units + 50);
     ideas = marks.filter((m) => m.k === "idea").map((m) => ({ g: m.g, len: 10, title: m.label }));
     scenes = sc.scenes.map(([g, len, title, user]) => ({ g, len, title, user }));
-    resize(); buildCalendar();
+    theme(); resize(); buildCalendar();
     const at = qs.get("g"); cam.s = cam.ts = minS(); cam.cx = cam.tcx = M.units / 2; clamp();
     if (at) fly(+at, maxS() * 0.5);
     regroup(); hud(); window.__tm.ready = true; kick();

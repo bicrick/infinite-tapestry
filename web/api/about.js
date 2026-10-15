@@ -180,6 +180,14 @@ module.exports = async (req, res) => {
   try {
     const kind = q.get("kind");
     if (kind === "tile") return await tile(res, +q.get("l"), +q.get("c"));
+    if (kind === "ogstrip") { // Time Machine v3: OG-era (SD 1.5) strip, private storage -> CDN, immutable
+      const i = +q.get("i"); if (!(i >= 0 && i < 100000 && Number.isInteger(i))) return res.status(400).end();
+      const r = await fetch(`${SB()}/storage/v1/object/tapestry/live/strips/${String(i).padStart(8, "0")}.jpg`, { headers: svc() }).catch(() => null);
+      if (!r || !r.ok) { res.setHeader("cache-control", "public, s-maxage=300"); return res.status(404).end(); }
+      res.setHeader("content-type", "image/jpeg"); res.setHeader("access-control-allow-origin", "*");
+      res.setHeader("cache-control", "public, max-age=86400, s-maxage=31536000, immutable");
+      return res.status(200).send(Buffer.from(await r.arrayBuffer()));
+    }
     if (kind === "transparency") {
       res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=300");
       return res.status(200).json(await transparency());
