@@ -1,0 +1,59 @@
+/* The live page's composer (static/style.css .dock/.cmd/.icon/.send, dark + light tokens), plus the timeline
+   controls it reflows into. Only transform and opacity are animated (ui/bar.js); everything here is static paint. */
+:root {
+  --ink: 255,255,255;
+  --shade: 0,0,0;
+  --solid: #fff;
+  --on-solid: #000;
+  --fg: rgba(var(--ink),.94);
+  --muted: rgba(var(--ink),.55);
+  --glass: rgba(18,18,20,.42);
+  --line: rgba(var(--ink),.10);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --ink: 38,32,26;
+    --shade: 120,100,80;
+    --solid: #26201a;
+    --on-solid: #f6f2eb;
+    --glass: rgba(250,246,240,.55);
+    --fg: rgba(38,32,26,.92);
+  }
+}
+
+.one-dock { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); height: 52px;
+  font-family: "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased; font-size: 13px; letter-spacing: -.005em; color: var(--fg); }
+.one-dock > * { position: absolute; }
+.one-dock button, .one-dock textarea { font: inherit; color: inherit; }
+
+/* Sliding doors: two fixed windows meet at the centre; each holds a full pill that slides inward, so the width changes
+   with no scaling (radius and shadow stay exact) and the only seam sits still on the centre line. Both blur layers
+   paint before either tint, as one .cmd does (blur the backdrop, then paint the glass), so neither half blurs the
+   other's tint into a band at the seam. */
+.one-dock .b-door { top: -60px; height: 172px; overflow: hidden; pointer-events: none; }
+.one-dock .b-door > .b-pill { position: absolute; top: 60px; height: 52px; border-radius: 26px; }
+.one-dock .b-blur { backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5); }
+.one-dock .b-tint { background: var(--glass); border: 1px solid var(--line); box-shadow: 0 10px 40px rgba(var(--shade),.25); }
+
+.one-dock .b-field { left: 17px; top: 6px; height: 40px; margin: 0; padding: 0; border: 0; outline: 0; background: none; resize: none;
+  overflow: hidden; white-space: nowrap; font-size: 16px; line-height: 40px; letter-spacing: normal; color: var(--fg); pointer-events: auto; }
+.one-dock .b-field::placeholder { color: rgba(var(--ink),.45); }
+
+.one-dock .icon { top: 6px; width: 40px; height: 40px; border: 0; padding: 0; margin: 0; border-radius: 20px; background: none;
+  display: grid; place-items: center; color: var(--fg); cursor: pointer; pointer-events: auto; }
+.one-dock .icon:hover { background: rgba(var(--ink),.08); }
+.one-dock .icon:disabled { opacity: .35; cursor: default; background: none; }
+.one-dock .icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.one-dock .b-ref svg { width: 17px; height: 17px; stroke-width: 1.5; translate: -.5px -.5px; } /* label#ref-btn renders its inline svg half a pixel off-grid */
+.one-dock .b-ref input { display: none; }
+
+.one-dock .b-send:hover { background: none; }
+.one-dock .b-disc { position: absolute; inset: 0; border-radius: 20px; background: var(--solid); display: grid; place-items: center; }
+.one-dock .b-disc svg { stroke: var(--on-solid); }
+
+.one-dock .b-live { width: auto; padding: 0 14px; font-weight: 500; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
+
+.one-dock .one-cap { left: 0; right: 0; bottom: calc(100% + 10px); text-align: center; font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.one-dock .b-date { width: 1px; height: 1px; opacity: 0; pointer-events: none; left: 0; top: 0; }

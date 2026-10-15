@@ -10,7 +10,7 @@
   T.renderer.addPass(tp); T.renderer.addPass(T.passes.grain);
   let M = null, hours = [];
   const Z_EVENTS = -6; // events/markers only zoomed out past ~hours (span >= ~1 h at desktop width); off by default (phase 4)
-  T.config = { Z_EVENTS, eventsDefault: false };
+  T.config = { Z_EVENTS, eventsDefault: false, api: API };
 
   // ---------- layout: zoom-0 band leaves room for the reflection below ----------
   function layout({ W, H }) {
@@ -27,10 +27,11 @@
   function hourAt(u) { let lo = 0, hi = hours.length - 1; if (hi < 0) return null; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (hours[m][0] <= u) lo = m; else hi = m - 1; } return hours[lo]; }
   function unitTime(u) { const h = hourAt(u); if (!h) return null; const f = Math.max(0, Math.min(1, (u - h[0]) / Math.max(1, h[1] - h[0]))); return new Date(h[2] + f * (h[3] - h[2])); }
   function timeUnit(ms) { for (let i = hours.length - 1; i >= 0; i--) if (hours[i][2] <= ms) { const h = hours[i]; return h[0] + Math.min(1, (ms - h[2]) / Math.max(1, h[3] - h[2])) * (h[1] - h[0]); } return 0; }
+  T.time = { unitTime, timeUnit, ready: () => hours.length > 0, head: () => (M ? M.units : 0) };
   cam.setRate((u) => { const h = hourAt(u); return h && h[3] > h[2] ? Math.max(0.05, Math.min(2, (h[1] - h[0]) / ((h[3] - h[2]) / 1000))) : 0.35; });
 
-  // ---------- UI (phase-1 minimum; the real UI layer is phase 4) ----------
-  const clock = $("one-clock"), cap = $("one-cap"), bPlay = $("one-play"), bLive = $("one-live");
+  // ---------- UI (clock + caption; the bar is ui/bar.js) ----------
+  const clock = $("one-clock"), cap = $("one-cap");
   const wall = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
   const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   (function tick() { clock.textContent = wall.format(new Date()); setTimeout(tick, 1000 - (Date.now() % 1000) + 5); })(); // ALWAYS wall time
@@ -41,14 +42,10 @@
     setText(cap, c.followLive ? "Live" : t ? fmt.format(t) : "");
     document.documentElement.style.setProperty("--zp", c.zoomProgress.toFixed(3));
     document.body.classList.toggle("is-live", c.followLive);
-    bLive.setAttribute("aria-pressed", String(c.followLive));
   }
   cam.on("change", () => urlSoon());
   cam.on("live", ui); cam.on("settle", () => { ui(); urlSoon(); });
-  cam.on("play", (on) => { bPlay.classList.toggle("on", on); bPlay.setAttribute("aria-label", on ? "Pause" : "Play"); bPlay.textContent = on ? "❚❚" : "▶"; });
   T.renderer.onTick((dt, ts) => { if (ts - lastUi > 100) { lastUi = ts; ui(); } return heldTick(dt); });
-  bPlay.onclick = () => (cam.get().playing ? cam.pause() : cam.play());
-  bLive.onclick = () => { cam.goLive(); T.renderer.kick(); };
 
   // ---------- input: one handler for every zoom ----------
   const typing = (t) => t && t.closest && t.closest("input,textarea,select,[contenteditable]");

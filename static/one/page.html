@@ -6,17 +6,16 @@
   <meta name="robots" content="noindex, nofollow, noarchive" />
   <title>Infinite Tapestry</title>
   <script src="theme.js"></script>
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
   <link rel="stylesheet" href="one/one.css" />
+  <link rel="stylesheet" href="one/ui/bar.css" />
 </head>
 <body>
   <canvas id="one-c" role="img" aria-label="Infinite Tapestry"></canvas>
   <div class="one-ui">
     <span id="one-clock" class="one-clock" aria-label="Current time"></span>
-    <div class="one-bar">
-      <span id="one-cap" class="one-cap"></span>
-      <button id="one-play" type="button" aria-label="Play">▶</button>
-      <button id="one-live" type="button" aria-pressed="false"><span class="dot"></span>Live</button>
-    </div>
+    <div id="one-dock" class="one-dock" role="group" aria-label="Composer and timeline controls"><span id="one-cap" class="one-cap"></span></div>
     <div class="one-hints" aria-hidden="true">Scroll · scrub &nbsp; Shift+scroll · zoom &nbsp; WASD / arrows &nbsp; Space · play &nbsp; L · live</div>
     <pre id="one-perf" class="one-perf" hidden></pre>
   </div>
@@ -27,5 +26,7 @@
   <script src="one/passes/tiles.js"></script>
   <script src="one/passes/grain.js"></script>
   <script src="one/main.js"></script>
+  <script src="one/ui/morph.js"></script>
+  <script src="one/ui/bar.js"></script>
 </body>
 </html>
