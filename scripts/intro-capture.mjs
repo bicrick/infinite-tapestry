@@ -83,9 +83,8 @@ const report = {
   longTasksDuringIntro: c.longTasks.filter(([t]) => c.introOn != null && t >= c.introOn && t <= (c.introOff || Infinity)).map(([t, d]) => [Math.round(t), Math.round(d)]),
   errors: timing.errors.slice(0, 20),
 };
-const rec = await session(true);
-if (rec.video) fs.renameSync(rec.video, path.join(out, "intro.webm"));
-report.recordedRun = { resolveAtMs: rec.cap.resolveAt && Math.round(rec.cap.resolveAt), introOffMs: rec.cap.introOff && Math.round(rec.cap.introOff), sequence: stats(rec.cap.frames.filter((t) => rec.cap.resolveAt != null && t >= rec.cap.resolveAt && t <= (rec.cap.introOff || Infinity))) };
+const save = () => fs.writeFileSync(path.join(out, "perf.json"), JSON.stringify(report, null, 2));
+save();
 
 const rm = await chromium.launch({ executablePath: exe, headless: true, args: ARGS });
 const rmCtx = await rm.newContext({ viewport: VIEWPORT, colorScheme: "dark", reducedMotion: "reduce" });
@@ -95,5 +94,14 @@ await rmPage.goto(base + "/", { waitUntil: "domcontentloaded" });
 const rmOk = await rmPage.waitForFunction(() => document.body.classList.contains("loaded"), null, { timeout: 30000 }).then(() => true, () => false);
 report.reducedMotion = { loaded: rmOk, introCanvas: await rmPage.evaluate(() => !!document.getElementById("intro")) };
 await rm.close();
-fs.writeFileSync(path.join(out, "perf.json"), JSON.stringify(report, null, 2));
+save();
+
+try {
+  const rec = await session(true);
+  if (rec.video) fs.renameSync(rec.video, path.join(out, "intro.webm"));
+  report.recordedRun = { resolveAtMs: rec.cap.resolveAt && Math.round(rec.cap.resolveAt), introOffMs: rec.cap.introOff && Math.round(rec.cap.introOff), sequence: stats(rec.cap.frames.filter((t) => rec.cap.resolveAt != null && t >= rec.cap.resolveAt && t <= (rec.cap.introOff || Infinity))) };
+} catch (e) {
+  report.recordedRun = { error: String(e).split("\n")[0] };
+}
+save();
 console.log(JSON.stringify(report, null, 2));
