@@ -305,7 +305,8 @@
   }
 
   function resize() {
-    dpr = Math.min(dprCap, devicePixelRatio || 1); // 0.75 = last-resort render scale on fill-rate-starved machines W = innerWidth; Hh = innerHeight;
+    // dprCap 0.75 = last-resort render scale on fill-rate-starved machines
+    dpr = Math.min(dprCap, devicePixelRatio || 1); W = innerWidth; Hh = innerHeight;
     cv.width = Math.round(W * dpr); cv.height = Math.round(Hh * dpr);
     maxBand = Math.round(Math.min(Hh * 0.56, 1024)); lineY = Math.round(Hh * 0.44);
     dirty = true; if (M) { clamp(); lastGroupS = 0; regroup(); } kick();
