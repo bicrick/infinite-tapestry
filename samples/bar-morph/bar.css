@@ -1,0 +1,71 @@
+/* Values copied from static/style.css (dark theme) and checked against computed styles of the live page.
+   Only transform and opacity are ever animated; everything below is static paint. */
+:root {
+  --ink: 255,255,255;
+  --shade: 0,0,0;
+  --solid: #fff;
+  --on-solid: #000;
+  --bg: #000;
+  color-scheme: dark;
+  --fg: rgba(var(--ink),.94);
+  --muted: rgba(var(--ink),.55);
+  --glass: rgba(18,18,20,.42);
+  --line: rgba(var(--ink),.10);
+  --ease: cubic-bezier(.2,.7,.2,1);
+  --live-dot: #ff4d3d;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
+  font-family: "Inter var", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-feature-settings: "cv11", "ss01"; -webkit-font-smoothing: antialiased; font-size: 13px; letter-spacing: -.005em; }
+button, textarea { font: inherit; color: inherit; }
+
+.stage { position: fixed; inset: 0; background: var(--bg) url(live-still.jpg) center bottom / cover no-repeat; }
+
+/* .dock + .cmd geometry from the live page: 560 x 52, 20px off the bottom, centred */
+.dock { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 560px; height: 52px; }
+.bar { position: absolute; inset: 0; }
+.bar > *, .win > *, .win-in > * { position: absolute; }
+
+.glass { background: var(--glass); border: 1px solid var(--line);
+  backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5); }
+.pill { inset: 0; border-radius: 26px; box-shadow: 0 10px 40px rgba(var(--shade),.25); }
+
+/* Three-piece pill for width changes without scaling the corner radius */
+.shadow { inset: 0; border-radius: 26px; box-shadow: 0 10px 40px rgba(var(--shade),.25); }
+.cap { top: 0; width: 26px; height: 52px; }
+.cap.l { left: 0; border-right: 0; border-radius: 26px 0 0 26px; }
+.cap.r { right: 0; border-left: 0; border-radius: 0 26px 26px 0; }
+.mid { left: 26px; width: 508px; top: 0; height: 52px; border-left: 0; border-right: 0; }
+
+.field { left: 17px; top: 6px; width: 454px; height: 40px; margin: 0; padding: 0; border: 0; outline: 0; background: none;
+  resize: none; overflow: hidden; white-space: nowrap; font-size: 16px; line-height: 40px; letter-spacing: normal; color: var(--fg); }
+.field::placeholder { color: rgba(var(--ink),.45); }
+.field.ghost { color: rgba(var(--ink),.45); pointer-events: none; }
+
+.icon { top: 6px; width: 40px; height: 40px; border: 0; padding: 0; margin: 0; border-radius: 20px; background: none;
+  display: grid; place-items: center; color: var(--fg); cursor: pointer; }
+.icon:hover { background: rgba(var(--ink),.08); }
+.icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.icon.ref svg { width: 17px; height: 17px; stroke-width: 1.5; translate: -.5px -.5px; } /* the live label#ref-btn sits its inline svg half a pixel off-grid */
+.icon.ghost { pointer-events: none; }
+
+.send { background: var(--solid); color: var(--on-solid); overflow: hidden; }
+.send:hover { background: var(--solid); }
+.send > * { grid-area: 1 / 1; }
+.send svg { stroke: var(--on-solid); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live-dot); }
+
+.live-label { top: 6px; height: 40px; line-height: 40px; font-size: 12px; font-weight: 500; color: var(--fg); white-space: nowrap; pointer-events: none; }
+
+.blur { filter: blur(2.5px); }
+.win { overflow: hidden; pointer-events: none; }
+.win-in > * { top: 0; }
+.win .icon { pointer-events: auto; }
+
+/* in live the timeline controls are not interactive, and vice versa */
+[data-state="live"] .tl, [data-state="timeline"] .lv { pointer-events: none; }
+
+.note { position: fixed; left: 28px; top: 64px; font-size: 12px; color: var(--muted); line-height: 1.6; pointer-events: none; }
+.note b { color: var(--fg); font-weight: 500; }
+.rec .note { display: none; }

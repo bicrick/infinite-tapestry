@@ -1,0 +1,13 @@
+{
+  "name": "bar-morph-samples",
+  "private": true,
+  "type": "module",
+  "description": "Scratch prototypes: live composer morphing into the timeline bar. Not part of the app.",
+  "scripts": {
+    "record": "node tools/record.mjs",
+    "perf": "node tools/perf.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.11.1"
+  }
+}
