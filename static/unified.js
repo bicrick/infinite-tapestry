@@ -29,11 +29,12 @@
   const pr = gl.createProgram();
   gl.attachShader(pr, sh(gl.VERTEX_SHADER, `attribute vec2 p; uniform vec4 r; uniform vec2 v; varying vec2 uv;
     void main(){ uv=p; vec2 q=r.xy+p*r.zw; gl_Position=vec4(q.x/v.x*2.-1., 1.-q.y/v.y*2., 0., 1.); }`));
-  gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; void main(){ gl_FragColor=texture2D(t, uvt.xy+uv*uvt.zw); }`));
+  gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `precision mediump float; varying vec2 uv; uniform sampler2D t; uniform vec4 uvt; uniform float al; void main(){ gl_FragColor=vec4(texture2D(t, uvt.xy+uv*uvt.zw).rgb, al); }`));
   gl.linkProgram(pr); gl.useProgram(pr);
   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
   const ap = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(ap); gl.vertexAttribPointer(ap, 2, gl.FLOAT, false, 0, 0);
-  const uR = gl.getUniformLocation(pr, "r"), uV = gl.getUniformLocation(pr, "v"), uT = gl.getUniformLocation(pr, "uvt");
+  const uR = gl.getUniformLocation(pr, "r"), uV = gl.getUniformLocation(pr, "v"), uT = gl.getUniformLocation(pr, "uvt"), uA = gl.getUniformLocation(pr, "al");
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   // The exact production reflection module (static/refl.js), imported, not copied.
   const refl = window.TapestryReflection ? window.TapestryReflection.create(cv, { surr: () => (light ? "244,239,231" : "5,5,6"), coarse: () => matchMedia("(pointer: coarse)").matches }) : null;
 
@@ -56,6 +57,8 @@
     loadBitmap(url).then((bm) => { e.bm = bm; uploads.push(e); }).catch(() => { e.state = 3; e.failAt = performance.now(); }).finally(() => { inflight--; dirty = true; kick(); });
     return null;
   }
+  // Draw-time fallback lookup: an already-resident texture, never a request.
+  const peek = (k) => { const e = tex.get(k); if (e && e.state === 2) { e.used = now; return e; } return null; };
   function flushUploads(budget) {
     const t0 = performance.now();
     while (uploads.length && performance.now() - t0 < budget) {
@@ -64,16 +67,18 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, e.bm);
-      e.t = g; e.w = e.bm.width; e.h = e.bm.height; e.state = 2; texBytes += e.w * e.h * 4;
+      e.t = g; e.w = e.bm.width; e.h = e.bm.height; e.state = 2; e.at = performance.now(); texBytes += e.w * e.h * 4;
       e.bm.close && e.bm.close(); e.bm = null; dirty = true;
     }
     if (tex.size > MAX_TEX * 1.15 || texBytes > MAX_BYTES * 1.15) {
-      const ready = []; for (const [k, e] of tex) if (e.state >= 2) ready.push([e.used, k, e]);
+      const ready = []; for (const [k, e] of tex) if (e.state >= 2 && !COARSE_KEEP(k)) ready.push([e.used, k, e]);
       ready.sort((a, b) => a[0] - b[0]);
       for (const [used, k, e] of ready) { if ((tex.size <= MAX_TEX && texBytes <= MAX_BYTES) || used === now) break; if (e.t) { gl.deleteTexture(e.t); texBytes -= e.w * e.h * 4; } tex.delete(k); }
     }
   }
 
+  // Coarse pyramid levels (6, 7) cover all history in a handful of small tiles: always resident, the backstop under everything.
+  const COARSE_KEEP = (k) => k[0] === "6" || k[0] === "7";
   // ---------- draw ----------
   const pxPerUnit = (l) => 64 / Math.pow(4, l - 1);
   function levelFor(s) { const dev = s * dpr; if (dev > 80) return 0; let l = 1; while (l < 7 && pxPerUnit(l + 1) >= dev) l++; return l; }
@@ -88,14 +93,19 @@
   function quad(e, ua, ub, y, h) {
     gl.bindTexture(gl.TEXTURE_2D, e.t);
     const hx = 0.5 / e.w, hy = 0.5 / e.h; gl.uniform4f(uT, hx, hy, 1 - 2 * hx, 1 - 2 * hy);
-    const xa = X(ua), xb = X(ub); gl.uniform4f(uR, xa, y, xb - xa, h); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); drawn++;
+    const xa = X(ua), xb = X(ub), a = e.at ? Math.min(1, (performance.now() - e.at) / FADE) : 1;
+    if (a < 1) fading = true; else e.at = 0;
+    gl.uniform1f(uA, a); gl.uniform4f(uR, xa, y, xb - xa, h); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); drawn++;
+    covered.push(xa, xb);
   }
+  let coarseDone = false, liveSnap = null;
+  const FADE = 200; let fading = false; const covered = []; let gaps = [];
   const tileUrl = (l, t, lv) => (viaApi ? `${location.origin}/api/tm?tile=${l}/${t}` : `${R2}/tm/lod/${l}/${String(t).padStart(6, "0")}.webp`) + (t >= lv.tiles - 2 ? (viaApi ? "&u=" : "?u=") + M.units : "");
-  function tilesAt(l, u0, u1, fn) {
-    const lv = M.levels[l - 1], upt = lv.units_per_tile;
+  function tilesAt(l, u0, u1, fn, only) { // only: draw what is resident, request nothing
+    const lv = M.levels[l - 1]; if (!lv) return; const upt = lv.units_per_tile;
     const t0 = Math.max(0, Math.floor(u0 / upt)), t1 = Math.min(lv.tiles - 1, Math.floor(u1 / upt));
     if (t1 - t0 > 24) return;
-    for (let t = t0; t <= t1; t++) { const e = want(`${l}/${t}`, tileUrl(l, t, lv)); if (e) fn(e, t * upt, Math.min(M.units, (t + 1) * upt)); }
+    for (let t = t0; t <= t1; t++) { const e = only ? peek(`${l}/${t}`) : want(`${l}/${t}`, tileUrl(l, t, lv)); if (e) fn(e, t * upt, Math.min(M.units, (t + 1) * upt)); }
   }
   let coverage = 1;
   function draw() {
@@ -108,11 +118,31 @@
     const u0 = cam.cx - W / 2 / cam.s, u1 = cam.cx + W / 2 / cam.s; U0 = u0;
     const L = levelFor(cam.s); drawn = 0;
     gl.uniform2f(uV, W, Hh);
-    for (let l = Math.min(7, Math.max(1, L) + 2); l >= Math.max(1, L); l--) tilesAt(l, u0, u1, (e, ua, ub) => quad(e, ua, ub, y0, bandH));
+    covered.length = 0; fading = false;
+    // Coarse prefetch: every level-7 then level-6 tile (a few dozen small webps for all history), requested before
+    // anything finer and kept resident, so a jump anywhere always has a parent to scale up.
+    if (!coarseDone) { let all = true; for (const l of [7, 6]) { const lv = M.levels[l - 1]; if (lv) for (let t = 0; t < lv.tiles; t++) if (!want(`${l}/${t}`, tileUrl(l, t, lv))) all = false; } coarseDone = all; }
+    // Live snapshot (taken on entering the timeline): the live viewer's own already-drawn strips, under everything.
+    if (liveSnap) { gl.bindTexture(gl.TEXTURE_2D, liveSnap.t); gl.uniform4f(uT, 0, liveSnap.v0, 1, liveSnap.v1 - liveSnap.v0); gl.uniform1f(uA, 1);
+      const xa = X(liveSnap.ua), xb = X(liveSnap.ub); gl.uniform4f(uR, xa, y0, xb - xa, bandH); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); drawn++; covered.push(xa, xb); }
+    // Never a blank: coarsest first (7 is always requested first = coarse prefetch, and kept resident), then every
+    // resident level in between scaled up, then the wanted levels L+2..L; each new texture fades in over its parent.
+    const lw = Math.min(7, Math.max(1, L) + 2), Q = (e, ua, ub) => quad(e, ua, ub, y0, bandH);
+    for (let l = 7; l > lw; l--) tilesAt(l, u0, u1, Q, l !== 7 && l !== 6);
+    for (let l = lw; l >= Math.max(1, L); l--) tilesAt(l, u0, u1, Q);
     // Full-res strips at strip zoom; past the pyramid (the live tip, up to now) the live viewer's own LOD chunks
     // (16/64/256 strips per tile, R2), finishing with single strips at the very edge. The line always reaches now.
     let need = 0, have = 0;
     const lm = liveMax(), g1 = Math.min(lm - 1, Math.floor(u1) + 1);
+    // Tip backstop (past the pyramid): the coarsest live chunks (256 strips each) are always requested first and every
+    // resident finer chunk is drawn under the wanted strips/chunks, so the tip never shows bare background.
+    if (g1 >= M.units) {
+      const base = SDXL0(), lmi = lm - base, f0 = Math.max(M.units, Math.floor(u0)) - base;
+      for (let lv = 3; lv >= 1; lv--) { const N = [0, 16, 64, 256][lv];
+        for (let c = Math.max(0, Math.floor(f0 / N)); c < Math.floor(lmi / N) && base + c * N <= g1; c++) {
+          const e = lv === 3 ? want(`p3/${c}`, `${R2}/live-sdxl/lod/3/${String(c).padStart(6, "0")}.jpg`) : peek(`p${lv}/${c}`);
+          if (e) quad(e, base + c * N, base + (c + 1) * N, y0, bandH); } }
+    }
     if (L === 0) {
       const g0 = Math.max(0, Math.floor(u0) - 1);
       for (let g = g0; g <= g1; g++) { need++; const e = want("s/" + g, stripUrl(g)); if (!e) continue; have++; const core = e.h / 4, ov = Math.max(0, e.w - core) / core; quad(e, g - ov, g + 1, y0, bandH); }
@@ -131,8 +161,17 @@
       for (let i = from; i < lmi && base + i <= g1; i++) { need++; const e = want("s/" + (base + i), stripUrl(base + i)); if (e) { have++; quad(e, base + i, base + i + 1, y0, bandH); } }
     }
     coverage = need ? have / need : 1;
+    gaps = trueGaps(X(0), Math.min(W, X(liveMax()))); // fading keeps the frame loop running (see frame())
+
     if (refl && now - lastRefl >= 32) { lastRefl = now; refl.frame({ left: U0 * cam.s * dpr, cov: 1, lod: true, fading: 0 }, y0 * dpr, bandH * dpr, cv.width, cv.height, 1); reflPending = false; }
     else if (refl) reflPending = true;
+  }
+  // Screen-x spans of the band with NO texture at any level (CSS px), from this frame's quads.
+  function trueGaps(xmin, xmax) {
+    const a = Math.max(0, xmin), b = Math.min(W, xmax), out = []; if (b <= a) return out;
+    const iv = []; for (let i = 0; i < covered.length; i += 2) iv.push([covered[i], covered[i + 1]]); iv.sort((p, q) => p[0] - q[0]);
+    let x = a; for (const [p, q] of iv) { if (q <= x) continue; if (p > x + 0.5) out.push([x, Math.min(p, b)]); x = Math.max(x, q); if (x >= b) break; }
+    if (x < b - 0.5) out.push([x, b]); return out;
   }
   const smooth = (x) => x * x * (3 - 2 * x);
 
@@ -241,12 +280,22 @@
       if (instant || coverage >= 0.9 || performance.now() - t0 > 450) { document.body.classList.add("u-tl"); } else revealT = setTimeout(reveal, 30);
     })();
   }
+  // One texImage2D of the live canvas's band rows (~1 ms): the timeline's first frames show exactly what live showed.
+  function takeSnap(L) {
+    try { const TV = window.TapestryView, b = TV.band(), ch = liveCv.height; if (!(b.height > 0) || !ch) return;
+      if (!liveSnap) { liveSnap = { t: gl.createTexture() }; gl.bindTexture(gl.TEXTURE_2D, liveSnap.t);
+        for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v); }
+      gl.bindTexture(gl.TEXTURE_2D, liveSnap.t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, liveCv);
+      const half = W / 2 / L.s; liveSnap.ua = L.g - half; liveSnap.ub = L.g + half; liveSnap.v0 = b.top / ch; liveSnap.v1 = (b.top + b.height) / ch;
+    } catch (_) { liveSnap = null; }
+  }
   function enterTimeline(targetS, sx) {
     if (!M) return;
     const L = readLive(); if (!L) return;
     sLive = L.s; entry = { y: L.y, s: L.s }; lineY = L.y; host.style.setProperty("--u-line", lineY + "px");
     // the live viewer stays live underneath (no seek: zero extra work while hidden)
     cam.cx = cam.tcx = L.g; cam.s = cam.ts = L.s; cam.vx = 0;
+    takeSnap(L);
     mode = "tl"; resize(); clamp();
     if (targetS) zoomAt(targetS / cam.ts, sx ?? W / 2);
     // Pre-draw a frame before the fade so the crossover never shows an empty canvas (strips around the centre are
@@ -326,6 +375,7 @@
     const moving = step(dt);
     if (uploads.length) flushUploads(4);
     if (moving || dirty) { draw(); dirty = false; placeMarks(); if (ts - lastHud > 120) { hud(); lastHud = ts; urlSoon(); } }
+    if (fading) dirty = true;
     if (moving || inflight || uploads.length || perf.on || dirty || reflPending) { if (reflPending && !moving) dirty = true; requestAnimationFrame(frame); }
     else { anim = false; last = 0; hud(); urlSoon(); }
   }
@@ -529,6 +579,18 @@
   addEventListener("tapestry:theme", theme);
 
   // ---------- perf harness (?perf=1) ----------
+  // ---------- public hook for placeholders (UI Tapestry's Grain / StippleFill, PR #91) ----------
+  // window.TapestryTimeline.hasAnyTexture(rect) -> boolean. rect = {x, y, width, height} in CSS px, viewport coords
+  // (the timeline canvas #u-c is fixed at inset 0). True when ANY texture (any pyramid level, tip chunk or strip)
+  // was drawn under any part of rect's horizontal span on the last frame; false = a true gap, the only place a
+  // placeholder may draw. Outside the band or outside timeline mode it returns true (nothing to fill). O(gaps).
+  window.TapestryTimeline = { hasAnyTexture(rect) {
+    if (mode !== "tl" || !rect) return true;
+    const x0 = rect.x, x1 = rect.x + (rect.width || 0), y = rect.y || 0, h = rect.height || 0;
+    if (h && (y + h < y0 || y > y0 + bandH)) return true;
+    for (const [a, b] of gaps) if (a <= x0 && b >= x1) return false; // the whole span lies inside one gap
+    return true;
+  } };
   window.__u = {
     cam, mode: () => mode, detents, zOf, level: () => levelFor(cam.s), drawn: () => drawn, coverage: () => coverage, dpr: () => dpr, liveMax,
     tex: () => ({ count: tex.size, bytes: texBytes, inflight, uploads: uploads.length }), enterTimeline, toLive, zoomAt, stepDetent, fly, snap,
