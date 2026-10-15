@@ -57,8 +57,10 @@
           <li class="built-item m m-scatter" style="--i:0"><span class="built-icon" style="--built-mask:url('/brand/built/vercel.svg')" aria-hidden="true"></span><span>Vercel</span></li>
           <li class="built-item m m-scatter" style="--i:1"><span class="built-icon" style="--built-mask:url('/brand/built/cloudflare.svg')" aria-hidden="true"></span><span>Cloudflare</span></li>
           <li class="built-item m m-scatter" style="--i:2"><span class="built-icon" style="--built-mask:url('/brand/built/stablediffusion.svg')" aria-hidden="true"></span><span>Stable Diffusion</span></li>
-          <li class="built-item m m-scatter" style="--i:3"><span class="built-icon" style="--built-mask:url('/brand/built/runpod.svg')" aria-hidden="true"></span><span>RunPod</span></li>
-          <li class="built-item m m-scatter" style="--i:4"><span class="built-icon" style="--built-mask:url('/brand/built/googlecloud.svg')" aria-hidden="true"></span><span>Google Cloud</span></li>
+          <li class="built-item m m-scatter" style="--i:3"><span class="built-icon" style="--built-mask:url('/brand/built/claude.svg')" aria-hidden="true"></span><span>Claude</span></li>
+          <li class="built-item m m-scatter" style="--i:4"><span class="built-icon" style="--built-mask:url('/brand/built/grok.svg')" aria-hidden="true"></span><span>Grok</span></li>
+          <li class="built-item m m-scatter" style="--i:5"><span class="built-icon" style="--built-mask:url('/brand/built/runpod.svg')" aria-hidden="true"></span><span>RunPod</span></li>
+          <li class="built-item m m-scatter" style="--i:6"><span class="built-icon" style="--built-mask:url('/brand/built/googlecloud.svg')" aria-hidden="true"></span><span>Google Cloud</span></li>
         </ul>
       </div>
     </section>
@@ -68,25 +70,43 @@
         <p class="eyebrow m m-left">How it works</p>
         <h2 class="m m-focus">Type a place. Watch the world walk into it.</h2>
         <p class="m m-up m-late" style="max-width:52ch">The tapestry never stops scrolling. Anyone watching can say where it goes next, and a few seconds later the painting turns toward it, seamlessly.</p>
-        <div class="steps">
-          <div class="step m m-card" style="--i:0">
-            <div class="shot"><img src="/about-img/step-type.webp" alt="A dog napping in warm sunlight" loading="lazy" decoding="async" />
-              <div class="ui-over"><div class="glass composer"><span class="ph">dog naps in sunlight<span class="caret"></span></span><span class="send">↑</span></div></div></div>
-            <h3><span class="n">01</span>&nbsp; Type an idea</h3><p>A place, a mood, something ridiculous. No account needed.</p>
-          </div>
-          <div class="step m m-card" style="--i:1">
-            <div class="shot"><img src="/about-img/step-queue.webp" alt="Cats wearing baseball hats" loading="lazy" decoding="async" />
-              <div class="ui-over"><div class="glass queue">
-                <div class="tabs"><b>Queue</b><span>Fuel</span><span>Chat</span><span>You</span></div>
-                <div class="sort"><b>Up next</b><span>New</span><span>Most liked</span></div>
-                <div class="row"><b>cats wearing baseball hats</b><i>♥ 4</i></div>
-                <div class="row"><span>minecraft dragon</span><i>♥ 2</i></div></div></div></div>
-            <h3><span class="n">02</span>&nbsp; It joins the queue</h3><p>Sort by Up next, New or Most liked, and heart the ones you want to see. When it's busy, everyone takes turns.</p>
-          </div>
-          <div class="step m m-card" style="--i:2">
-            <div class="shot"><img src="/about-img/step-land.webp" alt="A comet tail over ice under a star field" loading="lazy" decoding="async" />
-              <div class="caption">Comet Tail Over Ice<small>Auto · from the live archive</small></div></div>
-            <h3><span class="n">03</span>&nbsp; Watch it land</h3><p>Your idea scrolls in for everyone watching, titled, with its own page you can share.</p>
+        <div class="demo" id="demo">
+          <div class="demo-pin">
+            <div class="demo-stage">
+              <ol class="demo-steps">
+                <li class="ds m m-left" style="--i:0"><h3><span class="n">01</span>&nbsp; Type an idea</h3><p>A place, a mood, something ridiculous. No account needed.</p><i class="ds-bar" aria-hidden="true"><b></b></i></li>
+                <li class="ds m m-left" style="--i:1"><h3><span class="n">02</span>&nbsp; It joins the queue</h3><p>Sort by Up next, New or Most liked, and heart the ones you want to see. When it's busy, everyone takes turns.</p><i class="ds-bar" aria-hidden="true"><b></b></i></li>
+                <li class="ds m m-left" style="--i:2"><h3><span class="n">03</span>&nbsp; Watch it land</h3><p>Your idea scrolls in for everyone watching, titled, with its own page you can share.</p><i class="ds-bar" aria-hidden="true"><b></b></i></li>
+              </ol>
+              <div class="demo-card m m-rise" aria-hidden="true">
+                <div class="app">
+                  <div class="app-band"><img src="/about-img/hero-band.webp" alt="" decoding="async" /></div>
+                  <div class="app-tile">
+                    <img class="soft" src="/about-img/step-type.webp" alt="" decoding="async" />
+                    <img class="sharp" src="/about-img/step-type.webp" alt="" decoding="async" />
+                    <i class="scan"></i>
+                    <span class="tile-cap">Dog Naps in Sunlight<small>by you · just now</small></span>
+                  </div>
+                  <div class="app-top"><span class="app-brand"><img src="/brand/mark-plain.svg" alt="" width="22" height="13" />Infinite Tapestry</span><span class="app-live"><i class="dot"></i>Live</span></div>
+                  <div class="app-dock">
+                    <div class="app-now"><span class="lbl">Now</span><span class="now-t"><span class="now-a">Comet Tail Over Ice</span><span class="now-b">Dog Naps in Sunlight</span></span><span class="app-prog"><span></span></span></div>
+                    <div class="app-cmd">
+                      <span class="app-input"><span class="ph">Where should the world go next?</span><span class="typed">dog naps in sunlight</span><i class="caret"></i></span>
+                      <span class="app-send"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>
+                    </div>
+                  </div>
+                  <div class="app-drawer">
+                    <div class="app-tabs"><b>Queue</b><span>Fuel</span><span>Chat</span><span>You</span></div>
+                    <div class="app-seg"><b>Up next</b><span>New</span><span>Most liked</span></div>
+                    <ol class="app-list">
+                      <li class="app-item mine"><span class="n"><span>1</span></span><div><div class="t">dog naps in sunlight<em>you</em></div><div class="meta"><span class="m-a">You · Up next</span><span class="m-b">You · Painting now</span></div></div><span class="heart"><svg viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg><svg class="on" viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg><span class="odo"><span>0<br>1<br>2<br>3</span></span></span></li>
+                      <li class="app-item"><span class="n"><span>1</span><span>2</span></span><div><div class="t">cats wearing baseball hats</div><div class="meta">mira · Waiting</div></div><span class="heart"><svg class="on" viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg><span class="odo"><span>4</span></span></span></li>
+                      <li class="app-item"><span class="n"><span>2</span><span>3</span></span><div><div class="t">minecraft dragon</div><div class="meta">jules · Waiting</div></div><span class="heart"><svg class="on" viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg><span class="odo"><span>2</span></span></span></li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -132,30 +152,6 @@
       </div>
     </section>
 
-    <section id="explore" style="padding-top:0">
-      <div class="wrap">
-        <p class="eyebrow m m-left">More to explore</p>
-        <h2 class="m m-focus">Almost nothing on screen. The painting is the point.</h2>
-        <div class="feats">
-          <div class="feat m m-feat" style="--i:0">
-            <div class="shot"><img src="/about-img/feat-wonder.webp" alt="A dripping crystal grotto glowing with blue and amber light" loading="lazy" decoding="async" />
-              <div class="ui-over"><div class="glass story"><span class="small-l">Auto · wandering on its own</span><div class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></div></div></div></div>
-            <h3>Auto steers</h3><p>Between ideas, Auto wanders on its own — detours, atmospheres, little journeys that keep the scroll alive.</p>
-          </div>
-          <div class="feat m m-feat" style="--i:1">
-            <div class="shot"><img src="/about-img/bookshop.webp" alt="A warm clay oven and bakery interior from the live archive" loading="lazy" decoding="async" />
-              <div class="ui-over"><div class="glass cal"><div class="mo">October</div><div class="g">
-                <i></i><i></i><i></i><i class="d">1</i><i class="d">2</i><i class="d">3</i><i class="d">4</i><i class="d">5</i><i class="d">6</i><i class="d">7</i><i class="d">8</i><i class="d">9</i><i class="d">10</i><i class="d">11</i><i class="d">12</i><i class="d on">13</i></div></div></div></div>
-            <h3>Time Machine</h3><p>Pick any day on the <a href="/time-machine">calendar</a> and replay everything that was painted.</p>
-          </div>
-          <div class="feat m m-feat" style="--i:2">
-            <div class="shot"><img src="/about-img/feat-share.webp" alt="Turquoise terraces above a salt plain" loading="lazy" decoding="async" /></div>
-            <h3>Scene pages</h3><p>Hover a title to see who suggested it, then open its page with strips, prompt and a replay link. <a href="/s/630">See an example →</a></p>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="closing" style="padding-top:0">
       <div class="wrap" style="text-align:center">
         <h2 class="m m-zoom">It's painting right now.</h2>
@@ -170,6 +166,7 @@
   <!-- StippleFill (UI Tapestry): uncomment to stipple the ribbon and cards in. <script src="/stipple-fill.js" defer></script><script src="/stipple-slots.js" defer></script> -->
   <script src="/stipple-hook.js" defer></script>
   <script src="/about-hero.js" defer></script>
+  <script src="/about-demo.js" defer></script>
   <script src="/about.js" defer></script>
   <script src="/counter.js" defer></script>
   <!--chrome:scripts-->
