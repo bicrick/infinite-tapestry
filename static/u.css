@@ -54,3 +54,4 @@ html body.u-tl label#ref-btn, html body.u-tl .cmd label.icon { display:none !imp
 .u-live-b .u-dot { width:7px; height:7px; flex:0 0 7px; }
 body.u-tl .u-live-b { display:inline-flex !important; width:auto !important; padding:0 14px !important; }
 @media (max-width:560px) { body.u-tl .dock { width:min(300px, calc(100vw - 32px)); } }
+html body.u-tl:not(.u-x) .cmd #ref-btn:not(.hidden):not(.u-x) { display:none !important; }
