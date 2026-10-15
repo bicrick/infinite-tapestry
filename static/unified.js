@@ -37,10 +37,10 @@
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   // The exact production reflection module (static/refl.js), imported, not copied.
   const refl = window.TapestryReflection ? window.TapestryReflection.create(cv, { surr: () => (light ? "244,239,231" : "5,5,6"), coarse: () => matchMedia("(pointer: coarse)").matches }) : null;
-  // No black bars: stippled wireframe only where no texture exists at any level, halftone bloom as textures land (same
-  // GL context). hasAnyTexture(rect) -> boolean is this file's coverage check, used when defined; no blooms in a hand-off.
+  // Grain (same GL context): stippled wireframe and halftone bloom only where TapestryTimeline.hasAnyTexture (below)
+  // is false, i.e. no texture at any level; no blooms during a hand-off.
   const fill = window.TapestryStipple ? window.TapestryStipple.create({ gl, dpr: Math.min(2, devicePixelRatio || 1),
-    hasAnyTexture: (rect) => typeof hasAnyTexture === "function" && hasAnyTexture(rect),
+    hasAnyTexture: (rect) => window.TapestryTimeline.hasAnyTexture(rect), blend: [gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA],
     handOff: () => document.body.classList.contains("u-hold") }) : null;
 
   // ---------- worker fetch + decode ----------

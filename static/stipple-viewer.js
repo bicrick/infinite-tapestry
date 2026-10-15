@@ -13,13 +13,16 @@
 //
 // GL (unified.js, the timeline): shares the caller's WebGL context and draws straight into its framebuffer. The
 // renderer's underlay shows the image inside a bloom, so the caller draws only what paintTexture() hands back.
-//   const fill = TapestryStipple.create({ gl, dpr, hasAnyTexture?, handOff? })
-//     hasAnyTexture({ u0, u1, x, y, w, h }) -> boolean   optional: true if any texture at any zoom level covers that
-//                                                  slot (u0..u1 world units; x, y, w, h framebuffer px). Grain then
-//                                                  skips it: the wireframe is only for true gaps. Without it, a slot
-//                                                  is a gap when nothing painted it this frame (coarser tiles count)
+//   const fill = TapestryStipple.create({ gl, dpr, hasAnyTexture?, handOff?, blend? })
+//     hasAnyTexture({ x, y, width, height }) -> boolean   optional, same contract as
+//                                                  window.TapestryTimeline.hasAnyTexture: rect in CSS px, viewport
+//                                                  coords; false only where no texture at any level was drawn under
+//                                                  all of rect. Wireframe and blooms then appear only where it is
+//                                                  false. Without it, a span is a gap when nothing painted it this frame
 //     handOff() -> boolean                         optional: while true no bloom starts or keeps running, so the
 //                                                  frame matches what the next renderer will show
+//     blend: [src, dst]                            optional: the caller's blendFunc, set back after each draw (the
+//                                                  renderer leaves its own to avoid synchronous GL queries)
 //   fill.begin(), fill.reset()                     reset() after a pause in drawing (nothing stale blooms)
 //   for (const [c0, c1] of fill.paintTexture(x0, x1, key, texture, uv)) drawYourself(texture, x0, x1, c0, c1)
 //   fill.end(null, { left, span, s, yOff, bandH, width, height, lo, hi, dpr })
@@ -107,20 +110,26 @@
       return out;
     }
 
-    // With opts.hasAnyTexture, the unpainted spans are cut into slots on a power-of-two grid of world units (at least
-    // one unit, i.e. one strip in the timeline) and every slot the caller has any texture for, at any level, is
-    // dropped: no wireframe there, and no bloom when the sharper image lands (the caller fades it in itself).
+    // With opts.hasAnyTexture, only the parts of the unpainted spans it reports false for stay gaps: no wireframe,
+    // and so no later bloom, wherever the caller drew any texture at any level (it fades the sharper one in itself).
+    // A whole span is one query; only spans it rejects are split into CELL px cells. Queries are inset by most of a
+    // device px so the caller's pixel-rounded edges never turn a gap's border cells into bare background.
+    const CELL = 2;
     function trueGaps(empty, g) {
       const has = opts.hasAnyTexture;
       if (!has || !empty.length) return empty;
-      const step = Math.max(1, Math.pow(2, Math.ceil(Math.log2(48 / g.s)))), out = [];
+      const k = g.dpr || dpr, y = g.yOff / k, height = g.bandH / k, e = 0.75 / k, out = [];
+      const css = (u) => (u - g.left) * g.s / k, world = (x) => g.left + x * k / g.s;
+      const gap = (x0, x1) => x1 - x0 <= 2 * e || !has({ x: x0 + e, y, width: x1 - x0 - 2 * e, height });
       for (const [a, b] of empty) {
-        for (let x = Math.floor(a / step) * step; x < b; x += step) {
-          const u0 = Math.max(a, x), u1 = Math.min(b, x + step);
-          if (u1 <= u0 || has({ u0, u1, x: (u0 - g.left) * g.s, y: g.yOff, w: (u1 - u0) * g.s, h: g.bandH })) continue;
-          const last = out[out.length - 1];
-          if (last && last[1] >= u0) last[1] = u1; else out.push([u0, u1]);
+        const xa = css(a), xb = css(b);
+        if (gap(xa, xb)) { out.push([a, b]); continue; }
+        let run = -1;
+        for (let x = xa; x < xb; x += CELL) {
+          const x1 = Math.min(xb, x + CELL);
+          if (gap(x, x1)) { if (run < 0) run = x; } else if (run >= 0) { out.push([run === xa ? a : world(run), world(x)]); run = -1; }
         }
+        if (run >= 0) out.push([run === xa ? a : world(run), b]);
       }
       return out;
     }
@@ -158,7 +167,9 @@
         // Thin bands get a finer lattice so the wireframe still reads as a band (live-band size: the live look).
         if (g.dpr) dpr = g.dpr;
         r.setPitch(Math.max(1.25 * dpr, Math.min(5.5 * dpr, g.bandH / 20)), dpr);
-        r.draw(rects, { width: g.width, height: g.height }, now); return;
+        r.draw(rects, { width: g.width, height: g.height }, now);
+        if (opts.blend) gl.blendFunc(opts.blend[0], opts.blend[1]);
+        return;
       }
       const W = ctx.canvas.width, H = ctx.canvas.height;
       if (glc.width !== W || glc.height !== H) { glc.width = W; glc.height = H; }
