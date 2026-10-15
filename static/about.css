@@ -29,7 +29,7 @@ section { padding:120px 0; }
 .band-refl { flex:none; height:calc(var(--bh) * .42); overflow:hidden; position:relative; pointer-events:none;
   -webkit-mask-image:linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.2) 35%, transparent); mask-image:linear-gradient(rgba(0,0,0,.55), rgba(0,0,0,.2) 35%, transparent); }
 .band-refl .reel { position:absolute; top:0; left:0; display:flex; height:var(--bh); width:max-content; animation:drift 260s linear infinite; will-change:transform; }
-.band-refl img { height:100%; width:auto; aspect-ratio:6600/600; display:block; max-width:none; }
+.band-refl img { height:100%; width:auto; aspect-ratio:6712/600; display:block; max-width:none; }
 .band .live { position:absolute; left:28px; bottom:20px; z-index:2; color:#fff; font-size:12px; display:flex; gap:8px; align-items:center; text-shadow:0 1px 8px rgba(0,0,0,.6); }
 .dot { width:6px; height:6px; border-radius:50%; background:#6ee7a8; box-shadow:0 0 10px #6ee7a8; animation:pulse 2.4s ease-in-out infinite; }
 .band .cap { position:absolute; right:28px; bottom:20px; z-index:2; color:rgba(255,255,255,.88); font-size:12px; text-shadow:0 1px 8px rgba(0,0,0,.6); }
