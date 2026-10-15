@@ -42,14 +42,15 @@ section { padding:120px 0; }
 }
 
 /* ---------- Built using logo wall ---------- */
-.built { padding:80px 0 0; --logo:#c4c1bb; }
-@media (prefers-color-scheme: light) { .built { --logo:#55524e; } }
-.built .eyebrow { margin-bottom:28px; text-align:center; }
-.built-logos { list-style:none; margin:0 auto; padding:0; display:flex; flex-wrap:wrap; align-items:center;
-  justify-content:center; gap:20px 52px; color:var(--logo); }
-.built-item { display:inline-flex; align-items:center; gap:12px; font-size:17px; font-weight:500;
-  letter-spacing:-.015em; color:var(--logo); white-space:nowrap; }
-.built-icon { width:26px; height:26px; flex:none; display:block;
+.built { padding:80px 0 0; --logo:var(--muted); --logo-hover:#b3b0aa; }
+@media (prefers-color-scheme: light) { .built { --logo-hover:#3f3c39; } }
+.built .eyebrow { margin-bottom:32px; text-align:center; }
+.built-logos { list-style:none; margin:0 auto; padding:0; display:flex; flex-wrap:wrap; align-items:flex-start;
+  justify-content:center; gap:28px 24px; }
+.built-item { width:128px; display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center;
+  font-size:12px; letter-spacing:.01em; color:var(--logo); white-space:nowrap; transition:color .3s var(--ease); }
+.built-item:hover { color:var(--logo-hover); }
+.built-icon { width:42px; height:42px; flex:none; display:block;
   background:currentColor;
   -webkit-mask: var(--built-mask) center / contain no-repeat;
   mask: var(--built-mask) center / contain no-repeat; }
@@ -146,9 +147,9 @@ section { padding:120px 0; }
 @media (max-width: 860px) {
   .wrap { width:calc(100vw - 40px); }
   .built { padding:60px 0 0; }
-  .built-logos { gap:18px 28px; }
-  .built-item { font-size:15px; gap:10px; }
-  .built-icon { width:24px; height:24px; }
+  .built-logos { gap:24px 8px; }
+  .built-item { width:104px; font-size:11.5px; gap:10px; }
+  .built-icon { width:32px; height:32px; }
 
   section { padding:84px 0; } .hero { padding:118px 0 0; }
   .steps, .alive,   .feats { grid-template-columns:1fr; gap:40px; } .feat, .feat.wide { grid-column:auto; }
