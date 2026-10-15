@@ -1,6 +1,6 @@
 # One renderer, one camera, one UI (PLAN)
 
-Status: plan only, 2026-10-14. Supersedes `unified-viewer.md` (two renderers + crossover). Nothing here is built.
+Status: phases 0-1 built on branch `one-renderer` (2026-10-15). Hidden page `/one-3c9d1f.html`. Supersedes `unified-viewer.md` (two renderers + crossover). Nothing here is built.
 Base: `main` @ e0dd089 (low-res fallback + `TapestryTimeline.hasAnyTexture`). Grain = PR #91.
 
 ## 0. The idea in one paragraph
@@ -189,3 +189,26 @@ until phase 6.
 4. Events threshold: which zoom (hours? days?) and which categories on by default?
 5. OK to pause the current "same UI" patch and the four pending fixes stay unshipped, or ship those four to prod now
    while this is built?
+
+## 9. Patrick's decisions (2026-10-15)
+1. Zoom-0 band leaves room for the reflection (band 50% of height landscape / 42% portrait, centred at 42%).
+2. Leaving live is instant: any scrub/drag/zoom-out drops `followLive` immediately. No rubber band.
+3. Composer/prompt box only at live (phase 4).
+4. Events: `Z_EVENTS = -6` (span of roughly an hour or more at desktop width), off by default.
+5. Arrows = WASD (same code path), Play = spring zoom to 0 at the current spot then playback, top-left clock is always
+   wall time, never the wireframe where any level is resident.
+
+## 10. Phase 0 baseline (scripts/perf-path.mjs)
+Box numbers: headless Chrome, SwiftShader (CPU GL, no GPU), 1440x900 @2x. They rank pages but are NOT device numbers;
+the MacBook/iPhone rows still need running with `GPU=1` / Safari. Per segment: rAF p95 / max / frames > 33 ms.
+
+| Segment | prod `/` (unified) | `/classic-7f3e21.html` | `/one-3c9d1f.html` (phase 1, no live socket yet) |
+|---|---|---|---|
+| live 10 s | 283 / 583 / 67 | 150 / 233 / 81 | 16.8 / 16.8 / 0 |
+| zoom out (hold S 3.5 s) | 350 / 550 / 23 | 150 / 150 / 35 | 33.3 / 66.7 / 4 |
+| scrub (wheel) | 217 / 400 / 95 | 150 / 200 / 103 | 16.8 / 16.8 / 0 |
+| Play | 200 / 250 / 23 | 150 / 217 / 34 | 16.8 / 16.8 / 0 |
+| Live (0) | 350 / 350 / 18 | 150 / 167 / 25 | 16.8 / 33.3 / 0 |
+
+One-renderer main-thread JS per frame p95: 0.1-1.5 ms (max 22 ms, one texture-upload frame under SwiftShader during
+zoom-out). Frames with bare background (true gaps) on the whole path: 0. Peak texture memory 85 MB (budget 192).

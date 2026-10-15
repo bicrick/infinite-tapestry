@@ -29,6 +29,8 @@ CFG
 node "$ROOT/scripts/inject_chrome.js" "$OUT"
 # Hidden unified viewer page, derived from index.html (see scripts/make_unified.js).
 node "$ROOT/scripts/make_unified.js" "$OUT"
+# Hidden one-renderer page (see scripts/make_one.js).
+node "$ROOT/scripts/make_one.js" "$OUT"
 # Facebook/LinkedIn/iMessage need absolute og/twitter image URLs.
 SITE="${SITE_URL:-https://infinite-tapestry.vercel.app}"
 SITE="${SITE%/}"
@@ -45,5 +47,5 @@ fi
 VER=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || date +%s)-$(date +%s)
 if [ -n "${CRITICAL_BUILD:-}" ]; then printf '{"id":"%s","critical":true}\n' "$VER" > "$OUT/build.json"; else printf '{"id":"%s"}\n' "$VER" > "$OUT/build.json"; fi
 sed -i "s|^window.TAPESTRY_CONFIG = {|window.TAPESTRY_CONFIG = {\n  buildId: \"${VER}\",|" "$OUT/config.js"
-for f in "$OUT"/*.html; do sed -i -E "s#(src|href)=\"(/?[a-z0-9_-]+\.(js|css))\"#\1=\"\2?v=${VER}\"#g" "$f"; done
+for f in "$OUT"/*.html; do sed -i -E "s#(src|href)=\"(/?[a-z0-9_/-]+\.(js|css))\"#\1=\"\2?v=${VER}\"#g" "$f"; done
 echo "built $OUT"

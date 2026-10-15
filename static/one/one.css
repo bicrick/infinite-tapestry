@@ -1,0 +1,16 @@
+/* Phase-1 shell only. The real UI layer (bar morph on --zp, chat, composer) is phase 4. */
+html, body { margin: 0; height: 100%; background: #050506; color: #e9e6df; overflow: hidden; font: 14px/1.3 system-ui, sans-serif; }
+[data-theme="light"] body { background: #f4efe7; color: #1a1a1a; }
+#one-c { position: fixed; inset: 0; width: 100vw; height: 100vh; touch-action: none; display: block; }
+.one-ui { position: fixed; inset: 0; pointer-events: none; }
+.one-ui button { pointer-events: auto; }
+.one-clock { position: absolute; top: 14px; left: 16px; font-variant-numeric: tabular-nums; opacity: .8; }
+.one-bar { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; gap: 10px; align-items: center;
+  padding: 8px 8px 8px 18px; border-radius: 999px; background: rgba(30,30,32,.72); backdrop-filter: blur(10px); min-width: 300px; }
+.one-cap { flex: 1; font-variant-numeric: tabular-nums; }
+.one-bar button { border: 0; border-radius: 999px; height: 36px; min-width: 36px; padding: 0 12px; background: rgba(255,255,255,.1); color: inherit; font: inherit; cursor: pointer; }
+#one-live { background: #fff; color: #111; display: flex; gap: 6px; align-items: center; }
+#one-live .dot { width: 7px; height: 7px; border-radius: 50%; background: #999; }
+.is-live #one-live .dot { background: #e33; }
+.one-hints { position: absolute; right: 16px; bottom: 8px; font-size: 11px; opacity: .45; }
+.one-perf { position: absolute; top: 40px; left: 16px; margin: 0; font: 11px/1.4 ui-monospace, monospace; background: rgba(0,0,0,.6); color: #9f9; padding: 6px 8px; border-radius: 6px; }
