@@ -148,6 +148,7 @@
   // ---------- HUD + landmarks ----------
   const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const setText = (el, t) => { if (el._t !== t) { el._t = t; el.textContent = t; } };
+  const fmtY = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const fmtT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }), fmtD = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
   function hud() {
     // Same slots as the live viewer: the clock by the mark shows the moment under the needle, the caption above the
@@ -158,7 +159,7 @@
     const TV = window.TapestryView, tip = !on && cam.cx > (scenes.length ? scenes[scenes.length - 1].g : 0);
     setText(uTitle, on ? sc.title : tip && TV.title ? TV.title() || "—" : "—");
     const e = eras.find((x) => cam.cx >= x.g0 && cam.cx < x.g0 + x.n) || eras[eras.length - 1];
-    setText(uSub, (on && sc.user ? "an idea · " : "") + (e ? `strip ${Math.max(0, Math.floor(cam.cx)).toLocaleString()}` : ""));
+    setText(uSub, (on && sc.user ? "an idea · " : "") + (t ? (t.getFullYear() === new Date().getFullYear() ? fmt : fmtY).format(t) : ""));
     cv.setAttribute("aria-label", (t ? fmt.format(t) : "Timeline") + (on ? ", " + sc.title : ""));
   }
   const pool = [], markHost = $("u-marks"); let groups = [], lastGroupS = 0, lastGroupCx = 0;
@@ -390,7 +391,9 @@
   const bPrev = mk("u-prev", "Previous prompt ([)", '<path d="M15 6l-6 6 6 6"/>'), bNext = mk("u-next", "Next prompt (])", '<path d="M9 6l6 6-6 6"/>');
   const PLAY = '<path d="M8 6l10 6-10 6z"/>', PAUSE = '<path d="M8 6v12M16 6v12"/>';
   const bPlay = mk("u-play", "Play from here (space)", PLAY), bCal = mk("u-cal-b", "Calendar and events", '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>');
-  const anchor = $("hide-btn"); if (anchor) for (const b of [bOut, bIn, bPrev, bPlay, bNext, bCal]) anchor.before(b);
+  const bLive = mk("u-live-b", "Back to live (0)", '<circle cx="7" cy="12" r="2.2"/><path d="M12 7l5 5-5 5"/>');
+  bLive.onclick = () => toLive(liveMax());
+  const anchor = $("hide-btn"); if (anchor) for (const b of [bOut, bIn, bPrev, bPlay, bNext, bCal, bLive]) anchor.before(b);
   const calPop = el("div", "pop hidden u-pop", '<div class="pop-title">Jump to a day</div><div id="u-cal"></div><div class="pop-title">Show events</div><div class="pop-row u-cats" id="u-cats"></div><p class="fine">Events are off unless you turn them on here.</p>');
   $("cmd").after(calPop);
   bCal.onclick = (e) => { e.stopPropagation(); calPop.classList.toggle("hidden"); };

@@ -32,3 +32,7 @@ body.u-tl #top-clock, body.u-tl .dock .now:not(.u-now), body.u-tl #speed-btn, bo
 body.u-tl.away .dock .cmd { opacity:1; transform:none; pointer-events:auto; }
 body.u-tl.away .dock .now.u-now { opacity:1 !important; pointer-events:auto; }
 body.u-tl .dock .pill#live-btn { bottom:calc(100% + 34px); height:40px; padding:0 18px; border-radius:20px; font-size:14px; }
+/* The viewer's "Back to live" pill belongs to near-live / rewound live only; in the timeline the composer's Live
+   button returns to live. Fade only (no layout change). */
+#live-btn { transition:opacity .2s linear; }
+body.u-tl #live-btn { opacity:0 !important; pointer-events:none !important; }
