@@ -48,6 +48,101 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: bash scripts/publish_worker.sh
 
+  # PR-only Vercel preview (no domain aliases). Posts the URL on the PR.
+  deploy-preview:
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_wWQb6uWytPTAvJCeSYirxFb5
+      VERCEL_PROJECT_ID: prj_e5dEKiID5ny43SV89OWxDOvSgjrG
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Resolve live pod WebSocket URL from Supabase pod_state.pod_id
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bash scripts/resolve_ws_url.sh >> "$GITHUB_ENV"
+      - name: Build
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
+          SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
+          TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
+        run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
+      - name: Deploy Vercel preview
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_BYPASS: ${{ secrets.VERCEL_BYPASS }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/web"
+          # Preview only — never --prod, never alias production domains.
+          npx -y vercel@latest deploy --yes --token "$VERCEL_TOKEN" | tee /tmp/vercel-out.txt
+          URL=$(grep -oE 'https://[a-z0-9.-]+\.vercel\.app' /tmp/vercel-out.txt | tail -1)
+          test -n "$URL"
+          echo "preview $URL"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Vercel preview (not production)"
+            echo "$URL"
+            echo ""
+            echo "- Intro: $URL/"
+            echo "- Viewer without intro: $URL/?nointro=1"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${VERCEL_BYPASS:-}" ]; then
+            curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
+            curl -sf --retry 3 "$URL/intro.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'Halftone bloom'
+            curl -sf --retry 3 "$URL/intro-levels.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'OffscreenCanvas'
+          fi
+      - name: Comment preview URL on PR
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          MARK='<!-- vercel-preview-bot -->'
+          BODY=$(printf '%s\nVercel preview (not production): %s\n\nViewer without intro: %s/?nointro=1' "$MARK" "$URL" "$URL")
+          EXISTING=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --jq '[.[] | select(.body | contains("vercel-preview-bot")) | .id][0] // empty' || true)
+          if [[ "$EXISTING" =~ ^[0-9]+$ ]]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$EXISTING" -f body="$BODY" >/dev/null
+          else
+            gh api -X POST "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" -f body="$BODY" >/dev/null || true
+          fi
+      # Headless Chrome on the runner has no GPU (SwiftShader), so frame numbers here are a floor, not real-GPU fps.
+      - name: Capture the intro on the preview
+        if: success()
+        continue-on-error: true
+        env:
+          VERCEL_BYPASS: ${{ secrets.VERCEL_BYPASS }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cap"
+          cp scripts/intro-capture.mjs "$RUNNER_TEMP/cap/"
+          cd "$RUNNER_TEMP/cap"
+          npm init -y >/dev/null
+          npm i --no-audit --no-fund playwright-core@1.64.1 >/dev/null
+          npx playwright-core install ffmpeg >/dev/null
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable)" node intro-capture.mjs "$URL" "$RUNNER_TEMP/cap/out"
+      - name: Upload intro capture
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: intro-capture
+          path: ${{ runner.temp }}/cap/out
+          if-no-files-found: warn
+
   deploy-web:
     needs: test
     concurrency:
