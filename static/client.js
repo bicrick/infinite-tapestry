@@ -47,6 +47,11 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   const $ = (id) => document.getElementById(id);
   const canvas = $("view");
   const ctx = canvas.getContext("2d", { alpha: false });
+  // Missing image data never shows as black: stippled wireframe in the gaps, halftone bloom when pixels land (stipple-viewer.js).
+  const fill = window.TapestryStipple ? window.TapestryStipple.create() : null;
+  // Quiet (no wireframe, no blooms) under the intro and while the unified timeline covers this view or hands off to it,
+  // so the frame it uncovers is exactly the plain live frame.
+  const fillQuiet = () => { const c = document.body.classList; return c.contains("intro") || c.contains("u-tl") || c.contains("u-hold"); };
   const statusEl = $("status");
   const statusText = $("status-text");
   const DEBUG = /[?&]debug/.test(location.search);
@@ -387,15 +392,23 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     t.used = performance.now();
     return t.ok ? t.img : null;
   }
+  function lodDraw(img, key, x, tw, left, quarter) {   // quarter: draw one quarter of a coarser tile
+    const a = fill ? fill.paint(x, x + tw, key, img, quarter == null ? null : [quarter / 4, 0, (quarter + 1) / 4, 1]) : 1;
+    if (a <= 0) return;
+    if (a < 1) ctx.globalAlpha = a;
+    if (quarter == null) ctx.drawImage(img, x - left, 0, tw, config.height);
+    else { const part = img.width / 4; ctx.drawImage(img, quarter * part, 0, part, img.height, x - left, 0, tw, config.height); }
+    ctx.globalAlpha = 1;
+  }
   function drawLodChunk(level, c, left) {
     const tw = LOD_N[level] * SW();
     const img = lodTile(level, c);
-    if (img) { ctx.drawImage(img, c * tw - left, 0, tw, config.height); return; }
+    if (img) { lodDraw(img, "L" + level + ":" + c, c * tw, tw, left); return; }
     // Gap: the L2 overview is prefetched for all history, so slice it (blurry beats blank);
     // from L3 also try finer tiles (needed at the still-filling live edge).
     if (level !== 2) {
       const p = LOD_N[2], cc = Math.floor(c * LOD_N[level] / p), t2 = lodTile(2, cc);
-      if (t2 && level === 1) { const part = t2.width / 4; ctx.drawImage(t2, (c % 4) * part, 0, part, t2.height, c * tw - left, 0, tw, config.height); return; }
+      if (t2 && level === 1) { lodDraw(t2, "L2:" + cc + ":" + (c % 4), c * tw, tw, left, c % 4); return; }
     }
     if (level > 1) for (let k = 0; k < 4; k++) drawLodChunk(level - 1, c * 4 + k, left);   // finer tiles fill the gap
   }
@@ -653,6 +666,11 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     ctx.fillStyle = EMPTY;
     ctx.fillRect(0, 0, w, h);
     if (maxIndex < 0) {
+      if (fill) {   // no strips yet: the whole band is wireframe
+        const s = scale() * zoom * ribbon, bh = config.height * s;
+        const yOff = portrait() ? bandTopFor(h, config.height * scale()) + (config.height * scale() - bh) / 2 : ribbonTop(h, bh);
+        fill.begin(fillQuiet()); fill.end(ctx, { left: 0, span: w / s, s, yOff, bandH: bh });
+      }
       ctx.fillStyle = "rgba(255,255,255,.4)";
       ctx.font = `${14 * (window.devicePixelRatio || 1)}px Inter, sans-serif`;
       ctx.textAlign = "center";
@@ -689,6 +707,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     ctx.save();
     ctx.translate(0, yOff);
     ctx.scale(s, s);
+    if (fill) fill.begin(fillQuiet());
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet.
     const lodOn = !window.__nolod && (zoom < 0.97 || fast || coverage < 1); let fading = 0;
     if (lodOn) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
@@ -702,14 +721,20 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
-        if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) ? performance.now() : -1e9;
+        const x0 = i * SW() - e.overlap;
+        const ba = fill ? fill.paint(x0, x0 + e.bitmap.width, "s" + i, e.bitmap) : 1;   // < 1 only while it blooms out of the wireframe
+        if (ba < 1 && e.seenAt == null) e.seenAt = -1e9;   // the bloom replaces the plain crossfade
+        if (ba <= 0) continue;
+        if (e.seenAt == null) e.seenAt = (x0 < left + w / s) ? performance.now() : -1e9;
         const fa = Math.min(1, (performance.now() - e.seenAt) / 1000);                                      // then crossfade it in over ~1 s
         if (fa < 1) { ctx.globalAlpha = fa * fa * (3 - 2 * fa); fading = (fa * 20 | 0) + 1; }
-        ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);   // no live-edge clip: the old particle-era clip hid the next strip's inpaint band until it popped in
+        if (ba < 1) { ctx.globalAlpha = ba; fading = 1; }
+        ctx.drawImage(e.bitmap, x0 - left, 0);   // no live-edge clip: the old particle-era clip hid the next strip's inpaint band until it popped in
         ctx.globalAlpha = 1;
       }
       coverage = want ? have / want : 0;
     }
+    if (fill) fill.end(ctx, { left, span: w / s, s, yOff, bandH: config.height * s });
     if (mark) {
       const age = (performance.now() - mark.t0) / 1000;
       const a = age < 0.6 ? age / 0.6 : age > 5.5 ? Math.max(0, 1 - (age - 5.5) / 1.5) : 1;
