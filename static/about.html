@@ -22,7 +22,6 @@
   <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebApplication","@id":"https://infinite-tapestry.vercel.app/#app","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/","applicationCategory":"EntertainmentApplication","applicationSubCategory":"AI art","operatingSystem":"Any (web browser)","browserRequirements":"Requires JavaScript and a modern browser","description":"A live AI art stream: an endless AI painting that anyone watching can steer by typing an idea. Works as a free AI screensaver.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"image":"https://infinite-tapestry.vercel.app/about-img/og-about.jpg","publisher":{"@id":"https://infinite-tapestry.vercel.app/#org"},"keywords":"live AI art stream, AI screensaver, endless AI painting, infinite AI art, AI art you can steer"},{"@type":"Organization","@id":"https://infinite-tapestry.vercel.app/#org","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/","logo":"https://infinite-tapestry.vercel.app/brand/icon-512.png","email":"support@infinitetapestry.app"},{"@type":"WebPage","@id":"https://infinite-tapestry.vercel.app/about#page","url":"https://infinite-tapestry.vercel.app/about","name":"About Infinite Tapestry","isPartOf":{"@type":"WebSite","@id":"https://infinite-tapestry.vercel.app/#website","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/"},"about":{"@id":"https://infinite-tapestry.vercel.app/#app"}}]}</script>
   <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
-  <link rel="preload" as="image" href="/about-img/hero-band-refl.webp" />
   <link rel="stylesheet" href="/about.css" />
   <!--chrome:head-->
   <script src="/theme.js"></script>
@@ -39,15 +38,15 @@
       <p class="tcount reveal" id="tcount" hidden><b id="tcount-n">0</b> individually painted bands on the tapestry, and counting</p>
     </div>
     <!-- Archive art: strips idx >= 30632 only (painted at/after Oct 14 04:00 UTC = Oct 13 11pm America/Chicago blend cutoff; 30592@03:57:48Z, 30656@04:01:22Z). Ribbon contiguous strip-index order with viewer paste-over stitch (OV=192). Hero 47913–47956; steps 56041/45849/45833; feats 55030/45020/47225. -->
+    <!-- about-hero.js paints the band onto #hero-cv and mirrors it with the production reflection (refl.js);
+         the <img> reel below is the no-JS / no-canvas fallback. marks StippleFill targets. -->
+    <canvas id="hero-cv" class="hero-cv" aria-hidden="true"></canvas>
     <div class="band" aria-label="A desert-to-oasis stretch from the live tapestry, drifting">
       <div class="reel"><img src="/about-img/hero-band.webp" width="6712" height="600" alt="Dune crest at dusk rolling into an oasis and camel caravan — contiguous strips from the live archive after the blend cutoff" fetchpriority="high" /><img src="/about-img/hero-band.webp" width="6712" height="600" alt="" aria-hidden="true" /></div>
-      <div class="glow" aria-hidden="true"><i></i><i></i><i></i></div>
-      <div class="lights" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-      <div class="sheen" aria-hidden="true"></div>
       <div class="live"><span class="dot"></span>painted live, one strip every few seconds</div>
       <div class="cap">Dune Crest at Dusk → oasis → caravan · contiguous archive strips</div>
     </div>
-    <div class="band-refl" aria-hidden="true"><div class="reel"><img src="/about-img/hero-band-refl.webp" width="839" height="75" alt="" /><img src="/about-img/hero-band-refl.webp" width="839" height="75" alt="" /></div></div>
+    <div class="band-below" aria-hidden="true"></div>
   </header>
 
   <main>
@@ -150,8 +149,7 @@
             <h3>Time Machine</h3><p>Pick any day on the <a href="/time-machine">calendar</a> and replay everything that was painted.</p>
           </div>
           <div class="feat reveal">
-            <div class="shot"><img src="/about-img/feat-share.webp" alt="Turquoise terraces above a salt plain" loading="lazy" decoding="async" />
-              <div class="caption bottom">Turquoise Terraces Above Salt<small>every scene has a share page</small></div></div>
+            <div class="shot"><img src="/about-img/feat-share.webp" alt="Turquoise terraces above a salt plain" loading="lazy" decoding="async" /></div>
             <h3>Scene pages</h3><p>Hover a title to see who suggested it, then open its page with strips, prompt and a replay link. <a href="/s/630">See an example →</a></p>
           </div>
         </div>
@@ -168,6 +166,10 @@
   </main>
 
   <!--chrome:footer-->
+  <script src="/refl.js" defer></script>
+  <!-- StippleFill (UI Tapestry): uncomment to stipple the ribbon and cards in. <script src="/stipple-fill.js" defer></script><script src="/stipple-slots.js" defer></script> -->
+  <script src="/stipple-hook.js" defer></script>
+  <script src="/about-hero.js" defer></script>
   <script src="/about.js" defer></script>
   <script src="/counter.js" defer></script>
   <!--chrome:scripts-->
