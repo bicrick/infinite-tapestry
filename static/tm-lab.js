@@ -11,7 +11,7 @@
   const gl = cv.getContext("webgl", { alpha: false, antialias: false, powerPreference: "low-power" });
   if (!gl) { document.body.textContent = "WebGL unavailable"; return; }
   let M = null, eras = [], hours = [], marks = [], scenes = [], ideas = [], dpr = 1, W = 0, Hh = 0, bandH = 0, y0 = 0, maxBand = 0, lineY = 0, bg = [0.043, 0.043, 0.047];
-  let light = false;
+  let light = false, lastRefl = -1e9, reflPending = false;
   const cam = { cx: 0, s: 1, tcx: 0, ts: 1, vx: 0 };
   let dirty = true, anim = false, now = 0, drawn = 0, playing = false, showMarks = false, ideasOnly = false;
   // Landmarks are off by default; each category is opt-in from the menu (remembered locally).
@@ -124,7 +124,9 @@
     }
     // Reflection: the production module (static/refl.js, same as the live viewer). It samples this frame's band
     // (GPU->GPU drawImage), so it must run in the same task as the draw above. Idle = zero work inside the module.
-    if (refl) refl.frame({ left: U0 * cam.s * dpr, cov: 1, lod: true, fading: 0 }, y0 * dpr, bandH * dpr, cv.width, cv.height, 1);
+    // Capped at ~30 Hz like the module's design note (the mirror is heavily blurred; 30 Hz is indistinguishable).
+    if (refl && now - lastRefl >= 32) { lastRefl = now; refl.frame({ left: U0 * cam.s * dpr, cov: 1, lod: true, fading: 0 }, y0 * dpr, bandH * dpr, cv.width, cv.height, 1); reflPending = false; }
+    else if (refl) reflPending = true;
   }
 
   // ---------- time mapping ----------
@@ -199,7 +201,7 @@
     const moving = playing || Math.abs(lt - Math.log(cam.s)) > 1e-4 || Math.abs(cam.tcx - cam.cx) * cam.s > 0.05 || Math.abs(cam.vx) * cam.s > 1;
     if (uploads.length) flushUploads(4);
     if (moving || dirty) { draw(); dirty = false; placeMarks(); if (ts - lastHud > 120) { hud(); lastHud = ts; } }
-    if (moving || inflight || uploads.length || perf.on || dirty) requestAnimationFrame(frame); else { anim = false; last = 0; hud(); }
+    if (moving || inflight || uploads.length || perf.on || dirty || reflPending) { if (reflPending && !moving) dirty = true; requestAnimationFrame(frame); } else { anim = false; last = 0; hud(); }
   }
   function kick() { if (!anim && M) { anim = true; requestAnimationFrame(frame); } }
   const fly = (g, s) => { setPlay(false); cam.vx = 0; if (s) cam.ts = s; cam.tcx = g; clamp(); kick(); };
