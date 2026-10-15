@@ -1457,9 +1457,10 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     if (msg.type === "config") {
       wsConfigSeen = true;
       config = Object.assign(config, msg);
-      {   // R2 serves CORS and holds every strip/tile; if the pod still advertises the Supabase bucket, read R2 instead (no 400s).
-        const cdn = (window.TAPESTRY_CONFIG || {}).cdnBase, re = /^https:\/\/[^/]+supabase\.co\/storage\/v1\/object\/public\/[^/]+\//;
-        if (cdn) for (const k of ["strip_base", "lod_base"]) if (re.test(config[k] || "")) config[k] = config[k].replace(re, cdn.replace(/\/$/, "") + "/");
+      {   // Move a Supabase base onto R2 only when this build opted in (stripCdn=r2 and cdnBase).
+        // Same rule as rewriteSupabaseBases in web/lib/stripcdn.js. A baked public URL is not enough.
+        const page = window.TAPESTRY_CONFIG || {}, cdn = page.cdnBase, re = /^https:\/\/[^/]+supabase\.co\/storage\/v1\/object\/public\/[^/]+\//;
+        if (page.stripCdn === "r2" && cdn) for (const k of ["strip_base", "lod_base"]) if (re.test(config[k] || "")) config[k] = config[k].replace(re, String(cdn).replace(/\/$/, "") + "/");
         delete config.strip_base_fb; delete config.lod_base_fb;
       }
       interpreterOn = !!msg.interpreter;
@@ -1601,7 +1602,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   if (new URLSearchParams(location.search).has("ambient")) document.body.classList.add("ambient");
 
   // ---------- resilience: pod-independent bootstrap + replay fallback ----------
-  // /api/live (Vercel + Supabase) serves the strip config and recent refs; strips themselves come from R2.
+  // /api/live (Vercel + Supabase) serves the strip config and recent refs; strip images come from config.strip_base.
   // If live goes quiet (no new strip for a minute, or the pod is unreachable), quietly replay recent history.
   let podDown = false, liveChecked = false, podPollAt = performance.now();   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
   let replayAt = 0, wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;

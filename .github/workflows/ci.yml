@@ -254,8 +254,10 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/web"
           SITE="${SITE_URL%/}"; HOST="${SITE#https://}"
-          # Guard: the built public config must match what prod serves (apart from buildId, wsUrl and the google feature flag) - catches missing/blank secrets.
-          diff <(curl -sf "$SITE/config.js?x=$GITHUB_RUN_ID" | grep -vE 'buildId|wsUrl|^[[:space:]]*google:') <(grep -vE 'buildId|wsUrl|^[[:space:]]*google:' config.js) \
+          # Guard: the built public config must match what prod serves (apart from buildId, wsUrl, the google
+          # flag, and the strip CDN lines) - catches missing/blank secrets. cdnBase/stripCdn may change:
+          # viewers follow /api/live unless the build sets TAPESTRY_STRIP_CDN=r2.
+          diff <(curl -sf "$SITE/config.js?x=$GITHUB_RUN_ID" | grep -vE 'buildId|wsUrl|^[[:space:]]*google:|^[[:space:]]*cdnBase:|^[[:space:]]*stripCdn:') <(grep -vE 'buildId|wsUrl|^[[:space:]]*google:|^[[:space:]]*cdnBase:|^[[:space:]]*stripCdn:' config.js) \
             || { echo "::error::built config.js differs from prod; refusing to deploy"; exit 1; }
           URL=$(npx -y vercel@latest deploy --prod --yes --skip-domain --token "$VERCEL_TOKEN" | grep -o 'https://[a-z0-9.-]*\.vercel\.app' | tail -1)
           echo "deployed $URL"
