@@ -1,0 +1,273 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# Secrets cannot be referenced in step `if:` directly, so each job that needs them exposes a HAS_* flag
+# (job-level env) and every secret-using step is gated on it. Missing secrets (forks, a repo without them)
+# skip those steps with a notice instead of failing. The `test` job needs no secrets at all.
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install package (dev)
+        run: pip install -e ".[dev]"
+      - name: pytest
+        run: pytest -q
+      - name: Syntax-check JS (static/ and web/)
+        run: |
+          set -e
+          find static web -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -not -path '*/node_modules/*' -print0 \
+            | xargs -0 -n1 node --check
+      - name: Never show "Claude" in the UI
+        run: |
+          if grep -rIl "Claude" static/*.html static/*.js static/*.css; then echo "UI mentions Claude"; exit 1; fi
+      - name: Build the site (no secrets) and smoke-test it
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/web"
+          bash scripts/build_web.sh "$OUT"
+          # Deploy builds must refuse a config with no Supabase URL/key.
+          if env -u SUPABASE_URL -u SUPABASE_ANON_KEY REQUIRE_SUPABASE=1 bash scripts/build_web.sh "$RUNNER_TEMP/guard" 2>/dev/null; then
+            echo "::error::build_web.sh built a deployable bundle without Supabase config"; exit 1
+          fi
+          python3 -c 'import json; json.load(open("web/vercel.json"))'
+          node --check "$OUT/config.js"
+          for f in index.html about.html fuel.html time-machine.html privacy.html terms.html profile.html classic-7f3e21.html u-9b600a56.html; do
+            test -s "$OUT/$f" || { echo "::error::build is missing $f"; exit 1; }
+          done
+          # "/" is the unified viewer (scripts/make_unified.js SWAP), still running the live client underneath.
+          grep -q 'src="unified.js' "$OUT/index.html" || { echo "::error::index.html is not the unified viewer"; exit 1; }
+          grep -q 'src="client.js' "$OUT/index.html" || { echo "::error::index.html lost client.js"; exit 1; }
+          grep -q 'class="it-links"' "$OUT/about.html" || { echo "::error::shared header not injected"; exit 1; }
+          # The classic backup and the hidden unified page stay unlinked.
+          if grep -lE 'classic-7f3e21|u-9b600a56' "$OUT"/*.html "$OUT"/*.js; then echo "::error::a page links to a hidden backup"; exit 1; fi
+          python3 -m http.server 8790 --bind 127.0.0.1 --directory "$OUT" >/dev/null 2>&1 &
+          sleep 1
+          for p in / /about.html /fuel.html /time-machine.html /config.js /client.js /unified.js /u.css /social.js; do
+            curl -sf -o /dev/null "http://127.0.0.1:8790$p" || { echo "::error::$p did not serve"; exit 1; }
+          done
+          echo "build + smoke OK"
+
+  # Versioned pod worker: every green main commit becomes deploy/worker/<sha>.tgz; the pod pulls latest on restart.
+  publish-worker:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      HAS_SECRETS: ${{ secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip (secrets not configured)
+        if: env.HAS_SECRETS != 'true'
+        run: echo "::notice::publish-worker skipped; needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
+      - name: Publish worker release
+        if: env.HAS_SECRETS == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bash scripts/publish_worker.sh
+
+  # PR-only Vercel preview (no domain aliases). Posts the URL on the PR.
+  deploy-preview:
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    env:
+      VERCEL_ORG_ID: team_wWQb6uWytPTAvJCeSYirxFb5
+      VERCEL_PROJECT_ID: prj_e5dEKiID5ny43SV89OWxDOvSgjrG
+      HAS_SECRETS: ${{ secrets.VERCEL_TOKEN != '' && secrets.SUPABASE_URL != '' && secrets.SUPABASE_ANON_KEY != '' }}
+      HAS_WS_SECRET: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+    steps:
+      - name: Skip (secrets not configured)
+        if: env.HAS_SECRETS != 'true'
+        run: echo "::notice::deploy-preview skipped; needs VERCEL_TOKEN, SUPABASE_URL and SUPABASE_ANON_KEY"
+      - uses: actions/checkout@v4
+        if: env.HAS_SECRETS == 'true'
+      - uses: actions/setup-node@v4
+        if: env.HAS_SECRETS == 'true'
+        with:
+          node-version: "22"
+      # A preview is still useful with the pod off, so an unresolvable pod only warns (prod deploys still refuse).
+      - name: Resolve live pod WebSocket URL from Supabase pod_state.pod_id
+        if: env.HAS_SECRETS == 'true' && env.HAS_WS_SECRET == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bash scripts/resolve_ws_url.sh >> "$GITHUB_ENV" || echo "::warning::no healthy pod; preview builds without a live WebSocket URL"
+      - name: Build
+        if: env.HAS_SECRETS == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
+          SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
+          TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
+          REQUIRE_SUPABASE: "1"
+        run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
+      - name: Deploy Vercel preview
+        id: deploy
+        if: env.HAS_SECRETS == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_BYPASS: ${{ secrets.VERCEL_BYPASS }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/web"
+          # Preview only — never --prod, never alias production domains.
+          npx -y vercel@latest deploy --yes --token "$VERCEL_TOKEN" | tee /tmp/vercel-out.txt
+          URL=$(grep -oE 'https://[a-z0-9.-]+\.vercel\.app' /tmp/vercel-out.txt | tail -1)
+          test -n "$URL"
+          echo "preview $URL"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Vercel preview (not production)"
+            echo "$URL"
+            echo ""
+            echo "- Unified viewer: $URL/"
+            echo "- Viewer without intro: $URL/?nointro=1"
+            echo "- Homepage: $URL/about"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${VERCEL_BYPASS:-}" ]; then
+            curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
+            curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'unified.js'
+            curl -sf --retry 3 "$URL/intro.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'Halftone bloom'
+            curl -sf --retry 3 "$URL/intro-levels.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'OffscreenCanvas'
+          fi
+      - name: Comment preview URL on PR
+        if: env.HAS_SECRETS == 'true' && success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          MARK='<!-- vercel-preview-bot -->'
+          BODY=$(printf '%s\nVercel preview (not production): %s\n\nViewer without intro: %s/?nointro=1' "$MARK" "$URL" "$URL")
+          EXISTING=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --jq '[.[] | select(.body | contains("vercel-preview-bot")) | .id][0] // empty' || true)
+          if [[ "$EXISTING" =~ ^[0-9]+$ ]]; then
+            gh api -X PATCH "repos/${{ github.repository }}/issues/comments/$EXISTING" -f body="$BODY" >/dev/null
+          else
+            gh api -X POST "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" -f body="$BODY" >/dev/null || true
+          fi
+      # Headless Chrome on the runner has no GPU (SwiftShader), so frame numbers here are a floor, not real-GPU fps.
+      - name: Capture the intro on the preview
+        if: env.HAS_SECRETS == 'true' && success()
+        continue-on-error: true
+        env:
+          VERCEL_BYPASS: ${{ secrets.VERCEL_BYPASS }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cap"
+          cp scripts/intro-capture.mjs "$RUNNER_TEMP/cap/"
+          cd "$RUNNER_TEMP/cap"
+          npm init -y >/dev/null
+          npm i --no-audit --no-fund playwright-core@1.64.1 >/dev/null
+          npx playwright-core install ffmpeg >/dev/null
+          CHROME="$(command -v google-chrome || command -v google-chrome-stable)" node intro-capture.mjs "$URL" "$RUNNER_TEMP/cap/out"
+      - name: Upload intro capture
+        if: always() && env.HAS_SECRETS == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: intro-capture
+          path: ${{ runner.temp }}/cap/out
+          if-no-files-found: warn
+
+  deploy-web:
+    needs: test
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: true
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_wWQb6uWytPTAvJCeSYirxFb5
+      VERCEL_PROJECT_ID: prj_e5dEKiID5ny43SV89OWxDOvSgjrG
+      # TURNSTILE_SITE_KEY is required too: the config guard below refuses a build whose public config differs from prod.
+      HAS_SECRETS: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_BYPASS != '' && secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' && secrets.SUPABASE_ANON_KEY != '' && secrets.TURNSTILE_SITE_KEY != '' }}
+    steps:
+      - name: Skip (secrets not configured)
+        if: env.HAS_SECRETS != 'true'
+        run: echo "::notice::deploy-web skipped; needs VERCEL_TOKEN, VERCEL_BYPASS, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY and TURNSTILE_SITE_KEY"
+      - uses: actions/checkout@v4
+        if: env.HAS_SECRETS == 'true'
+      - uses: actions/setup-node@v4
+        if: env.HAS_SECRETS == 'true'
+        with:
+          node-version: "22"
+      - name: Resolve live pod WebSocket URL from Supabase pod_state.pod_id
+        if: env.HAS_SECRETS == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bash scripts/resolve_ws_url.sh >> "$GITHUB_ENV"
+      - name: Build
+        if: env.HAS_SECRETS == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+          R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
+          SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
+          TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
+          REQUIRE_SUPABASE: "1"
+        run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
+      - name: Deploy to production, smoke-test, then point the domains at it
+        if: env.HAS_SECRETS == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_BYPASS: ${{ secrets.VERCEL_BYPASS }}
+          SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/web"
+          SITE="${SITE_URL%/}"; HOST="${SITE#https://}"
+          # Guard: the built public config must match what prod serves (apart from buildId, wsUrl and the google feature flag) - catches missing/blank secrets.
+          diff <(curl -sf "$SITE/config.js?x=$GITHUB_RUN_ID" | grep -vE 'buildId|wsUrl|^[[:space:]]*google:') <(grep -vE 'buildId|wsUrl|^[[:space:]]*google:' config.js) \
+            || { echo "::error::built config.js differs from prod; refusing to deploy"; exit 1; }
+          URL=$(npx -y vercel@latest deploy --prod --yes --skip-domain --token "$VERCEL_TOKEN" | grep -o 'https://[a-z0-9.-]*\.vercel\.app' | tail -1)
+          echo "deployed $URL"
+          # smoke test before the domain moves (deployment URLs are protected; the bypass secret gets through)
+          curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
+          curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'unified.js'
+          BID=$(curl -sf "$URL/build.json?x-vercel-protection-bypass=$VERCEL_BYPASS")
+          echo "build $BID"
+          # Only the newest main commit may take the domain (a manual deploy or a later push wins otherwise).
+          HEAD=$(git -C "$GITHUB_WORKSPACE" ls-remote origin refs/heads/main | cut -f1)
+          if [ "$HEAD" != "$GITHUB_SHA" ]; then echo "main moved on ($HEAD); leaving the domains alone"; exit 0; fi
+          for d in $(printf '%s\n' "$HOST" infinite-tapestry.vercel.app infinite-tapestry-preview.vercel.app infinitetapestry.app | sort -u); do
+            npx -y vercel@latest alias set "$URL" "$d" --token "$VERCEL_TOKEN"
+          done
+          for n in 1 2 3 4 5 6; do sleep 4; curl -sf "$SITE/build.json?x=$GITHUB_RUN_ID-$n" | tee /dev/stderr | grep -q "${GITHUB_SHA:0:7}" && break; [ $n = 6 ] && exit 1; done
+          # deploy history for the admin panel
+          curl -sf -X POST "$SUPABASE_URL/rest/v1/deploy_log" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Content-Type: application/json" -H "Prefer: return=minimal" \
+            -d "{\"kind\":\"web\",\"sha\":\"$GITHUB_SHA\",\"url\":\"$URL\",\"run_id\":\"$GITHUB_RUN_ID\"}" || echo "deploy_log write failed (non-fatal)"
