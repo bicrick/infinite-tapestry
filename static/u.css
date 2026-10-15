@@ -50,3 +50,7 @@ body.u-tl #chat { opacity:0 !important; pointer-events:none !important; }
 .u-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:#ff4d3d; }
 body.u-tl .dock { width:min(400px, calc(100vw - 32px)); }
 @media (max-width:560px) { body.u-tl .dock { width:240px; } }
+html body.u-tl label#ref-btn, html body.u-tl .cmd label.icon { display:none !important; }
+.u-live-b .u-dot { width:7px; height:7px; flex:0 0 7px; }
+body.u-tl .u-live-b { display:inline-flex !important; width:auto !important; padding:0 14px !important; }
+@media (max-width:560px) { body.u-tl .dock { width:min(300px, calc(100vw - 32px)); } }
