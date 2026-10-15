@@ -155,7 +155,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     if (a !== drawSurround.a) { drawSurround.a = a; document.documentElement.style.setProperty("--amb-a", a); }
     if (refl && drawSurround.v) refl.frame(drawSurround.v, yOff, bandH, w, h, surroundA);
   }
-  // Reflection: shared module (static/refl.js), same tech in the live viewer and the Time Machine.
+  // Reflection: shared module (static/refl.js).
   const refl = window.TapestryReflection ? window.TapestryReflection.create(canvas, { surr: () => SURR, coarse: () => COARSE }) : null;
   const pastVeil = document.createElement("div"); pastVeil.id = "past-veil"; pastVeil.setAttribute("aria-hidden", "true"); canvas.after(pastVeil);
   // Reflection: a few soft colour blobs above/below the band, sampled from the strips on screen every ~2.5 s
@@ -860,7 +860,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   let driftVel = 0, driftAcc = 0, driftArm = 0, turbo = 0;
   function holdDrift() { driftVel = 0; driftAcc = 0; driftArm = 0; }
   // ---------- arrow-key flight ----------
-  // Hold ← / → : slow, sustained acceleration that keeps building (exponential ramp, capped) until you're flying.
+  // Hold ← / → or A / D: slow, sustained acceleration that keeps building (exponential ramp, capped) until you're flying.
   // Opposite arrow while moving = hard brake (quick deceleration, not a dead stop); keep holding and it reverses.
   // Release: hand the velocity to the glide with loose (turbo) friction, which settles and drifts back to live pace.
   // Driven by the main rAF loop (stepPan); wheel / drag / touch cancel it instantly so it never fights native scroll.
@@ -870,9 +870,10 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   const FLY_MAX = () => SW() * 60;          // ~60 strips/s top speed
   const FLY_BRAKE = 7.0;                    // 1/s exponential brake + a linear floor below
   function flyKey(e, down) {
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return false;
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
-    const d = e.key === "ArrowRight" ? 1 : -1;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (k !== "ArrowLeft" && k !== "ArrowRight" && k !== "a" && k !== "d") return false;
+    const d = (k === "ArrowRight" || k === "d") ? 1 : -1;
     if (down) fly.keys.add(d); else fly.keys.delete(d);
     const prev = fly.dir;
     fly.dir = fly.keys.has(d) && down ? d : fly.keys.has(-d) ? -d : fly.keys.has(d) ? d : 0;

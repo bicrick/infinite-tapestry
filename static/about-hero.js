@@ -1,7 +1,7 @@
 // /about hero ribbon: paints the drifting band onto #hero-cv and mirrors it with the production reflection
-// module (static/refl.js, TapestryReflection), called exactly as the unified viewer calls it. The <img> reel in
+// module (static/refl.js, TapestryReflection). The <img> reel in
 // .band stays as the fallback until the canvas has the decoded art (and forever without JS or 2D canvas).
-// Runs only while the hero is on screen; reflection redraws are capped at ~30 Hz like unified.js.
+// Runs only while the hero is on screen; reflection redraws are capped at ~30 Hz.
 (() => {
   const hero = document.querySelector(".hero");
   const cv = document.getElementById("hero-cv");

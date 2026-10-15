@@ -27,8 +27,6 @@ window.TAPESTRY_CONFIG = {
 CFG
 # Shared header/footer partials (web/lib/chrome.js) into every static page.
 node "$ROOT/scripts/inject_chrome.js" "$OUT"
-# Hidden unified viewer page, derived from index.html (see scripts/make_unified.js).
-node "$ROOT/scripts/make_unified.js" "$OUT"
 # Facebook/LinkedIn/iMessage need absolute og/twitter image URLs.
 SITE="${SITE_URL:-https://infinite-tapestry.vercel.app}"
 SITE="${SITE%/}"

@@ -54,18 +54,18 @@ jobs:
           fi
           python3 -c 'import json; json.load(open("web/vercel.json"))'
           node --check "$OUT/config.js"
-          for f in index.html about.html fuel.html time-machine.html privacy.html terms.html profile.html classic-7f3e21.html u-9b600a56.html; do
+          for f in index.html about.html fuel.html time-machine.html privacy.html terms.html profile.html; do
             test -s "$OUT/$f" || { echo "::error::build is missing $f"; exit 1; }
           done
-          # "/" is the unified viewer (scripts/make_unified.js SWAP), still running the live client underneath.
-          grep -q 'src="unified.js' "$OUT/index.html" || { echo "::error::index.html is not the unified viewer"; exit 1; }
           grep -q 'src="client.js' "$OUT/index.html" || { echo "::error::index.html lost client.js"; exit 1; }
+          if grep -q 'unified.js' "$OUT/index.html"; then echo "::error::index.html still loads the unified viewer"; exit 1; fi
           grep -q 'class="it-links"' "$OUT/about.html" || { echo "::error::shared header not injected"; exit 1; }
-          # The classic backup and the hidden unified page stay unlinked.
-          if grep -lE 'classic-7f3e21|u-9b600a56' "$OUT"/*.html "$OUT"/*.js; then echo "::error::a page links to a hidden backup"; exit 1; fi
+          if [ -e "$OUT/unified.js" ] || [ -e "$OUT/u-9b600a56.html" ] || [ -e "$OUT/classic-7f3e21.html" ] || [ -e "$OUT/tm-lab.html" ]; then
+            echo "::error::build still contains the unified viewer"; exit 1
+          fi
           python3 -m http.server 8790 --bind 127.0.0.1 --directory "$OUT" >/dev/null 2>&1 &
           sleep 1
-          for p in / /about.html /fuel.html /time-machine.html /config.js /client.js /unified.js /u.css /social.js; do
+          for p in / /about.html /fuel.html /time-machine.html /config.js /client.js /social.js; do
             curl -sf -o /dev/null "http://127.0.0.1:8790$p" || { echo "::error::$p did not serve"; exit 1; }
           done
           echo "build + smoke OK"
@@ -150,13 +150,14 @@ jobs:
             echo "### Vercel preview (not production)"
             echo "$URL"
             echo ""
-            echo "- Unified viewer: $URL/"
+            echo "- Live viewer: $URL/"
             echo "- Viewer without intro: $URL/?nointro=1"
             echo "- Homepage: $URL/about"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ -n "${VERCEL_BYPASS:-}" ]; then
             curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
-            curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'unified.js'
+            curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'client.js'
+            curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'unified.js' && { echo "::error::homepage still loads the unified viewer"; exit 1; }
             curl -sf --retry 3 "$URL/intro.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'Halftone bloom'
             curl -sf --retry 3 "$URL/intro-levels.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'OffscreenCanvas'
           fi
@@ -260,7 +261,8 @@ jobs:
           echo "deployed $URL"
           # smoke test before the domain moves (deployment URLs are protected; the bypass secret gets through)
           curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
-          curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'unified.js'
+          curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'client.js'
+          curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'unified.js' && { echo "::error::homepage still loads the unified viewer"; exit 1; }
           BID=$(curl -sf "$URL/build.json?x-vercel-protection-bypass=$VERCEL_BYPASS")
           echo "build $BID"
           # Only the newest main commit may take the domain (a manual deploy or a later push wins otherwise).

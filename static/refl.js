@@ -1,4 +1,4 @@
-// Shared band reflection (WebGL2), used by the live viewer (client.js) and the Time Machine (tm-lab.js).
+// Shared band reflection (WebGL2), used by the live viewer (client.js) and the about page.
 // Moved verbatim out of client.js; the only change is that SURR/COARSE come from opts.
 // Reflection (WebGL2): a heavily blurred, fading mirror of the band in the dark space above/below it.
 // One tiny 128x16 thumbnail of the visible strips (GPU->GPU drawImage, no readback), mipmapped, drawn by one
