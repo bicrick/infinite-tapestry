@@ -1,10 +1,8 @@
 // Shared strip load-in reveal (live viewer + any unified page on the same strip path).
-// When a strip bitmap lands: scattered starry dots drift into a coarse B&W stipple of the image,
-// then discrete passes add density and colour before settling on the real pixels.
-// Cheap by design: sample once from a downscaled offscreen; animate only a short initial drift;
-// later passes redraw the offscreen in one shot. No gradients, no glow. Caps concurrent reveals.
-// Visual language is bright-on-dark (tapestry surround is near-black) — not paper stipple.
-// Usage: const r = TapestryStripReveal.start(bitmap, { now }); r.tick(now); r.draw(ctx, x, y); r.dispose();
+// Sequence: scattered stars → drift into coarse B&W → denser B&W passes until a complete,
+// crisp monochrome stipple (engraving / halftone) → then colour arrives via a gentle crossfade
+// to the real bitmap. Cheap: sample once; short drift only; later passes are one-shot redraws.
+// Usage: const r = TapestryStripReveal.start(bitmap, { now }); r.tick(now); r.draw(ctx, x, y);
 (() => {
   "use strict";
 
@@ -13,20 +11,25 @@
   const MAX_ACTIVE = LOW ? 2 : 4;
   let active = 0;
 
-  // Pass schedule (ms from start). Drift is the only per-frame particle motion.
-  const T_DRIFT = 520;
-  const T_BW1 = 820;
-  const T_BW2 = 1180;
-  const T_COLOR = 1580;
-  const T_SETTLE = 2050;
-  const T_DONE = 2400;
+  // Timeline (ms). Colour only starts after the fine B&W plate has landed.
+  const T_DRIFT = 480;
+  const T_BW1 = 780;     // coarse ink
+  const T_BW2 = 1150;    // denser
+  const T_BW3 = 1600;    // fine engraving (full plate)
+  const T_HOLD = 2000;   // brief hold on complete B&W
+  const T_COLOR = 2550;  // crossfade B&W → colour photo
+  const T_DONE = 2900;
 
-  // Dot budgets per pass (index into the pre-sampled pool).
-  const N_STAR = LOW ? 56 : 84;
-  const N_BW1 = LOW ? 160 : 240;
-  const N_BW2 = LOW ? 320 : 480;
-  const N_COLOR = LOW ? 480 : 700;
-  const N_POOL = LOW ? 520 : 820;
+  // Dot budgets. Final pass uses the whole pool for a readable plate.
+  const N_STAR = LOW ? 64 : 96;
+  const N_BW1 = LOW ? 280 : 420;
+  const N_BW2 = LOW ? 900 : 1600;
+  const N_BW3 = LOW ? 2400 : 4500;
+  const N_POOL = N_BW3;
+
+  // Engraving paper + ink (hard dots, no glow).
+  const PAPER = "#e6e1d6";
+  const INK = "#12110f";
 
   function mulberry32(a) {
     return () => {
@@ -40,11 +43,10 @@
   function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
   function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
-  // Stratified luminance-weighted samples with a cheap local min-distance (blue-noise-ish).
-  // Vertical bands guarantee the whole strip is covered — pure Bridson was filling the pool
-  // from the brightest corner before the rest of the strip got any dots.
+  // Stratified, darkness-weighted samples (classic stipple: more/larger ink in dark regions)
+  // with a cheap min-distance so the fine plate reads as blue-noise rather than clumps.
   function samplePool(bitmap, W, H, seed) {
-    const maxSide = LOW ? 96 : 128;
+    const maxSide = LOW ? 140 : 200;
     const scale = Math.min(1, maxSide / Math.max(W, H));
     const sw = Math.max(8, Math.round(W * scale));
     const sh = Math.max(8, Math.round(H * scale));
@@ -57,7 +59,7 @@
     catch (_) { return null; }
 
     const rnd = mulberry32(seed || (Math.random() * 1e9) | 0);
-    const cell = Math.max(1.2, Math.sqrt((sw * sh) / (N_POOL * 2.6)));
+    const cell = Math.max(0.95, Math.sqrt((sw * sh) / (N_POOL * 3.1)));
     const cols = Math.ceil(sw / cell);
     const rows = Math.ceil(sh / cell);
     const grid = new Int16Array(cols * rows).fill(-1);
@@ -69,7 +71,9 @@
       return (0.2126 * data[o] + 0.7152 * data[o + 1] + 0.0722 * data[o + 2]) / 255;
     }
     function radiusFor(L) {
-      return cell * (0.55 + 1.1 * (1 - L));
+      // Darker → tighter spacing (more ink). Lights stay open (paper shows through).
+      const dark = 1 - L;
+      return cell * (0.45 + 1.35 * L) / (0.55 + dark);
     }
     function ok(x, y, r) {
       const c0 = Math.floor(x / cell), r0 = Math.floor(y / cell);
@@ -82,7 +86,7 @@
           if (id < 0) continue;
           const p = pts[id];
           const dx = p.sx - x, dy = p.sy - y;
-          const minR = Math.min(r, p.r) * 0.92;
+          const minR = Math.min(r, p.r) * 0.9;
           if (dx * dx + dy * dy < minR * minR) return false;
         }
       }
@@ -98,10 +102,11 @@
       const gi = Math.floor(y / cell) * cols + Math.floor(x / cell);
       if (gi < 0 || gi >= grid.length) return false;
       grid[gi] = pts.length;
+      const dark = 1 - L;
       pts.push({
         sx: x, sy: y,
         x: x * sx, y: y * sy,
-        r, L,
+        r, L, dark,
         cr: data[o], cg: data[o + 1], cb: data[o + 2],
         ox: rnd() * W,
         oy: rnd() * H,
@@ -110,25 +115,27 @@
       return true;
     }
 
-    const bands = LOW ? 10 : 14;
+    const bands = LOW ? 12 : 16;
     const perBand = Math.ceil(N_POOL / bands);
     for (let b = 0; b < bands; b++) {
       const y0 = (b / bands) * sh;
       const y1 = ((b + 1) / bands) * sh;
       let got = 0, tries = 0;
-      while (got < perBand && tries++ < perBand * 50) {
+      while (got < perBand && tries++ < perBand * 55) {
         const x = 0.5 + rnd() * (sw - 1);
         const y = y0 + rnd() * Math.max(0.5, y1 - y0);
         const L = lumAt(x | 0, y | 0);
-        if (rnd() > Math.pow(L, 0.85) + 0.2) continue;
+        // Prefer dark sites for ink; keep a thin scatter in lights so highlights still stipple.
+        if (rnd() > Math.pow(1 - L, 1.05) + 0.12) continue;
         if (push(x, y)) got++;
       }
     }
 
+    // Dark → light so early coarse passes lay down the heavy ink first.
+    pts.sort((a, b) => b.dark - a.dark || a.j - b.j);
     return pts;
   }
 
-  // Evenly stride through the pool so early passes sketch the whole strip, not just the brightest corner.
   function takeSpread(pts, n) {
     const lim = Math.min(n, pts.length);
     if (lim >= pts.length) return pts;
@@ -142,31 +149,19 @@
     return ranked.slice(0, Math.min(n, ranked.length));
   }
 
-  function paintDots(ctx, pts, n, mode, W, H) {
-    ctx.clearRect(0, 0, W, H);
-    const list = mode === "star" ? takeBright(pts, n) : takeSpread(pts, n);
-    const coarse = mode === "bw" && n <= N_BW1;
-    for (let i = 0; i < list.length; i++) {
+  // Crisp engraving plate: paper ground + hard black ink squares sized by darkness.
+  function paintEngraving(ctx, pts, n, W, H, fine) {
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, W, H);
+    const list = fine ? pts : takeSpread(pts, n);
+    const lim = Math.min(n, list.length);
+    ctx.fillStyle = INK;
+    for (let i = 0; i < lim; i++) {
       const p = list[i];
-      let s, fill;
-      if (mode === "star") {
-        s = 1.2 + p.j * 1.6;
-        fill = `rgba(236,234,226,${(0.5 + 0.45 * p.j).toFixed(3)})`;
-      } else if (mode === "bw") {
-        // Bright-on-dark stipple: dot size and value track image luminance.
-        s = (coarse ? 1.8 : 1.2) + p.L * (coarse ? 5.2 : 3.2);
-        const g = Math.round(36 + p.L * 219);
-        fill = `rgb(${g},${g},${g})`;
-      } else {
-        s = 1.15 + p.L * 3.0;
-        // Lift colour a touch so midtones read on the dark surround before the photo settles.
-        const lift = 1.1;
-        const r = Math.min(255, (p.cr * lift) | 0);
-        const g = Math.min(255, (p.cg * lift) | 0);
-        const b = Math.min(255, (p.cb * lift) | 0);
-        fill = `rgb(${r},${g},${b})`;
-      }
-      ctx.fillStyle = fill;
+      // Coarse: larger, chunkier marks. Fine: small crisp ticks (engraving density).
+      const s = fine
+        ? (0.7 + p.dark * 2.4)
+        : (n <= N_BW1 ? (1.6 + p.dark * 5.5) : (1.1 + p.dark * 3.6));
       const hs = s * 0.5;
       ctx.fillRect(p.x - hs, p.y - hs, s, s);
     }
@@ -174,25 +169,36 @@
 
   function paintDrift(ctx, pts, n, u, W, H) {
     ctx.clearRect(0, 0, W, H);
-    // Drift: bright seeds scatter, then land on a coarse spatial spread (whole-strip silhouette).
     const stars = takeBright(pts, Math.min(n, N_STAR));
-    const targets = takeSpread(pts, Math.min(Math.max(n, N_BW1), N_BW1));
+    const targets = takeSpread(pts, Math.min(N_BW1, pts.length));
     const e = easeOutCubic(u);
     const lim = Math.min(stars.length, targets.length);
+    // Paper fades in under the assembling stars so the handoff into engraving isn't a pop.
+    const paperA = easeInOut(Math.max(0, (e - 0.35) / 0.65));
+    if (paperA > 0.01) {
+      ctx.globalAlpha = paperA;
+      ctx.fillStyle = PAPER;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
     for (let i = 0; i < lim; i++) {
       const p0 = stars[i];
       const p = targets[i];
-      const local = Math.max(0, Math.min(1, (e - p0.j * 0.25) / 0.75));
+      const local = Math.max(0, Math.min(1, (e - p0.j * 0.22) / 0.78));
       const k = easeInOut(local);
       const x = p0.ox + (p.x - p0.ox) * k;
       const y = p0.oy + (p.y - p0.oy) * k;
-      const s = 1.15 + (1 - k) * 1.35 + k * (1.5 + p.L * 3.6);
-      const g = Math.round(210 * (1 - k) + (36 + p.L * 219) * k);
-      ctx.fillStyle = k < 0.5
-        ? `rgba(236,234,226,${(0.5 + 0.4 * p0.j).toFixed(3)})`
-        : `rgb(${g},${g},${g})`;
-      const hs = s * 0.5;
-      ctx.fillRect(x - hs, y - hs, s, s);
+      if (k < 0.55) {
+        const s = 1.2 + (1 - k) * 1.4;
+        ctx.fillStyle = `rgba(236,234,226,${(0.55 + 0.4 * p0.j).toFixed(3)})`;
+        const hs = s * 0.5;
+        ctx.fillRect(x - hs, y - hs, s, s);
+      } else {
+        const s = 1.4 + p.dark * 4.2;
+        ctx.fillStyle = INK;
+        const hs = s * 0.5;
+        ctx.fillRect(x - hs, y - hs, s, s);
+      }
     }
   }
 
@@ -209,10 +215,12 @@
     if (!pts || pts.length < 12) return null;
 
     active++;
+    // Near-full working buffer so the fine plate stays crisp when upscaled.
+    const rw = Math.max(96, Math.round(W * (LOW ? 0.65 : 0.85)));
+    const rh = Math.max(96, Math.round(H * (LOW ? 0.65 : 0.85)));
     const cv = document.createElement("canvas");
-    const rw = Math.max(64, W >> 1), rh = Math.max(64, H >> 1);
     cv.width = rw; cv.height = rh;
-    const cx = cv.getContext("2d", { alpha: true });
+    const cx = cv.getContext("2d", { alpha: false });
     const xScale = rw / W, yScale = rh / H;
     for (const p of pts) {
       p.x *= xScale; p.y *= yScale;
@@ -221,7 +229,7 @@
 
     let phase = "drift";
     let done = false;
-    let settleA = 0;
+    let colorA = 0;
     let lastPass = "";
     let disposed = false;
 
@@ -243,19 +251,28 @@
         phase = "drift";
         paintDrift(cx, pts, N_STAR, t / T_DRIFT, rw, rh);
         lastPass = "drift";
+        colorA = 0;
       } else if (t < T_BW1) {
         phase = "bw1";
-        ensurePass("bw1", () => paintDots(cx, pts, N_BW1, "bw", rw, rh));
+        ensurePass("bw1", () => paintEngraving(cx, pts, N_BW1, rw, rh, false));
+        colorA = 0;
       } else if (t < T_BW2) {
         phase = "bw2";
-        ensurePass("bw2", () => paintDots(cx, pts, N_BW2, "bw", rw, rh));
-      } else if (t < T_COLOR) {
-        phase = "color";
-        ensurePass("color", () => paintDots(cx, pts, N_COLOR, "color", rw, rh));
+        ensurePass("bw2", () => paintEngraving(cx, pts, N_BW2, rw, rh, false));
+        colorA = 0;
+      } else if (t < T_BW3) {
+        phase = "bw3";
+        ensurePass("bw3", () => paintEngraving(cx, pts, N_BW3, rw, rh, true));
+        colorA = 0;
+      } else if (t < T_HOLD) {
+        phase = "hold";
+        ensurePass("bw3", () => paintEngraving(cx, pts, N_BW3, rw, rh, true));
+        colorA = 0;
       } else {
-        phase = "settle";
-        ensurePass("color", () => paintDots(cx, pts, N_COLOR, "color", rw, rh));
-        settleA = easeInOut(Math.min(1, (t - T_COLOR) / (T_SETTLE - T_COLOR)));
+        // Colour arrives only after the monochrome plate is complete: soft crossfade to the photo.
+        phase = "color";
+        ensurePass("bw3", () => paintEngraving(cx, pts, N_BW3, rw, rh, true));
+        colorA = easeInOut(Math.min(1, (t - T_HOLD) / (T_COLOR - T_HOLD)));
       }
       return true;
     }
@@ -265,14 +282,11 @@
         ctx.drawImage(bitmap, dx, dy);
         return;
       }
-      if (phase === "settle" && settleA > 0.02) {
-        ctx.globalAlpha = 1;
-        ctx.drawImage(cv, 0, 0, rw, rh, dx, dy, W, H);
-        ctx.globalAlpha = settleA;
+      ctx.drawImage(cv, 0, 0, rw, rh, dx, dy, W, H);
+      if (colorA > 0.01) {
+        ctx.globalAlpha = colorA;
         ctx.drawImage(bitmap, dx, dy);
         ctx.globalAlpha = 1;
-      } else {
-        ctx.drawImage(cv, 0, 0, rw, rh, dx, dy, W, H);
       }
     }
 
