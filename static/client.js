@@ -49,6 +49,9 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   const ctx = canvas.getContext("2d", { alpha: false });
   // Missing image data never shows as black: stippled wireframe in the gaps, halftone bloom when pixels land (stipple-viewer.js).
   const fill = window.TapestryStipple ? window.TapestryStipple.create() : null;
+  // Quiet (no wireframe, no blooms) under the intro and while the unified timeline covers this view or hands off to it,
+  // so the frame it uncovers is exactly the plain live frame.
+  const fillQuiet = () => { const c = document.body.classList; return c.contains("intro") || c.contains("u-tl") || c.contains("u-hold"); };
   const statusEl = $("status");
   const statusText = $("status-text");
   const DEBUG = /[?&]debug/.test(location.search);
@@ -666,7 +669,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       if (fill) {   // no strips yet: the whole band is wireframe
         const s = scale() * zoom * ribbon, bh = config.height * s;
         const yOff = portrait() ? bandTopFor(h, config.height * scale()) + (config.height * scale() - bh) / 2 : ribbonTop(h, bh);
-        fill.begin(document.body.classList.contains("intro")); fill.end(ctx, { left: 0, span: w / s, s, yOff, bandH: bh });
+        fill.begin(fillQuiet()); fill.end(ctx, { left: 0, span: w / s, s, yOff, bandH: bh });
       }
       ctx.fillStyle = "rgba(255,255,255,.4)";
       ctx.font = `${14 * (window.devicePixelRatio || 1)}px Inter, sans-serif`;
@@ -704,7 +707,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     ctx.save();
     ctx.translate(0, yOff);
     ctx.scale(s, s);
-    if (fill) fill.begin(document.body.classList.contains("intro"));
+    if (fill) fill.begin(fillQuiet());
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet.
     const lodOn = !window.__nolod && (zoom < 0.97 || fast || coverage < 1); let fading = 0;
     if (lodOn) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)

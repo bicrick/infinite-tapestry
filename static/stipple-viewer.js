@@ -13,7 +13,13 @@
 //
 // GL (unified.js, the timeline): shares the caller's WebGL context and draws straight into its framebuffer. The
 // renderer's underlay shows the image inside a bloom, so the caller draws only what paintTexture() hands back.
-//   const fill = TapestryStipple.create({ gl, dpr })
+//   const fill = TapestryStipple.create({ gl, dpr, hasAnyTexture?, handOff? })
+//     hasAnyTexture({ u0, u1, x, y, w, h }) -> boolean   optional: true if any texture at any zoom level covers that
+//                                                  slot (u0..u1 world units; x, y, w, h framebuffer px). Grain then
+//                                                  skips it: the wireframe is only for true gaps. Without it, a slot
+//                                                  is a gap when nothing painted it this frame (coarser tiles count)
+//     handOff() -> boolean                         optional: while true no bloom starts or keeps running, so the
+//                                                  frame matches what the next renderer will show
 //   fill.begin(), fill.reset()                     reset() after a pause in drawing (nothing stale blooms)
 //   for (const [c0, c1] of fill.paintTexture(x0, x1, key, texture, uv)) drawYourself(texture, x0, x1, c0, c1)
 //   fill.end(null, { left, span, s, yOff, bandH, width, height, lo, hi, dpr })
@@ -42,7 +48,7 @@
     const r = SF.createRenderer(gl, { underlay: embedded, dpr, restoreBlendFunc: false });
     if (!r.supported) return noop;
 
-    let frame = 0, painted = [], prevEmpty = [], prevMin = 1, quiet = false;
+    let frame = 0, painted = [], prevEmpty = [], prevMin = 1, quiet = false, still = false;
     const lastSeen = new Map();   // key -> last frame it was painted
     const blooms = new Map();     // key -> { state, t0, a, b, segs: [[x0, x1]], uv, frame, tex }
 
@@ -52,14 +58,18 @@
       for (const [ea, eb] of prevEmpty) { const x0 = Math.max(a, ea), x1 = Math.min(b, eb); if (x1 - x0 > prevMin) out.push([x0, x1]); }
       return out;
     }
-    function begin(q) { frame++; painted = []; quiet = !!q; }
+    function begin(q) {
+      frame++; painted = []; quiet = !!q;
+      still = !!(opts.handOff && opts.handOff());
+      if (still) for (const k of [...blooms.keys()]) finish(k);   // the hand-off frame shows plain images, as the live viewer will
+    }
     function reset() { prevEmpty = []; for (const k of blooms.keys()) r.releaseColor(k); blooms.clear(); }
     function track(a, b, key, source, uv, isTex) {
       const seenPrev = lastSeen.get(key) === frame - 1;
       lastSeen.set(key, frame);
       let bl = blooms.get(key);
       if (!bl) {
-        const segs = !seenPrev && source && !quiet ? emptySegs(a, b) : [];
+        const segs = !seenPrev && source && !quiet && !still ? emptySegs(a, b) : [];
         if (!segs.length) return null;
         bl = { state: isTex ? "run" : "pending", t0: performance.now(), a, b, segs, uv: uv || [0, 0, 1, 1], frame, tex: isTex ? source : null };
         blooms.set(key, bl);
@@ -97,6 +107,24 @@
       return out;
     }
 
+    // With opts.hasAnyTexture, the unpainted spans are cut into slots on a power-of-two grid of world units (at least
+    // one unit, i.e. one strip in the timeline) and every slot the caller has any texture for, at any level, is
+    // dropped: no wireframe there, and no bloom when the sharper image lands (the caller fades it in itself).
+    function trueGaps(empty, g) {
+      const has = opts.hasAnyTexture;
+      if (!has || !empty.length) return empty;
+      const step = Math.max(1, Math.pow(2, Math.ceil(Math.log2(48 / g.s)))), out = [];
+      for (const [a, b] of empty) {
+        for (let x = Math.floor(a / step) * step; x < b; x += step) {
+          const u0 = Math.max(a, x), u1 = Math.min(b, x + step);
+          if (u1 <= u0 || has({ u0, u1, x: (u0 - g.left) * g.s, y: g.yOff, w: (u1 - u0) * g.s, h: g.bandH })) continue;
+          const last = out[out.length - 1];
+          if (last && last[1] >= u0) last[1] = u1; else out.push([u0, u1]);
+        }
+      }
+      return out;
+    }
+
     function end(ctx, g) {
       for (const [k, bl] of blooms) if (bl.frame !== frame) finish(k);
       if (lastSeen.size > 4000) for (const [k, f] of lastSeen) if (f < frame - 1) lastSeen.delete(k);
@@ -112,9 +140,9 @@
         cur = Math.max(cur, b);
       }
       if (cur < R - minW) empty.push([cur, R]);
-      prevEmpty = empty; prevMin = 1 / g.s;
+      prevEmpty = trueGaps(empty, g); prevMin = 1 / g.s;
       const rects = [];
-      for (const [a, b] of empty) rects.push({ x: (a - L) * g.s, y: g.yOff, w: (b - a) * g.s, h: g.bandH });
+      for (const [a, b] of prevEmpty) rects.push({ x: (a - L) * g.s, y: g.yOff, w: (b - a) * g.s, h: g.bandH });
       const now = performance.now();
       for (const [k, bl] of blooms) {
         if (bl.state !== "run") continue;
