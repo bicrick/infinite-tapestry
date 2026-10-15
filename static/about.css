@@ -163,7 +163,6 @@ main { position:relative; z-index:1; }
 }
 
 .ui-over.top { inset:14px 14px auto 14px; }
-.caption.bottom { top:auto; bottom:14px; }
 .bar { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-radius:999px; font-size:12px; }
 .bar .dot { display:inline-block; margin-right:7px; vertical-align:1px; }
 .bar .icons { display:flex; gap:12px; } .bar svg { width:15px; height:15px; }
