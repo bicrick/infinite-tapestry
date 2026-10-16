@@ -104,7 +104,7 @@ async function tapestryPodIds() {
   try {
     const rows = await rest(
       "GET",
-      "audit_log?action=in.(pod_adopt,pod_start,pod_stop,admin_gpu_start,admin_gpu_stop)&select=target,detail&order=created_at.desc&limit=200"
+      "audit_log?action=in.(pod_adopt,pod_replace,pod_start,pod_stop,admin_gpu_start,admin_gpu_stop,gpu_on,gpu_off)&select=target,detail&order=created_at.desc&limit=200"
     ).catch(() => []);
     for (const r of Array.isArray(rows) ? rows : []) {
       if (r.target) ids.add(String(r.target));

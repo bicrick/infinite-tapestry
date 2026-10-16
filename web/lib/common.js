@@ -149,33 +149,35 @@ async function fuelBalance() {
   return { balance: Number(rows[0] ? rows[0].balance_cents : 0), pod: rows[0] && rows[0].pod_status };
 }
 
-// Reconcile the GPU pod. Fuel (prepaid purchases) is display-only: the pod runs 24/7. The only automatic stop is the
-// RunPod credit guard (account balance <= RUNPOD_MIN_BALANCE, default $0.50), plus an explicit desired=off.
-// Starting is gated by CONTROLLER_ENABLE_START=1.
+// Reconcile the GPU pod (every 5 min via /api/controller). pod_state.desired is the one switch (web/lib/gpu.js):
+// "off" stops the pod; anything else means ON: resume the pod, or create a replacement when its host has no free GPU.
+// The only other automatic stop is the RunPod credit guard (account balance <= RUNPOD_MIN_BALANCE, default $0.50).
+// Fuel (prepaid purchases) is display-only. (CONTROLLER_ENABLE_START and desired "auto" are retired: on means on.)
 const MIN_BALANCE = () => Number(env("RUNPOD_MIN_BALANCE", "0.5"));
 async function runpodBalance() {
   try { const d = await runpod(`query { myself { clientBalance } }`); const b = Number(d.myself && d.myself.clientBalance); return Number.isFinite(b) ? b : null; }
   catch (_) { return null; }   // unknown: never stop on a failed read
 }
 async function reconcile(reason) {
+  const gpu = require("./gpu");
   await loadPod(true);
   await adoptPod().catch(() => null);
   const { balance } = await fuelBalance();
   const credit = await runpodBalance();
-  const st = await podStatus();
   const desiredRows = await rest("GET", "pod_state?id=eq.1&select=desired");
-  const desired = desiredRows[0] ? desiredRows[0].desired : "auto";
+  const desired = desiredRows[0] && desiredRows[0].desired === "off" ? "off" : "on";
   const broke = credit != null && credit <= MIN_BALANCE();
-  let action = "none";
-  if ((broke || desired === "off") && st === "RUNNING") {
-    await podStop(); action = "stop";
-  } else if (!broke && credit != null && desired !== "off" && st !== "RUNNING" && env("CONTROLLER_ENABLE_START") === "1") {
-    action = await podStart().then(() => "start", (e) => "start_failed:" + e.message);
+  let action;
+  try { action = broke || desired === "off" ? await gpu.ensureOff() : credit == null ? "none" : await gpu.ensureOn(reason); }
+  catch (e) {
+    action = "error:" + String(e.message).slice(0, 200);
+    await rest("PATCH", "pod_state?id=eq.1", { last_error: String(e.message).slice(0, 300) }, { prefer: "return=minimal" }).catch(() => {});
   }
-  const status = action.startsWith("start_failed") ? "sleeping" : action === "start" ? "waking" : action === "stop" ? "sleeping" : st === "RUNNING" ? "running" : "sleeping";
+  const st = await podStatus().catch(() => "UNKNOWN");
+  const status = st === "RUNNING" ? "running" : action === "start" || action.startsWith("replace") ? "waking" : "sleeping";
   await rest("PATCH", "pod_state?id=eq.1", { status, updated_at: new Date().toISOString(), note: `${reason}: pod ${st}, runpod $${credit == null ? "?" : credit.toFixed(2)}, fuel ${balance.toFixed(1)}c, action ${action}` }, { prefer: "return=minimal" });
   if (action === "start" || action === "stop") await audit(action === "start" ? "pod_start" : "pod_stop", { target: POD(), detail: { reason, balance_cents: balance, runpod_balance: credit, by: "controller" } });
-  return { balance_cents: balance, runpod_balance: credit, pod: st, action, desired, start_enabled: env("CONTROLLER_ENABLE_START") === "1" };
+  return { balance_cents: balance, runpod_balance: credit, pod: st, action, desired };
 }
 
 async function readRaw(req) {

@@ -128,3 +128,9 @@ body { margin: 0; }
   .adm td { padding: 6px 4px; }
   .adm .seg { margin-left: 0; }
 }
+.gsw { display: flex; align-items: center; gap: 16px; margin: 2px 0 14px; }
+.adm .gsw-btn { position: relative; width: 64px; height: 34px; border-radius: 17px; padding: 0; margin: 0; background: rgba(var(--ink), .14); border: 0; transition: background .2s; flex: none; }
+.adm .gsw-btn[aria-checked=true] { background: #2f9e5b; }
+.gsw-knob { position: absolute; top: 3px; left: 3px; width: 28px; height: 28px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: left .2s; }
+.gsw-btn[aria-checked=true] .gsw-knob { left: 33px; }
+.gsw-state { font-size: 20px; font-weight: 600; } .gsw-state.live { color: #2f9e5b; } .gsw-state.starting, .gsw-state.stopping { color: #c98a1b; }

@@ -103,3 +103,17 @@ VERCEL_BYPASS, STRIPE_WEBHOOK_ID/SECRET).
   the `workflow` scope is available. Repo secrets are already set.
 * **Next step (not done):** move the crowd director + Auto (Haiku) into a Vercel function on the pg_cron tick writing a
   `scenes` queue table the pod pulls from; the pod would then only render.
+
+## GPU on/off (one switch)
+
+`pod_state.desired` is the only switch. **On** keeps a `tapestry-sdxl*` pod running with a healthy worker: the 5-minute
+controller (and the switch itself) resumes the recorded pod, and if RunPod says its host has no free GPU (or the pod is
+gone) it creates a replacement pod named `tapestry-sdxl-<yymmddhhmm>` that boots the worker by itself (pod env carries the
+secrets; `dockerStartCmd` pulls the newest release and runs `scripts/pod/selfboot.sh`), then points `pod_state.pod_id`
+at it. The old pod stays EXITED (never deleted). **Off** stops the pod; the site replays. The RunPod credit guard
+(`RUNPOD_MIN_BALANCE`) still stops it when the account runs dry. `CONTROLLER_ENABLE_START` and desired=`auto` are retired.
+Clients follow `/api/live`'s `pod.ws`, so a pod change needs no redeploy.
+
+- Admin: the switch at the top of `/admin` (Overview), with off / starting / live, pod id, uptime and $/h.
+- CLI: `scripts/gpu.sh status|on|off [--wait]` with `TAPESTRY_GPU_SECRET` = Vercel env `GPU_CLI_SECRET`
+  (the secret only unlocks the GPU actions).
