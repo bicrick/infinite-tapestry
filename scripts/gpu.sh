@@ -11,17 +11,25 @@ CMD="${1:-status}"; WAIT="${2:-}"
 URL="${TAPESTRY_URL:-https://infinitetapestry.app}/api/admin"
 case "$CMD" in status) A=gpu_status ;; on) A=gpu_on ;; off) A=gpu_off ;; *) echo "usage: $0 status|on|off [--wait]" >&2; exit 2 ;; esac
 call() { curl -sS -m 60 -X POST "$URL" -H "content-type: application/json" -H "x-gpu-secret: $TAPESTRY_GPU_SECRET" -d "{\"action\":\"$1\"}"; }
-show() { python3 -c '
-import json,sys
-d=json.loads(sys.stdin.read() or "{}")
-if not d: print("error: empty response (auth?)"); sys.exit(1)
-if d.get("ok") is False: print("error:", d.get("error")); sys.exit(1)
-up=d.get("uptime_s"); r=d.get("rate_per_hr")
-print(f"{d.get(\"state\",\"?\"):9} desired={d.get(\"desired\")} pod={d.get(\"pod_id\")} runpod={d.get(\"runpod\")} gpu={d.get(\"gpu\") or \"-\"}"
-      + (f" up={up//60}m" if up else "") + (f" ${r}/h" if r and d.get("runpod")=="RUNNING" else "")
-      + (f" strip={d[\"strip_index\"]}" if d.get("strip_index") is not None else "") + (f" action={d[\"action\"]}" if d.get("action") else ""))
-if d.get("last_error") and d.get("desired")=="on": print("last_error:", d["last_error"])
-print("STATE=" + str(d.get("state")), file=sys.stderr)'; }
+PY=$(cat <<'P'
+import json, sys
+d = json.loads(sys.stdin.read() or "{}")
+if not d:
+    print("error: empty response (wrong TAPESTRY_GPU_SECRET?)"); sys.exit(1)
+if d.get("ok") is False:
+    print("error:", d.get("error")); sys.exit(1)
+g = d.get
+line = "%-9s desired=%s pod=%s runpod=%s gpu=%s" % (g("state", "?"), g("desired"), g("pod_id"), g("runpod"), g("gpu") or "-")
+if g("uptime_s"): line += " up=%dm" % (g("uptime_s") // 60)
+if g("rate_per_hr") and g("runpod") == "RUNNING": line += " $%s/h" % g("rate_per_hr")
+if g("strip_index") is not None: line += " strip=%s" % g("strip_index")
+if g("action"): line += " action=%s" % g("action")
+print(line)
+if g("last_error") and g("desired") == "on" and g("state") != "live": print("last_error:", g("last_error"))
+print("STATE=%s" % g("state"), file=sys.stderr)
+P
+)
+show() { python3 -c "$PY"; }
 OUT=$(call "$A"); echo "$OUT" | show 2>/tmp/gpu_state.$$ || { rm -f /tmp/gpu_state.$$; exit 1; }
 if [ "$WAIT" = "--wait" ] && [ "$CMD" != status ]; then
   GOAL=$([ "$CMD" = on ] && echo live || echo off)
