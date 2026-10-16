@@ -83,7 +83,9 @@ class DiffusersInpainter(Inpainter):
             from diffusers import DPMSolverMultistepScheduler
 
             logger.info("No LCM-LoRA: using DPM++ 2M Karras")
-            pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+            self.model_id = config.sdxl_model if getattr(self, "_fell_back", None) is None else fb
+        logger.info("SDXL inpaint model loaded: %s (unet in_channels=%s)", self.model_id, pipe.unet.config.in_channels)
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
                 pipe.scheduler.config,
                 use_karras_sigmas=True,
                 algorithm_type="dpmsolver++",
@@ -190,19 +192,24 @@ class SDXLInpainter(Inpainter):
 
     def __init__(self, config: "Config") -> None:
         import torch
-        from diffusers import AutoPipelineForInpainting, DPMSolverMultistepScheduler
+        from diffusers import DPMSolverMultistepScheduler
+
+        from .sdxl_merge import load_pipeline
 
         self.config = config
         self._torch = torch
         logger.info("Loading SDXL inpaint model %s …", config.sdxl_model)
+        self.model_id = config.sdxl_model
         try:
-            pipe = AutoPipelineForInpainting.from_pretrained(config.sdxl_model, torch_dtype=torch.float16, variant="fp16")
+            pipe = load_pipeline(config.sdxl_model, torch.float16)
         except Exception as e:
             fb = getattr(config, "sdxl_fallback_model", "")
             if not fb or fb == config.sdxl_model:
                 raise
             logger.warning("SDXL model %s failed (%s); falling back to %s", config.sdxl_model, str(e)[:160], fb)
-            pipe = AutoPipelineForInpainting.from_pretrained(fb, torch_dtype=torch.float16, variant="fp16")
+            pipe = load_pipeline(fb, torch.float16)
+            self.model_id = fb
+        logger.warning("SDXL inpaint model loaded: %s (unet in_channels=%s)", self.model_id, pipe.unet.config.in_channels)
         pipe.scheduler = DPMSolverMultistepScheduler.from_config(
             pipe.scheduler.config, use_karras_sigmas=True, algorithm_type="dpmsolver++")
         # The stock SDXL VAE overflows in fp16; use the fp16-fixed one.
