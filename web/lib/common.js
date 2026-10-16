@@ -175,7 +175,7 @@ async function reconcile(reason) {
   }
   const st = await podStatus().catch(() => "UNKNOWN");
   const status = st === "RUNNING" ? "running" : action === "start" || action.startsWith("replace") ? "waking" : "sleeping";
-  await rest("PATCH", "pod_state?id=eq.1", { status, updated_at: new Date().toISOString(), note: `${reason}: pod ${st}, runpod $${credit == null ? "?" : credit.toFixed(2)}, fuel ${balance.toFixed(1)}c, action ${action}` }, { prefer: "return=minimal" });
+  await rest("PATCH", "pod_state?id=eq.1", { status, ...(st === "RUNNING" ? { last_error: null } : {}), updated_at: new Date().toISOString(), note: `${reason}: pod ${st}, runpod $${credit == null ? "?" : credit.toFixed(2)}, fuel ${balance.toFixed(1)}c, action ${action}` }, { prefer: "return=minimal" });
   if (action === "start" || action === "stop") await audit(action === "start" ? "pod_start" : "pod_stop", { target: POD(), detail: { reason, balance_cents: balance, runpod_balance: credit, by: "controller" } });
   return { balance_cents: balance, runpod_balance: credit, pod: st, action, desired };
 }
