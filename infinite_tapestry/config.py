@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
@@ -42,8 +43,11 @@ class Config:
     lcm_lora: str = ""
     # Backend: "sd15" (default, cheap GPUs) or "sdxl" (24 GB-class GPUs; see SDXL_PRESET)
     backend: str = "sd15"
-    sdxl_model: str = "OzzyGT/RealVisXL_V4.0_inpainting"  # photoreal SDXL inpaint (9-ch UNet, fp16)
-    sdxl_fallback_model: str = "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
+    # Photoreal SDXL inpaint (9-ch UNet, fp16). Default: RealVisXL V5.0 inpaint, merged on the box (sdxl_merge.py).
+    # TAPESTRY_SDXL_MODEL overrides it (e.g. OzzyGT/RealVisXL_V4.0_inpainting to roll back to V4); if the model
+    # fails to load, TAPESTRY_SDXL_FALLBACK_MODEL (default: V4) is used instead.
+    sdxl_model: str = field(default_factory=lambda: os.environ.get("TAPESTRY_SDXL_MODEL") or "merge:realvisxl-v5-inpaint")
+    sdxl_fallback_model: str = field(default_factory=lambda: os.environ.get("TAPESTRY_SDXL_FALLBACK_MODEL") or "OzzyGT/RealVisXL_V4.0_inpainting")
     ip_adapter: bool = True  # SDXL only: image ideas steer strips via IP-Adapter (refs.py); face mode not shipped
     style_loras: bool = True  # SDXL only: load style LoRAs (styles.py) and ramp them across transitions
     takeover_strips: int = 2       # first strips of a new user idea repaint nearly all context
