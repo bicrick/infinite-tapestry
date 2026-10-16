@@ -6,7 +6,15 @@ const chat = require("../lib/autochat");
 const { env, rest, adminFromToken, audit, runpod, MIN_BALANCE, POD, loadPod, adoptPod, podStart, podStop } = require("../lib/common");
 const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svc = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
-const DESIRED = new Set(["on", "off", "auto"]);
+const crypto = require("crypto");
+const G = require("../lib/gpu");
+const DESIRED = new Set(["on", "off", "auto"]);   // "auto" is legacy and means on
+const CLI_ACTIONS = new Set(["gpu_status", "gpu_on", "gpu_off"]);
+// scripts/gpu.sh authenticates with x-gpu-secret = GPU_CLI_SECRET (Vercel env); it can only use the GPU switch actions.
+function cliOk(req) {
+  const want = env("GPU_CLI_SECRET", ""), given = String(req.headers["x-gpu-secret"] || "");
+  return want.length >= 24 && given.length === want.length && crypto.timingSafeEqual(Buffer.from(given), Buffer.from(want));
+}
 const SHA = /^[0-9a-f]{40}$/;
 
 async function gpu() {
@@ -29,8 +37,8 @@ async function gpu() {
     last_change: p && p.lastStatusChange, last_strip_at: last[0] && last[0].created_at, last_strip: last[0] && last[0].idx,
     balance: bal, rate_per_hr: rate, spend_per_hr: spend, floor,
     hours_left: bal != null && rate ? Math.max(0, (bal - floor) / rate) : null, burning: !!(running || (spend && spend > 0.05)),
-    start_enabled: env("CONTROLLER_ENABLE_START") === "1", console_url: `https://console.runpod.io/pods?id=${id}`,
-    state: ps[0] || null };
+    console_url: `https://console.runpod.io/pods?id=${id}`,
+    state: ps[0] || null, switch: await G.status().catch(() => null) };
 }
 async function storageList(prefix) {
   const r = await fetch(`${SB()}/storage/v1/object/list/deploy`, { method: "POST", headers: { ...svc(), "content-type": "application/json" },
@@ -63,22 +71,20 @@ function cleanRender(b) {
 
 module.exports = async (req, res) => {
   res.setHeader("cache-control", "private, no-store");
-  const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  const me = tok ? await adminFromToken(tok).catch(() => null) : null;
-  if (!me) return res.status(403).end();
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
   const a = body.action || "recent";
+  const tok = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const me = tok ? await adminFromToken(tok).catch(() => null) : CLI_ACTIONS.has(a) && cliOk(req) ? { id: null, cli: true } : null;
+  if (!me) return res.status(403).end();
   try {
-    if (a === "ui") return res.status(200).json(UI);
-    if (a === "gpu_start" || a === "gpu_stop") {   // immediate start/stop (also sets desired so the controller agrees)
-      await loadPod(true);
-      const on = a === "gpu_start";
-      await rest("PATCH", "pod_state?id=eq.1", { desired: on ? "on" : "off", updated_at: new Date().toISOString() }, { prefer: "return=minimal" });
-      await audit(on ? "admin_gpu_start" : "admin_gpu_stop", { actor: me.id, target: POD() });
-      try { if (on) await podStart(); else await podStop(); }
-      catch (e) { return res.status(200).json({ ok: false, error: e.message, detail: e.detail || String(e.message).slice(0, 300) }); }
-      return res.status(200).json({ ok: true, gpu: await gpu() });
+    if (a === "gpu_status") return res.status(200).json(await G.status());
+    if (a === "gpu_on" || a === "gpu_off" || a === "gpu_start" || a === "gpu_stop" || a === "gpu_set") {   // the one switch
+      const on = a === "gpu_set" ? (DESIRED.has(body.desired) ? body.desired !== "off" : null) : a === "gpu_on" || a === "gpu_start";
+      if (on === null) return res.status(400).json({ error: "bad" });
+      try { const st = await G.setDesired(on, me.id, me.cli ? "cli" : "admin"); return res.status(200).json({ ok: true, ...st, gpu: me.cli ? undefined : await gpu() }); }
+      catch (e) { return res.status(200).json({ ok: false, error: String(e.message).slice(0, 300), gpu: me.cli ? undefined : await gpu().catch(() => null) }); }
     }
+    if (a === "ui") return res.status(200).json(UI);
     if (a === "gpu_pod_id") {   // {pod_id}: point everything at another pod (e.g. after a RunPod migration)
       const id = String(body.pod_id || "").trim();
       if (!/^[a-z0-9]{8,24}$/.test(id)) return res.status(400).json({ error: "bad_pod_id" });
@@ -153,13 +159,6 @@ module.exports = async (req, res) => {
       const { MOODS } = require("../lib/moods.json");
       return res.status(200).json({ gpu: g, auto: cfg[0], moods: MOODS, usage, fuel_cents: fuel[0] ? Number(fuel[0].balance_cents) : null, viewers: v,
         release: rel, releases, deploys, reports, ideas, sanctions, decisions, vercel_url: "https://vercel.com/bicricks-projects/infinite-tapestry-app/deployments" });
-    }
-    if (a === "gpu_set") {   // {desired: on|off|auto, dry?}: writes the desired state; the 5-minute controller acts on it
-      if (!DESIRED.has(body.desired)) return res.status(400).json({ error: "bad" });
-      if (body.dry) return res.status(200).json({ ok: true, dry: true, would: { desired: body.desired } });
-      await rest("PATCH", "pod_state?id=eq.1", { desired: body.desired, updated_at: new Date().toISOString(), note: `admin: desired ${body.desired}` }, { prefer: "return=minimal" });
-      await audit("admin_gpu_desired", { actor: me.id, target: POD(), detail: { desired: body.desired } });
-      return res.status(200).json({ ok: true, gpu: await gpu() });
     }
     if (a === "auto_set") {  // {paused, theme, minutes, mood_weights}
       const patch = { updated_at: new Date().toISOString(), updated_by: me.id };

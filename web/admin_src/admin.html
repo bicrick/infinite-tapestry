@@ -17,12 +17,12 @@
     <section class="view" id="view-overview">
       <header class="vh"><h1>Overview</h1></header>
       <div class="card-a" id="sec-gpu"><h2>GPU</h2>
-        <div class="kv" id="gpu"></div>
-        <div id="gpu-err" class="err hidden"></div>
-        <div class="row">
-          <button id="gpu-start" class="pri">Start</button><button id="gpu-stop">Stop</button>
-          <div class="seg" id="gpu-seg" role="radiogroup" aria-label="Desired state"><button data-d="on">On</button><button data-d="auto">Auto</button><button data-d="off">Off</button></div>
+        <div class="gsw">
+          <button id="gpu-switch" class="gsw-btn" role="switch" aria-checked="false" aria-label="GPU on/off"><span class="gsw-knob"></span></button>
+          <div><div class="gsw-state" id="gpu-phase">…</div><div class="fine" id="gpu-sub"></div></div>
         </div>
+        <div id="gpu-err" class="err hidden"></div>
+        <div class="kv" id="gpu"></div>
         <p class="fine" id="gpu-note"></p>
         <details><summary>Pod</summary>
           <p class="fine">Pod id <code id="gpu-id"></code> · <a id="gpu-console" target="_blank" rel="noopener">Open in RunPod</a></p>

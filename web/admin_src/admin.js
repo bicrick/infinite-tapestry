@@ -44,19 +44,21 @@ const gb = (b) => (b == null ? "—" : b >= 1e9 ? (b / 1e9).toFixed(2) + " GB" :
 const kv = (pairs) => pairs.map(([k, v]) => `<div><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join("");
 let OV = null;
 const dur = (sec) => sec == null ? "—" : sec < 3600 ? Math.round(sec / 60) + " min" : (sec / 3600).toFixed(1) + " h";
-const ERRS = { no_gpu_on_host: "RunPod can't start this pod: its host machine has no free GPU right now. Retry later, or migrate it to another machine in RunPod (it may get a new pod id; it is picked up automatically, or paste it under Pod).",
-  start_failed: "RunPod refused to start the pod." };
+const PHASE = { off: "Off", starting: "Starting…", live: "Live", stopping: "Stopping…" };
 function renderGpu(g, err) {
-  const st = g.state || {}, age = g.last_strip_at ? (Date.now() - new Date(g.last_strip_at)) / 1000 : null;
-  $("gpu").innerHTML = kv([["RunPod state", (g.pod || "—").toLowerCase()], ["GPU", g.gpu ? g.gpu + (g.location ? " · " + g.location : "") : "—"], ["uptime", g.pod === "RUNNING" ? dur(g.uptime_s) : "—"],
-    ["last strip", age == null ? "—" : age < 120 ? Math.round(age) + " s ago" : dur(age) + " ago"], ["$/hr", g.rate_per_hr != null ? fmt$(g.rate_per_hr) : "—"],
-    ["RunPod balance", fmt$(g.balance)], ["hours left (to $" + (g.floor ?? 0.5) + ")", g.hours_left == null ? "—" : g.hours_left.toFixed(1) + " h"], ["desired", st.desired || "—"]]);
-  document.querySelectorAll("#gpu-seg button").forEach((b) => b.classList.toggle("on", b.dataset.d === st.desired));
-  const e = err || st.last_error;
+  const st = g.state || {}, w = g.switch || {}, age = g.last_strip_at ? (Date.now() - new Date(g.last_strip_at)) / 1000 : null;
+  const ph = w.state || "off", on = w.desired !== "off";
+  $("gpu-switch").setAttribute("aria-checked", String(on));
+  $("gpu-phase").textContent = PHASE[ph] || ph; $("gpu-phase").className = "gsw-state " + ph;
+  $("gpu-sub").textContent = [w.pod_id ? "pod " + w.pod_id : "", w.gpu || "", w.uptime_s != null && w.runpod === "RUNNING" ? "up " + dur(w.uptime_s) : "",
+    w.rate_per_hr != null && w.runpod === "RUNNING" ? fmt$(w.rate_per_hr) + "/h" : ""].filter(Boolean).join(" · ") +
+    (ph === "starting" ? " · new pods take ~5–10 min to paint" : "");
+  $("gpu").innerHTML = kv([["last strip", age == null ? "—" : age < 120 ? Math.round(age) + " s ago" : dur(age) + " ago"], ["viewers", w.viewers ?? "—"],
+    ["RunPod balance", fmt$(g.balance)], ["hours left (to $" + (g.floor ?? 0.5) + ")", g.hours_left == null ? "—" : g.hours_left.toFixed(1) + " h"]]);
+  const e = err || (on ? st.last_error : null);
   const box = $("gpu-err"); box.classList.toggle("hidden", !e);
-  if (e) box.innerHTML = esc(ERRS[e] || (/not enough free GPUs/i.test(e) ? ERRS.no_gpu_on_host : "Last start error: " + e)) + ` <a href="${esc(g.console_url)}" target="_blank" rel="noopener">Migrate / start on another machine →</a>`;
-  $("gpu-start").disabled = g.pod === "RUNNING"; $("gpu-stop").disabled = g.pod !== "RUNNING";
-  $("gpu-note").textContent = (st.note || "") + (g.start_enabled ? "" : " · controller auto-start is off (Start here still works)");
+  if (e) box.textContent = "Last error: " + e;
+  $("gpu-note").textContent = "On keeps a GPU painting (it replaces the pod by itself if RunPod has no GPU on its host). Off stops it; the site shows replays. " + (st.note || "");
   $("gpu-id").textContent = g.id || "—"; $("gpu-console").href = g.console_url || "#";
 }
 async function overview() {
@@ -90,19 +92,17 @@ async function overview() {
 document.addEventListener("click", async (e) => {
   const t = e.target.closest("button"); if (!t) return;
   try {
-    if (t.id === "gpu-start" || t.id === "gpu-stop") {
-      const on = t.id === "gpu-start";
-      if (!confirm(on ? "Start the GPU pod now? Billing ~$" + ((OV && OV.gpu && OV.gpu.rate_per_hr) || 0.9) + "/h until stopped." : "Stop the GPU pod? (It is stopped, never terminated.)")) return;
-      t.disabled = true; $("gpu-note").textContent = on ? "Starting…" : "Stopping…";
-      const r = await call(on ? "gpu_start" : "gpu_stop");
-      if (!r.ok) { renderGpu(OV.gpu, r.error === "start_failed" ? r.detail : r.error); t.disabled = false; return; }
+    if (t.id === "gpu-switch") {
+      const on = t.getAttribute("aria-checked") !== "true";
+      if (!confirm(on ? "Turn the GPU on? Billing ~$" + ((OV && OV.gpu && OV.gpu.rate_per_hr) || 0.89) + "/h until you turn it off." : "Turn the GPU off? The site will show replays (the pod is stopped, never deleted).")) return;
+      t.disabled = true; $("gpu-phase").textContent = on ? "Starting…" : "Stopping…";
+      const r = await call(on ? "gpu_on" : "gpu_off"); t.disabled = false;
+      if (!r.ok) { renderGpu(OV.gpu, r.error); return; }
       renderGpu(r.gpu); setTimeout(overview, 8000);
     } else if (t.id === "gpu-setid") {
       const id = $("gpu-newid").value.trim(); if (!id || !confirm("Point the app at pod " + id + "?")) return;
       const r = await call("gpu_pod_id", { pod_id: id }); $("gpu-newid").value = ""; renderGpu(r.gpu);
-    } else if (t.dataset.d) {
-      if (!confirm(`Set the desired state to "${t.dataset.d}"? The 5-minute controller follows it` + (t.dataset.d === "off" ? " (stops the pod)." : " (may start the pod; billing ~$0.90/h)."))) return;
-      await call("gpu_set", { desired: t.dataset.d }); overview();
+
     } else if (t.dataset.idea) { await call("idea", { id: +t.dataset.idea, op: t.dataset.op }); overview(); }
     else if (t.dataset.sanc) { if (t.dataset.kind === "ban" && !confirm("Ban this user?")) return; await call("sanction", { user_id: t.dataset.sanc, kind: t.dataset.kind, minutes: +(t.dataset.min || 0) }); overview(); }
     else if (t.dataset.unsanc) { await call("unsanction", { id: +t.dataset.unsanc }); overview(); }
@@ -384,3 +384,5 @@ async function opsView() {
 document.addEventListener("click", (e) => { const b = e.target.closest && e.target.closest("#ops-seg button"); if (!b) return;
   OPS_W = { h: +b.dataset.h, b: b.dataset.b }; document.querySelectorAll("#ops-seg button").forEach((x) => x.classList.toggle("on", x === b)); opsView().catch(() => {}); });
 setInterval(() => { if (!document.hidden && token && $("view-reliability").classList.contains("on")) opsView().catch(() => {}); }, 60000);
+// keep the GPU switch's status fresh (off / starting / live) without reloading the whole overview
+setInterval(() => { if (!document.hidden && OV && OV.gpu) call("gpu_status").then((w) => { if (w && w.state) { OV.gpu.switch = w; renderGpu(OV.gpu); } }).catch(() => {}); }, 15000);
