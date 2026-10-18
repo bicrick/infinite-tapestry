@@ -192,7 +192,8 @@ module.exports = async (req, res) => {
     if (kind === "ogstrip") { // Time Machine v3: OG-era (SD 1.5) strip, private storage -> CDN, immutable
       const i = +q.get("i"); if (!(i >= 0 && i < 100000 && Number.isInteger(i))) return res.status(400).end();
       const name = `live/strips/${String(i).padStart(8, "0")}.jpg`;
-      const b = (await r2Get(name)) || (await sbGet(`tapestry/${name}`));   // R2 copy first, old private object second
+      // R2 "live/strips/" is a different (SDXL) history with the same key names, so the OG copy lives under sb-tapestry/
+      const b = (await r2Get(`sb-tapestry/${name}`)) || (await sbGet(`tapestry/${name}`));
       if (!b) { res.setHeader("cache-control", "public, s-maxage=300"); return res.status(404).end(); }
       res.setHeader("content-type", "image/jpeg"); res.setHeader("access-control-allow-origin", "*");
       res.setHeader("cache-control", "public, max-age=86400, s-maxage=31536000, immutable");

@@ -95,4 +95,4 @@ def test_readers_try_r2_before_supabase():
     about = (WEB / "api/about.js").read_text()
     tile = about[about.index("async function tile("):]
     assert tile.index("r2Get(") < tile.index("storage/v1/object/tapestry")
-    assert "(await r2Get(name)) || (await sbGet(" in about
+    assert "(await r2Get(`sb-tapestry/${name}`)) || (await sbGet(" in about
