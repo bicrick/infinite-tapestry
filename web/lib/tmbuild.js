@@ -1,12 +1,15 @@
 // Time Machine index writer (runs as a Vercel cron, /api/tm?job=index). Resumable + idempotent: state.json
 // records the last idx folded per era; re-running folds nothing twice (fold() skips idx <= hour.b).
-// Layout and fold logic: lib/tmindex.js. Storage: Supabase Storage bucket "tapestry", tm/idx/*.
+// Layout and fold logic: lib/tmindex.js. Storage: Supabase Storage bucket "tapestry", tm/idx/* (JSON only).
 const { ERAS, V, fold, compact, hourKey, landmarks } = require("./tmindex");
 const SB = () => process.env.SUPABASE_URL.replace(/\/$/, "");
 const H = () => ({ apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, authorization: "Bearer " + process.env.SUPABASE_SERVICE_ROLE_KEY });
 
 async function getJSON(key) { const r = await fetch(`${SB()}/storage/v1/object/tapestry/${key}`, { headers: H() }); return r.ok ? r.json() : null; }
+// Binary tiles go to R2 only (Supabase Storage is relational/JSON-only now); the small JSON index stays here.
+const { r2Put } = require("./r2");
 async function putObj(key, body, type) {
+  if (!/json/.test(type)) return r2Put(key, body, type, { cacheControl: "public, max-age=60" });
   const r = await fetch(`${SB()}/storage/v1/object/tapestry/${key}`, { method: "POST", headers: { ...H(), "content-type": type, "x-upsert": "true", "cache-control": "60" }, body });
   if (!r.ok) throw new Error(`put ${key}: ${r.status} ${(await r.text()).slice(0, 200)}`);
   return body.length;

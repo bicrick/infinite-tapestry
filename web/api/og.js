@@ -1,5 +1,6 @@
 const OWNER = (h) => String(h || "").toLowerCase() === "bicrick";   // never credited in previews
 const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
+const { r2Get } = require("../lib/r2");
 
 // Raw crops (no `card`): a crop of the tapestry where an idea landed (profile thumbnails etc).
 // Designed cards (`card=`): 1200x630 link previews over real tapestry crops (see lib/card.js):
@@ -13,6 +14,7 @@ const sbHeaders = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorizati
 
 async function getCrop(a, b, w, h, ms = 9000) {
   const key = `crops/${a}-${b}-${w}x${h}.jpg`;
+  for (const pre of storagePrefixes()) { const b = await r2Get(`${pre}/${key}`); if (b) return b; }   // R2 first
   for (const pre of storagePrefixes()) {
     const r = await fetch(`${env("SUPABASE_URL").replace(/\/$/, "")}/storage/v1/object/tapestry/${pre}/${key}`, { headers: sbHeaders() }).catch(() => null);
     if (r && r.ok) return Buffer.from(await r.arrayBuffer());

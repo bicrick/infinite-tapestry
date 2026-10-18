@@ -2,7 +2,7 @@
 // global line (era g0 + idx). L1 = 16 units/tile at 1024x256; L2..L7 = x4 units per tile, 64 px tall.
 // L1 is composed exactly like the live viewer: each strip image starts `overlap` before its slot and later strips
 // paint over earlier ones (SDXL: the pod's own level-1 tiles on R2 already are that composite, so they are
-// re-cut; OG era and the live tip are composed from the strips). Stored in Supabase Storage tm/lod2/, served by
+// re-cut; OG era and the live tip are composed from the strips). Stored on R2 tm/lod2/ (older tiles: Supabase, read-only), served by
 // /api/tm?tile=L/T through the CDN. Resumable (cursor in the manifest) and idempotent (rebuilding a tile
 // rewrites the same bytes). Work is time-boxed per invocation.
 const sharp = require("sharp");
@@ -23,6 +23,8 @@ async function bytes(url, headers) {
   return null;
 }
 const sbObj = (k) => bytes(`${SB()}/storage/v1/object/tapestry/${k}`, H());
+// Tiles live on R2 (tm/lod2/...); tiles built before the R2 move are still read from Supabase until copied.
+const tileObj = async (k) => (await bytes(`${R2()}/${k}`)) || (await sbObj(k));
 
 function ctx(state) {
   const og = state.eras.find((e) => e.id === "og"), sd = state.eras.find((e) => e.id === "sdxl");
@@ -69,7 +71,7 @@ async function buildUp(C, l, t) {
   const nUnits = Math.min(UPT[l], C.N - t * UPT[l]), w = Math.max(1, Math.round(nUnits * TW / UPT[l])), layers = [];
   let x = 0;
   for (let c = 4 * t; c < Math.min(4 * t + 4, Math.ceil(C.N / UPT[l - 1])); c++) {
-    const ch = C.children.get(key(l - 1, c)) || (await sbObj(key(l - 1, c)));
+    const ch = C.children.get(key(l - 1, c)) || (await tileObj(key(l - 1, c)));
     const cu = Math.min(UPT[l - 1], C.N - c * UPT[l - 1]), cw = Math.max(1, Math.round(cu * TW / UPT[l]));
     if (ch) layers.push({ input: await sharp(ch).resize(cw, 64, { kernel: "cubic", fit: "fill" }).toBuffer(), left: x, top: 0 });
     x += cw;
@@ -118,4 +120,4 @@ async function runTiles({ budgetMs = 45000, rebuild = false } = {}) {
   return { built, units: man.units, full: man.full, ms: Date.now() - t0 };
 }
 
-module.exports = { runTiles, key, _internals: { ctx, buildL1, buildUp } };
+module.exports = { runTiles, key, tileObj, _internals: { ctx, buildL1, buildUp } };

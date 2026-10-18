@@ -1,5 +1,6 @@
 const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
 const tmi = require("../lib/tmindex");
+const { r2Get, sbGet } = require("../lib/r2");
 
 // Public, read-only, aggregated data for /about and /time-machine (no PII: handles only where the
 // person chose to be credited — idea authors and fuel buyers, never ids/emails/ip).
@@ -155,6 +156,14 @@ async function history(tz) {
 async function tile(res, l, c) {
   if (![1, 2, 3].includes(l) || !(c >= 0)) return res.status(400).end();
   const key = `lod/${l}/${String(c).padStart(6, "0")}.jpg`;
+  for (const pre of storagePrefixes()) {   // R2 first (the pod writes LOD tiles only there)
+    const b = await r2Get(`${pre}/${key}`);
+    if (b) {
+      res.setHeader("content-type", "image/jpeg");
+      res.setHeader("cache-control", "public, max-age=86400, s-maxage=31536000, immutable");
+      return res.status(200).send(b);
+    }
+  }
   for (const pre of storagePrefixes()) {
     const r = await fetch(`${SB()}/storage/v1/object/tapestry/${pre}/${key}`, { headers: svc() }).catch(() => null);
     if (r && r.ok) {
@@ -182,11 +191,12 @@ module.exports = async (req, res) => {
     if (kind === "tile") return await tile(res, +q.get("l"), +q.get("c"));
     if (kind === "ogstrip") { // Time Machine v3: OG-era (SD 1.5) strip, private storage -> CDN, immutable
       const i = +q.get("i"); if (!(i >= 0 && i < 100000 && Number.isInteger(i))) return res.status(400).end();
-      const r = await fetch(`${SB()}/storage/v1/object/tapestry/live/strips/${String(i).padStart(8, "0")}.jpg`, { headers: svc() }).catch(() => null);
-      if (!r || !r.ok) { res.setHeader("cache-control", "public, s-maxage=300"); return res.status(404).end(); }
+      const name = `live/strips/${String(i).padStart(8, "0")}.jpg`;
+      const b = (await r2Get(name)) || (await sbGet(`tapestry/${name}`));   // R2 copy first, old private object second
+      if (!b) { res.setHeader("cache-control", "public, s-maxage=300"); return res.status(404).end(); }
       res.setHeader("content-type", "image/jpeg"); res.setHeader("access-control-allow-origin", "*");
       res.setHeader("cache-control", "public, max-age=86400, s-maxage=31536000, immutable");
-      return res.status(200).send(Buffer.from(await r.arrayBuffer()));
+      return res.status(200).send(b);
     }
     if (kind === "transparency") {
       res.setHeader("cache-control", "public, s-maxage=60, stale-while-revalidate=300");
