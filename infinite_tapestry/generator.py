@@ -196,8 +196,11 @@ class StripGenerator:
             self._scene_key, self._scene_strips = sk, 0
         else:
             self._scene_strips = getattr(self, "_scene_strips", 0) + 1
-        user_takeover = (scene_meta or {}).get("origin") == "user" and \
-            self._scene_strips < int(getattr(cfg, "takeover_strips", 2))
+        # Any scene change starts near-fresh (user ideas for 2 strips, Auto for 1), so compositions
+        # (rows of people, banners) can't carry over from scene to scene.
+        is_user = (scene_meta or {}).get("origin") == "user"
+        user_takeover = self._strip_index > 0 and \
+            self._scene_strips < (int(getattr(cfg, "takeover_strips", 2)) if is_user else 1)
         self.last_takeover = bool(user_takeover)
         # Scene change: repaint most of the visible context (keep only a narrow seam
         # band) so the new idea isn't trapped inside the old composition.
@@ -228,7 +231,7 @@ class StripGenerator:
         if hasattr(self.inpainter, "guidance"):
             user_scene = (scene_meta or {}).get("origin") == "user"
             boost = getattr(cfg, "user_cfg_boost", 1.5) if user_scene else 0.0
-            if user_takeover and cfg.guidance_scale > 1.5:   # CFG models only (klein is distilled, guidance 1.0)
+            if user_takeover and is_user and cfg.guidance_scale > 1.5:   # CFG models only (klein is distilled, guidance 1.0)
                 boost = max(boost, getattr(cfg, "takeover_cfg_boost", 3.0))
             self.inpainter.guidance = cfg.guidance_scale + boost
         from .guard import is_disallowed
@@ -274,6 +277,14 @@ class StripGenerator:
         # out of the context (most often mid-transition). Score each attempt by
         # its worst column discontinuity in the repainted region and retry with
         # a new seed if it looks like a cut; keep the best attempt.
+        neg = self.director.negative_for(blend_t)
+        if user_takeover:
+            # Composition breakers on a scene change, unless the new prompt asks for them.
+            low = (prompt_a + " " + (prompt_b or "")).lower()
+            brk = [w for w in ("crowd", "rows of people", "banner", "signage", "lettering")
+                   if not any(k in low for k in (w, w.split()[-1].rstrip("s"), "people" if w == "crowd" else w))]
+            if brk:
+                neg = neg + ", " + ", ".join(brk)
         attempts = 1 if cfg.mock else max(1, cfg.seam_retries + 1)
         best, best_score = None, None
         for k in range(attempts):
@@ -281,7 +292,7 @@ class StripGenerator:
                 image=window,
                 mask=mask,
                 prompt=prompt_a,
-                negative_prompt=self.director.negative_for(blend_t),
+                negative_prompt=neg,
                 seed=seed + 7919 * k,
                 prompt_b=prompt_b,
                 t=blend_t,
@@ -308,7 +319,7 @@ class StripGenerator:
                     break
                 logger.info("Strip %d repeats its context (dup %.2f); regenerating", self._strip_index, d)
                 generated = self.inpainter.generate(
-                    image=window, mask=mask, prompt=prompt_a, negative_prompt=self.director.negative_for(blend_t),
+                    image=window, mask=mask, prompt=prompt_a, negative_prompt=neg,
                     seed=seed + 31337 * (k + 1), prompt_b=prompt_b, t=blend_t)
         if generated.size != window.size:
             generated = generated.resize(window.size, Image.Resampling.LANCZOS)

@@ -59,11 +59,11 @@ _STYLE_NOTE = (
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide what comes next, forever.
 Be inventive and surprising: fun, strange, beautiful or funny ideas, always different from the recent scenes.
 Each prompt is SHORT and SIMPLE: about 5-20 words of plain language saying what the scene is. No piles of descriptors, no quality words, no camera, lens or film terms (unless that is the idea itself).
-Style: there is NO default style. Invent the look yourself every time and vary it freely (any medium, era, culture or vibe: crayon, mosaic, claymation, woodcut, neon sign, stained glass, ukiyo-e, a photo, an 80s airbrush poster...), and never repeat the look of the recent scenes. Write the look INTO the prompt in a few words at the start (any look you invent; do not reuse the examples above or a look from the recent scenes), because only the prompt is painted; style = that look as a short label. Do not default to soft, luminous, serene oil or watercolor paintings.
+Style: EVERY prompt MUST BEGIN with one explicit, concrete style or medium phrase, e.g. "woodcut print of", "claymation diorama of", "ukiyo-e print of", "pixel art of", "1970s airbrush poster of". There is NO default style. Invent the look yourself every time and vary it freely (any medium, era, culture or vibe: crayon, mosaic, claymation, woodcut, neon sign, stained glass, ukiyo-e, a photo, an 80s airbrush poster...), and never repeat the look of the recent scenes. Write the look INTO the prompt in a few words at the start (any look you invent; do not reuse the examples above or a look from the recent scenes), because only the prompt is painted; style = that look as a short label. Do not default to soft, luminous, serene oil or watercolor paintings.
 Functional needs only: one continuous scene that can extend sideways (not one centered object), no text, frames or borders. {_COMPOSITION_NOTE}
 Never: nudity or sexual content, children/minors, hateful slurs or symbols, recognizable real people.
-transition = strips to blend in (2-3), hold = strips to stay (2-4).
-Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":2,"hold":3,"style":"the look in 2-4 words"}}],"note":"one short sentence"}}"""
+transition = strips to blend in (1-2), hold = 3.
+Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":1,"hold":3,"style":"the look in 2-4 words"}}],"note":"one short sentence"}}"""
 _IMMERSIVE_NOTE = (
     "\nSubject and framing are OPEN: any subject at any scale and any framing is welcome: vast places, interiors, "
     "close-ups, macro details, single objects, materials and textures, patterns, abstract art. Take the idea LITERALLY: "
@@ -142,12 +142,14 @@ class PromptInterpreter:
         self.tokens_used += int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
-    def autoplan(self, recent: list[dict], vibe: str = "", count: int = 2, brief: str = "") -> dict[str, Any]:
+    def autoplan(self, recent: list[dict], vibe: str = "", count: int = 2, brief: str = "",
+                 recent_looks: list[str] | None = None) -> dict[str, Any]:
         """Next autopilot scenes continuing from `recent` (title/prompt dicts).
         Raises on failure so the caller can back off."""
         lines = [f"{i + 1}. {r.get('title', '')}: {r.get('prompt', '')[:200]}" for i, r in enumerate(recent[-8:])]
         user = "Recent scenes, oldest first:\n" + "\n".join(lines)
-        looks = [str(r.get("style") or "").strip() for r in recent[-6:] if str(r.get("style") or "").strip() not in ("", "none")]
+        looks = recent_looks if recent_looks is not None else \
+            [str(r.get("style") or "").strip() for r in recent[-8:] if str(r.get("style") or "").strip() not in ("", "none")]
         if looks:
             user += "\nLooks already used recently (use a clearly DIFFERENT medium for every new scene, and different from each other): " + ", ".join(dict.fromkeys(looks))
         if vibe:
@@ -163,8 +165,9 @@ class PromptInterpreter:
                     sc["prompt"] = short_prompt(sc["prompt"])
                     st = (sc.get("style") or "").strip()
                     # Only the prompt is painted: if Auto's chosen look isn't in it, lead with that label.
-                    if st and st != "none" and not set(re.findall(r"[a-z]{5,}", st)) & set(re.findall(r"[a-z]{5,}", sc["prompt"].lower())):
-                        sc["prompt"] = f"{st}, {sc['prompt']}"
+                    head = " ".join(sc["prompt"].lower().split()[:6])
+                    if st and st != "none" and not set(re.findall(r"[a-z]{5,}", st)) & set(re.findall(r"[a-z]{5,}", head)):
+                        sc["prompt"] = f"{st} of {sc['prompt'][0].lower()}{sc['prompt'][1:]}"   # the look always leads
                     sc["beats"] = []
                 plan["source"], plan["model"] = "haiku", model
                 return plan

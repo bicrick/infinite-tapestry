@@ -285,7 +285,9 @@ class Autopilot:
                 mood = self.moods.next(2)
                 self.last_mode = "director"
                 text = director_brief(d.recent(20), self.journey, self.steer, mood, self.moods.brief(mood))
-            plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text)
+            looks = [str(r.get("style") or "") for r in d.recent(40) if r.get("origin") == "auto"
+                     and str(r.get("style") or "") not in ("", "none")][-8:]   # last ~8 Auto looks: never reuse
+            plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text, looks)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
             from .guard import is_disallowed
@@ -314,8 +316,8 @@ class Autopilot:
             logger.info("autoplan mood=%s move=%s titles=%s", mood or self.last_mode, dec.get("move"), [s.get("title") for s in plan["scenes"]])
             for s in plan["scenes"]:
                 self.memory.add(s.get("title", ""))
-            d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
-                              s.get("hold"), source="", origin="auto", style=s.get("style"), beats=s.get("beats"),
+            d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), min(2, int(s.get("transition") or 1)),
+                              3, source="", origin="auto", style=s.get("style"), beats=s.get("beats"),
                               lora=explicit_lora(s["prompt"])) for s in plan["scenes"]])   # LoRA only if the prompt names it
             self._failures = 0
             self.last_error = ""
