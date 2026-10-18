@@ -183,9 +183,11 @@ def config_from_args(args: Any) -> Config:
 
 
 # 1024-class geometry for SDXL: same proportions as SD1.5 (window 1:1, strip 1/4, overlap 3/4 strip).
+# Sampler (2026-10-18 A/B on the 4090, DPM++ 2M Karras): 18 steps/CFG 6 = 2.15 s/strip (97 px/s); 26/6.5 = 2.96 s (71 px/s);
+# 30/6.5 = 3.22 s (65 px/s). RealVisXL V5 asks for 50+ steps on 2M Karras, so 26 is the real-time compromise.
 SDXL_PRESET: dict[str, Any] = {
     "height": 1024, "window_width": 1024, "strip_width": 256, "overlap": 192, "repaint_band": 128,
-    "steps": 18, "guidance_scale": 6.0, "seam_retries": 1, "fresh_anchor": True, "scroll_speed": 60.0, "scroll_speed_min": 16.0,
+    "steps": 26, "guidance_scale": 6.5, "seam_retries": 1, "fresh_anchor": True, "scroll_speed": 60.0, "scroll_speed_min": 16.0,
 }
 
 
