@@ -266,7 +266,12 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       fetch(e.url, { mode: "cors" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
         .then((b) => { e.blob = b; e.decoding = false; ensureDecoded(e); })
         .catch(() => {
-          // Fresh live strips are always .webp on R2 and may simply not have landed yet: retry R2 only (no .jpg / Supabase probes).
+          // R2 miss: the pod also writes the Supabase public bucket, so try that copy (fresh strips after two misses).
+          if (!e.triedFb && config.strip_base_fb && config.strip_base && e.url.startsWith(config.strip_base) && (!e.fresh || (e.tries || 0) >= 2)) {
+            e.triedFb = true; e.url = config.strip_base_fb + e.url.slice(config.strip_base.length);
+            e.decoding = false; e.retryAt = 0; ensureDecoded(e); return;
+          }
+          // Fresh live strips are always .webp and may simply not have landed yet: retry (no .jpg probes).
           if (e.fresh) {
             e.decoding = false; e.tries = (e.tries || 0) + 1;
             e.retryAt = performance.now() + Math.min(4000, 600 * e.tries);
@@ -351,11 +356,14 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     syncSpeedUi();
     // Server pos is as of m.ts; project to now.
     const projected = m.pos + m.speed * Math.max(0, m.now - m.ts);
-    if (livePos === null || Math.abs(projected - livePos) > SW() * 6) livePos = projected;
+    // Only a first fix (or a gap of more than SNAP_STRIPS, e.g. a long sleep) jumps; anything smaller is eased in by
+    // frame() - ahead by catching up quickly, behind by slowing down (never by moving backward).
+    if (livePos === null || Math.abs(projected - livePos) > SW() * SNAP_STRIPS) { livePos = projected; corr = 0; }
     else corr = projected - livePos;
     lastClockAt = localNow;
   }
   let corr = 0, lastClockAt = 0;
+  const SNAP_STRIPS = 40;
 
   const COARSE = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
   const PHONE = matchMedia("all");   // desktop mirrors the phone experience
@@ -601,14 +609,18 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     if (livePos !== null) {
       // Advance at the shared speed, bleed in the correction over ~1s,
       // and never run past what we've actually received.
-      const fix = corr * Math.min(1, dt * 1.5);
+      // Small errors bleed in over ~1 s; bigger ones (a few strips after a hiccup) catch up faster instead of snapping.
+      const rate = Math.abs(corr) > SW() * 2 ? 3 : 1.5;
+      const fix = corr * Math.min(1, dt * rate);
       corr -= fix;
       // Soft limit: the visible edge may only reach strips that are received AND decoded (+ the staging zone).
       // Ease the speed down as the buffer thins instead of stopping, so new pixels never surface on screen.
       let k = Math.max(0, Math.floor((livePos - STAGE() + drawExcess + BAND()) / SW())); while (k <= maxIndex) { const e = strips.get(k); if (!e || !e.bitmap) break; k++; }
       const limit = Math.min(panoramaWidth() - drawExcess, k * SW() - BAND() + STAGE() - drawExcess);   // visible edge stays BAND short of strip k's repaint zone
       const ease = Math.max(0, Math.min(1, (limit - livePos) / (0.75 * SW())));
-      if (livePos < limit) livePos = Math.min(limit, livePos + srvSpeed * dt * ease + Math.min(fix, Math.max(0, limit - livePos)));
+      // A negative fix only slows the advance (to 25% at most), it never moves the view backward.
+      const step = srvSpeed * dt * ease + Math.min(fix, Math.max(0, limit - livePos));
+      if (livePos < limit) livePos = Math.min(limit, livePos + Math.max(fix < 0 ? srvSpeed * dt * ease * 0.25 : 0, step));
       liveScroll = livePos - viewWorld();
     }
     stepPan(dt);
@@ -737,8 +749,11 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       const px = window.__noblur || !COARSE ? 0 : Math.round(Math.min(6, blur / (window.devicePixelRatio || 1) / 2) * 2) / 2;
       if (px !== draw.blurPx) { draw.blurPx = px; canvas.style.transition = px > 0.5 ? "none" : ""; canvas.style.filter = px > 0.5 ? `blur(${px}px)` : ""; }
     }
-    if (!fast && zoom > 0.9) requestMissing(firstIdx - 8, lastIdx + 3);
-    for (let i = lastIdx + 1; i <= Math.min(maxIndex, lastIdx + 3); i++) { const e = strips.get(i); if (e) ensureDecoded(e); }   // pre-decode the next strips so they never pop in
+    // Live: everything from the view up to the newest strip (the server keeps ~5 ahead) is fetched and decoded now, so the
+    // soft limit never waits on a strip that was already received. History/scrub: the next 3 as before.
+    const ahead = panMode === "live" ? Math.max(lastIdx + 3, Math.min(maxIndex, lastIdx + 12)) : lastIdx + 3;
+    if (!fast && zoom > 0.9) requestMissing(firstIdx - 8, ahead);
+    for (let i = lastIdx + 1; i <= Math.min(maxIndex, ahead); i++) { const e = strips.get(i); if (e) ensureDecoded(e); }   // pre-decode the next strips so they never pop in
     evictFar(firstIdx, lastIdx);
   }
 
@@ -1461,7 +1476,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
         // Same rule as rewriteSupabaseBases in web/lib/stripcdn.js. A baked public URL is not enough.
         const page = window.TAPESTRY_CONFIG || {}, cdn = page.cdnBase, re = /^https:\/\/[^/]+supabase\.co\/storage\/v1\/object\/public\/[^/]+\//;
         if (page.stripCdn === "r2" && cdn) for (const k of ["strip_base", "lod_base"]) if (re.test(config[k] || "")) config[k] = config[k].replace(re, String(cdn).replace(/\/$/, "") + "/");
-        delete config.strip_base_fb; delete config.lod_base_fb;
+        if (page.stripCdn === "r2" && cdn) { delete config.strip_base_fb; delete config.lod_base_fb; }   // rewritten bases have no matching fallback
       }
       interpreterOn = !!msg.interpreter;
       delete config.type;
@@ -1497,7 +1512,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     caption: () => centerScene() });
   function connect() {
     const url = wsUrl();
-    ws = new WebSocket(url + (url.includes("?") ? "&" : "?") + "v=2");
+    ws = new WebSocket(url + (url.includes("?") ? "&" : "?") + "v=2&bytes=1");   // bytes=1: live strip pixels ride the socket
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       if (dropAt && window.TapestryOps) TapestryOps.report("reconnect", performance.now() - dropAt, { pod: podDown ? "down" : "running" });
@@ -1506,7 +1521,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       reconnectDelay = 1000;
       send({ type: "upcoming_request" });
       requested.clear();
-      livePos = null;
+      lastMsgAt = performance.now();   // livePos is kept: the first clock eases toward the server instead of jumping
       if (clientPingTimer) clearInterval(clientPingTimer);
       clientPingTimer = setInterval(() => send({ type: "ping" }), 25000);
       send({ type: "status_request" });
@@ -1515,13 +1530,18 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       window.__tapestryWsOpen = true; window.dispatchEvent(new CustomEvent("tapestry:ws", { detail: { open: true } }));
     };
     ws.onmessage = (ev) => {
+      lastMsgAt = performance.now();
       if (typeof ev.data === "string") {
         try { handleJson(JSON.parse(ev.data)); } catch (e) { console.warn("bad json", e); }
       } else {
         onStripBinary(ev.data);
       }
     };
-    ws.onclose = (ev) => {
+    ws.onclose = (ev) => onWsClose(ev);
+    ws.onerror = () => { try { ws.close(); } catch (_) {} };
+  }
+  function onWsClose(ev) {
+    {
       if (connected && !document.hidden && window.TapestryOps) TapestryOps.report("disconnect", 0, { code: String((ev && ev.code) || 0), pod: podDown ? "down" : "running" });
       if (connected && !document.hidden) dropAt = performance.now();
       connected = false;
@@ -1530,9 +1550,17 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       const wait = reconnectDelay * (0.75 + Math.random() * 0.5);  // jitter
       setTimeout(connect, navigator.onLine === false ? 3000 : wait);
       reconnectDelay = Math.min(podDown ? 30000 : 4000, reconnectDelay * 1.6);
-    };
-    ws.onerror = () => { try { ws.close(); } catch (_) {} };
+    }
   }
+  // Dead-socket watchdog: the server sends a clock/status/ping at least every 5 s, so ~10 s of silence means the TCP
+  // path died without a close (mobile handoff, proxy idle-kill). Drop it and reconnect now instead of minutes later.
+  let lastMsgAt = performance.now();
+  setInterval(() => {
+    if (!connected || !ws || document.hidden || performance.now() - lastMsgAt < 10000) return;
+    const dead = ws; dead.onclose = null; dead.onmessage = null; dead.onerror = null;
+    try { dead.close(); } catch (_) {}
+    onWsClose({ code: 4000 });
+  }, 2000);
 
   window.addEventListener("online", () => { if (!connected) { reconnectDelay = 1000; try { ws && ws.close(); } catch (_) {} } });
 
@@ -1607,6 +1635,9 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   let podDown = false, liveChecked = false, podPollAt = performance.now();   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
   let replayAt = 0, wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;
   const apiReq = new Set();
+  // Pod liveness comes from the pod's own 30 s heartbeat; the newest mirrored strip row (last_at) lags whenever
+  // uploads back up, and used to flip healthy streams into "replay". last_at is only a fallback for old APIs.
+  const stale = (j) => j.heartbeat_at != null ? j.now - j.heartbeat_at > 90 : !!(j.last_at && j.now - j.last_at > 60);
   function apiMissing(a, b) {
     a = Math.max(0, a); b = Math.min(b, maxIndex);
     for (let c = Math.floor(a / 64) * 64; c <= b; c += 64) {
@@ -1631,7 +1662,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
         podWs = j.pod.ws;
         if (!connected && ws) { try { ws.onclose = null; ws.close(); } catch (_) {} connect(); }
       }
-      podDown = !!(j.pod && (j.pod.status !== "running" || j.pod.desired === "off")) || !!(j.last_at && j.now - j.last_at > 60);
+      podDown = !!(j.pod && (j.pod.status !== "running" || j.pod.desired === "off")) || stale(j);
       // Pod down at load: choose replay BEFORE the first strips land, so the camera starts at the replay position
       // and the load-in plays on the strips being replayed (no live-edge frame, then a backward jump).
       if (podDown && !connected && maxIndex < 0 && it.length >= 40 && panMode === "live" && !pendingSeek && !/[?&]at=/.test(location.search)) {
@@ -1645,7 +1676,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       }
       if (it.length) onStripRef(it[it.length - 1], false);   // newest first: the live view initialises at the real edge
       it.forEach((r) => onStripRef(r, false));
-      if (!connected && j.last_at && j.now - j.last_at > 60) lastFreshAt = performance.now() - 61000;
+      if (!connected && stale(j)) lastFreshAt = performance.now() - 61000;
     }).catch(() => {}).finally(() => { liveChecked = true; });
   }
   function fadeSwap(fn, done) {   // compositor-only fade around a jump (no pop-in, no seek blur)

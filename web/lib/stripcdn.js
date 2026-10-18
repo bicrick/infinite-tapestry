@@ -30,12 +30,14 @@ function useR2(env = process.env) {
 
 function stripBases(env = process.env) {
   const prefix = session(env);
-  if (useR2(env)) {
-    const cdn = String(val(env, "R2_PUBLIC_URL", R2_PUBLIC_DEFAULT)).replace(/\/$/, "");
-    return { strip_base: `${cdn}/${prefix}/strips/`, lod_base: `${cdn}/${prefix}/lod/` };
-  }
   const sb = String(val(env, "SUPABASE_URL", "")).replace(/\/$/, "");
   const root = `${sb}/storage/v1/object/public/strips/${prefix}`;
+  if (useR2(env)) {
+    const cdn = String(val(env, "R2_PUBLIC_URL", R2_PUBLIC_DEFAULT)).replace(/\/$/, "");
+    // The pod keeps writing the Supabase public bucket too, so it is a real fallback for an R2 miss.
+    const fb = sb ? { strip_base_fb: `${root}/strips/`, lod_base_fb: `${root}/lod/` } : {};
+    return { strip_base: `${cdn}/${prefix}/strips/`, lod_base: `${cdn}/${prefix}/lod/`, ...fb };
+  }
   return { strip_base: `${root}/strips/`, lod_base: `${root}/lod/` };
 }
 

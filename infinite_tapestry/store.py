@@ -40,6 +40,22 @@ def _strip_mime(ext: str) -> str:
 
 
 
+def _err(e: Exception) -> str:
+    """Short, secret-free description of an upload error (HTTP status + the start of the body, when there is one)."""
+    code = getattr(e, "code", None)
+    if code is not None:
+        body = ""
+        try:
+            body = e.read()[:160].decode("utf-8", "replace")   # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return f"{type(e).__name__} {code} {body}".strip()
+    resp = getattr(e, "response", None)
+    if isinstance(resp, dict) and resp.get("Error"):
+        return f"{type(e).__name__} {resp['Error'].get('Code', '')}".strip()
+    return type(e).__name__
+
+
 class R2Public:
     """Public strip/tile CDN on Cloudflare R2 (S3 API, zero egress fees)."""
 
@@ -55,16 +71,22 @@ class R2Public:
                                config=Config(retries={"max_attempts": 3}, connect_timeout=10, read_timeout=30))
         self._cors: tuple[float, bool] = (0.0, False)
 
+    off_reason = ""   # why R2 is not in use (surfaced in /health); never contains secret values
+
     @classmethod
     def from_env(cls) -> "R2Public | None":
         e = os.environ
         need = ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL")
-        if not all(e.get(k) for k in need) or e.get("TAPESTRY_R2", "1") == "0":
+        missing = [k for k in need if not e.get(k)]
+        if missing or e.get("TAPESTRY_R2", "1") == "0":
+            cls.off_reason = "TAPESTRY_R2=0" if e.get("TAPESTRY_R2", "1") == "0" else "missing " + ",".join(missing)
+            logger.warning("R2 WRITES OFF (%s): strips go to Supabase Storage only", cls.off_reason)
             return None
         try:
             return cls(e["R2_ENDPOINT"], e["R2_ACCESS_KEY_ID"], e["R2_SECRET_ACCESS_KEY"],
                        e.get("R2_BUCKET", "tapestry-strips"), e["R2_PUBLIC_URL"])
-        except Exception:
+        except Exception as ex:
+            cls.off_reason = f"init failed: {type(ex).__name__}"
             logger.exception("R2 init failed; staying on Supabase Storage")
             return None
 
@@ -105,11 +127,46 @@ class SupabaseMirror:
 
     def __init__(self, url: str, key: str, bucket: str = "tapestry", prefix: str = "live") -> None:
         self.url, self.key, self.bucket, self.prefix = url.rstrip("/"), key, bucket, prefix
-        self._q: "queue.Queue[tuple[str, bytes, str]]" = queue.Queue(maxsize=2000)
+        # Fast lane: strip/tile uploads + strip rows on UPLOAD_WORKERS threads, newest strips first (priority, seq).
+        # Slow lane: one ordered thread for canvas.png + the state row (state must never point past its canvas).
+        self._q: "queue.PriorityQueue[tuple]" = queue.PriorityQueue(maxsize=4000)
+        self._slow: "queue.Queue[tuple]" = queue.Queue(maxsize=200)
+        self._seq = 0
+        self._seq_lock = threading.Lock()
         self.uploaded = 0
         self.failed = 0
+        self.last_error = ""
         self.r2 = R2Public.from_env()
-        threading.Thread(target=self._run, name="supabase-mirror", daemon=True).start()
+        self.r2_write_ok: bool | None = None
+        self.r2_error = ""
+        self.r2_failed = 0
+        for n in range(self.UPLOAD_WORKERS):
+            threading.Thread(target=self._run, args=(self._q, True), name=f"mirror-{n}", daemon=True).start()
+        threading.Thread(target=self._run, args=(self._slow, False), name="mirror-slow", daemon=True).start()
+        if self.r2 is not None:
+            threading.Thread(target=self._r2_check, name="r2-check", daemon=True).start()
+
+    UPLOAD_WORKERS = int(os.environ.get("TAPESTRY_UPLOAD_WORKERS", "4"))
+    PRIO_STRIP, PRIO_ROW, PRIO_TILE = 0, 1, 2
+
+    def _r2_check(self) -> None:
+        """Startup write check: a broken key/bucket must be loud, not a silent fall back to Supabase."""
+        try:
+            self.r2.put(f"{self.prefix}/_health/write-check.txt", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()).encode(),
+                        "text/plain")
+            self.r2_write_ok, self.r2_error = True, ""
+            logger.info("R2 write check OK (bucket %s, prefix %s)", self.r2.bucket, self.prefix)
+        except Exception as e:
+            self.r2_write_ok, self.r2_error = False, _err(e)
+            logger.error("R2 WRITE CHECK FAILED (%s): strips will NOT reach the R2 CDN", self.r2_error)
+
+    def health(self) -> dict:
+        r2 = ({"configured": True, "write_ok": self.r2_write_ok, "error": self.r2_error, "failed": self.r2_failed,
+               "cors": bool(self.r2._cors[1])} if self.r2 is not None
+              else {"configured": False, "write_ok": False, "error": R2Public.off_reason})
+        return {"r2": r2, "uploaded": self.uploaded, "failed": self.failed, "queue": self._q.qsize(),
+                "slow_queue": self._slow.qsize(), "last_error": self.last_error,
+                "supabase_public": self._supabase_public_too()}
 
     @classmethod
     def from_env(cls) -> "SupabaseMirror | None":
@@ -154,9 +211,22 @@ class SupabaseMirror:
         with urllib.request.urlopen(req, timeout=30) as r:
             return r.read()
 
-    def put(self, path: str, data: bytes, ctype: str) -> None:
+    def _next(self) -> int:
+        with self._seq_lock:
+            self._seq += 1
+            return self._seq
+
+    def put(self, path: str, data: bytes, ctype: str, after=None) -> None:
+        """Queue an upload. `after` (optional) runs once it has succeeded (e.g. the strip's DB row)."""
         try:
-            self._q.put_nowait((path, data, ctype))
+            if not path.startswith("public:"):
+                self._slow.put_nowait((path, data, ctype, after))
+                return
+            prio = self.PRIO_STRIP if path.startswith("public:strips/") else self.PRIO_TILE
+            if prio == self.PRIO_STRIP and self.r2 is not None and self._supabase_public_too():
+                # Two independent jobs, so a slow Supabase copy never delays the R2 (primary) one.
+                self._q.put_nowait((prio, self._next(), "supabase:" + path, data, ctype, None))
+            self._q.put_nowait((prio, self._next(), path, data, ctype, after))
         except queue.Full:
             self.failed += 1
 
@@ -172,21 +242,28 @@ class SupabaseMirror:
             t = r.read()
             return json.loads(t) if t else None
 
-    def db_async(self, fn) -> None:
-        """Run a DB write on the uploader thread (ordered with uploads)."""
+    def db_async(self, fn, slow: bool = True) -> None:
+        """Run a DB write on an uploader thread: the ordered slow lane (state) or the fast lane (strip rows)."""
         try:
-            self._q.put_nowait(("__call__", fn, ""))
+            if slow:
+                self._slow.put_nowait(("__call__", fn, "", None))
+            else:
+                self._q.put_nowait((self.PRIO_ROW, self._next(), "__call__", fn, "", None))
         except queue.Full:
             self.failed += 1
 
-    def save_strip_row(self, s: Strip) -> None:
+    def save_strip_row(self, s: Strip, now: bool = True) -> None:
         ext = _strip_ext(s.jpeg)
         row = {"session": self.prefix, "idx": s.index, "width": s.width, "height": s.height,
                "overlap": s.overlap, "prompt": s.prompt[:500], "path": f"{self.prefix}/strips/{s.index:08d}.{ext}",
                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(s.created_at or time.time())),
                "scene": s.scene}
-        self.db_async(lambda: self._rest("POST", "strips?on_conflict=session,idx", [row],
-                                         "resolution=merge-duplicates,return=minimal"))
+        call = lambda: self._rest("POST", "strips?on_conflict=session,idx", [row],  # noqa: E731
+                                  "resolution=merge-duplicates,return=minimal")
+        if now:
+            self.db_async(call, slow=False)
+        else:
+            call()   # already on an uploader thread (runs right after the image landed)
 
     def save_state_row(self, state: dict) -> None:
         row = {"id": self.prefix, "strip_index": int(state.get("strip_index", 0)), "data": state,
@@ -232,28 +309,43 @@ class SupabaseMirror:
         except Exception:
             return None
 
-    def _run(self) -> None:
+    def _run(self, q: "queue.Queue", prioritized: bool) -> None:
         while True:
-            path, data, ctype = self._q.get()
+            item = q.get()
+            path, data, ctype, after = item[2:] if prioritized else item
             for attempt in range(3):
                 try:
                     if path == "__call__":
                         data()
+                    elif path.startswith("supabase:"):
+                        self._req("POST", path[len("supabase:"):], data, ctype)
                     elif path.startswith("public:") and self.r2:
-                        self.r2.put(f"{self.prefix}/{path[len('public:'):]}", data, ctype)
-                        if self._supabase_public_too():
-                            try:
-                                self._req("POST", path, data, ctype)
-                            except Exception as e:
-                                logger.warning("Supabase public copy %s failed: %s", path, type(e).__name__)
+                        try:
+                            self.r2.put(f"{self.prefix}/{path[len('public:'):]}", data, ctype)
+                            if self.r2_write_ok is False:
+                                logger.info("R2 writes recovered")
+                            self.r2_write_ok, self.r2_error = True, ""
+                        except Exception as e:
+                            self.r2_failed += 1
+                            self.r2_error = _err(e)
+                            if attempt == 2:
+                                self.r2_write_ok = False
+                                logger.error("R2 UPLOAD %s FAILED: %s", path, self.r2_error)
+                            raise
                     else:
                         self._req("POST", path, data, ctype)
                     self.uploaded += 1
+                    if after is not None:
+                        try:
+                            after()
+                        except Exception as e:
+                            logger.warning("post-upload step for %s failed: %s", path, _err(e))
                     break
                 except Exception as e:
                     if attempt == 2:
                         self.failed += 1
-                        logger.warning("Storage upload %s failed: %s", path, type(e).__name__)
+                        self.last_error = f"{path}: {_err(e)}"
+                        logger.warning("Storage upload %s failed: %s", path, _err(e))
                     time.sleep(1 + attempt * 2)
 
 
@@ -286,8 +378,9 @@ class HistoryStore:
                 f.write(json.dumps(meta) + "\n")
         if self.mirror:
             # One durable copy, in the public CDN bucket (viewers fetch it directly).
-            self.mirror.put(f"public:strips/{s.index:08d}.{ext}", s.jpeg, _strip_mime(ext))
-            self.mirror.save_strip_row(s)
+            # The DB row (what /api/live hands out) is written right after the image landed, so refs never 404.
+            self.mirror.put(f"public:strips/{s.index:08d}.{ext}", s.jpeg, _strip_mime(ext),
+                            after=lambda m=self.mirror: m.save_strip_row(s, now=False))
         if getattr(self, "lod", None):
             self.lod.on_strip(s.index)
 
@@ -356,7 +449,9 @@ class HistoryStore:
             tmp = self.dir / "state.json.tmp"
             tmp.write_bytes(data)
             os.replace(tmp, self.dir / "state.json")
-            if canvas is not None:
+            # canvas.png (~8 MB PNG) is only a restore fallback: restarts rebuild the context from the published
+            # strips. Encoding it on every strip cost ~1 s of the persist thread, so do it only when mirroring.
+            if canvas is not None and (mirror_now or not (self.dir / "canvas.png").exists()):
                 buf = io.BytesIO()
                 canvas.save(buf, format="PNG")
                 (self.dir / "canvas.png.tmp").write_bytes(buf.getvalue())

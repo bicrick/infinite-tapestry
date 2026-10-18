@@ -41,7 +41,9 @@ def test_session_prefix_defaults_and_overrides():
 
 def test_explicit_r2_opt_in():
     got = bases({"TAPESTRY_STRIP_CDN": "r2", "R2_PUBLIC_URL": R2 + "/"})
-    assert got == {"strip_base": f"{R2}/live-sdxl/strips/", "lod_base": f"{R2}/live-sdxl/lod/"}
+    fb = f"{SB}/storage/v1/object/public/strips/live-sdxl"
+    assert got == {"strip_base": f"{R2}/live-sdxl/strips/", "lod_base": f"{R2}/live-sdxl/lod/",
+                   "strip_base_fb": f"{fb}/strips/", "lod_base_fb": f"{fb}/lod/"}   # Supabase copy as fallback
     # The known public host is only a fallback after an explicit opt-in, not the default.
     got = bases({"TAPESTRY_STRIP_CDN": "r2"})
     assert got["strip_base"] == f"{R2}/live-sdxl/strips/"
@@ -102,3 +104,19 @@ def test_build_omits_r2_cdn_unless_opted_in(tmp_path):
     opted = _build(tmp_path / "r2", {"TAPESTRY_STRIP_CDN": "r2", "R2_PUBLIC_URL": R2 + "/"})
     assert f'cdnBase: "{R2}"' in opted
     assert 'stripCdn: "r2"' in opted
+
+
+def test_live_reports_pod_heartbeat():
+    src = (ROOT / "web/api/live.js").read_text()
+    assert "ops_heartbeat" in src and "heartbeat_at" in src
+    client = (ROOT / "static/client.js").read_text()
+    assert "j.heartbeat_at" in client
+
+
+def test_client_stream_hardening():
+    src = (ROOT / "static/client.js").read_text()
+    assert "v=2&bytes=1" in src                     # live strip bytes on the socket
+    assert "SW() * 6) livePos = projected" not in src   # no 6-strip snap
+    assert "livePos = null;\n" not in src.split("ws.onopen")[1].split("ws.onmessage")[0]   # kept on reconnect
+    assert "lastMsgAt" in src and "10000" in src    # dead-socket watchdog
+    assert "strip_base_fb" in src.split("function ensureDecoded")[1].split("function evictFar")[0]

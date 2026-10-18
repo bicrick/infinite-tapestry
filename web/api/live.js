@@ -22,8 +22,9 @@ module.exports = async (req, res) => {
       return res.status(200).json({ items: rows.map(ref) });
     }
     const n = Math.min(400, Math.max(1, parseInt(q.n, 10) || 240));
-    const [rows, ps] = await Promise.all([rest("GET", `${base}&order=idx.desc&limit=${n}`),
-      rest("GET", "pod_state?id=eq.1&select=status,desired,pod_id").catch(() => [])]);
+    const [rows, ps, hb] = await Promise.all([rest("GET", `${base}&order=idx.desc&limit=${n}`),
+      rest("GET", "pod_state?id=eq.1&select=status,desired,pod_id").catch(() => []),
+      rest("GET", "ops_heartbeat?id=eq.pod&select=at").catch(() => [])]);
     rows.reverse();
     const last = rows[rows.length - 1];
     const ov = last ? last.overlap : 192, w = last ? last.width - ov : 256;
@@ -32,9 +33,13 @@ module.exports = async (req, res) => {
     res.status(200).json({
       config: { height: last ? last.height : 1024, strip_width: w, overlap: ov, scroll_speed: 60, scroll_speed_min: 16,
         buffer_target: 3, buffer_min: 2, strip_ext: "webp", strip_mime: "image/webp",
-        strip_base: bases.strip_base, lod_base: bases.lod_base },
+        strip_base: bases.strip_base, lod_base: bases.lod_base,
+        ...(bases.strip_base_fb ? { strip_base_fb: bases.strip_base_fb, lod_base_fb: bases.lod_base_fb } : {}) },
       max: last ? last.idx : -1,
       last_at: last ? Date.parse(last.created_at) / 1000 : null,
+      // The pod's own 30 s heartbeat (ops_heartbeat): viewers judge "pod down" from this, not from the newest
+      // mirrored strip row, which lags whenever uploads back up.
+      heartbeat_at: hb && hb[0] && hb[0].at ? Date.parse(hb[0].at) / 1000 : null,
       now: Date.now() / 1000,
       pod: ps[0] ? { status: ps[0].status, desired: ps[0].desired, ws: ps[0].pod_id ? `wss://${ps[0].pod_id}-8000.proxy.runpod.net/ws` : null } : null,
       items: rows.map(ref),

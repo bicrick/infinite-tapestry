@@ -34,7 +34,7 @@ HEADER_FMT = "!4sIHHHH"  # magic, index, width, height, overlap, prompt_len
 HEADER_SIZE = struct.calcsize(HEADER_FMT)
 
 # App-level keep-alive well under RunPod proxy idle timeout (~100s).
-PING_INTERVAL_S = 20.0
+PING_INTERVAL_S = 5.0   # idle keepalive; clients treat ~10 s of silence as a dead socket
 
 
 RECENT_ON_CONNECT = 24
@@ -96,11 +96,12 @@ def _on_loop(loop: asyncio.AbstractEventLoop) -> bool:
 class Viewer:
     """One connected viewer: bounded queue of outbound messages."""
 
-    __slots__ = ("q", "v2", "task", "kicked")
+    __slots__ = ("q", "v2", "task", "kicked", "live_bytes")
 
-    def __init__(self, v2: bool) -> None:
+    def __init__(self, v2: bool, live_bytes: bool = False) -> None:
         self.q: asyncio.Queue[Any] = asyncio.Queue(maxsize=CLIENT_QUEUE_MAX)
         self.v2 = v2
+        self.live_bytes = live_bytes
         self.task: asyncio.Task | None = None
         self.kicked = False
 
@@ -178,6 +179,7 @@ MAX_CONNECTIONS = int(os.environ.get("TAPESTRY_MAX_CONNECTIONS", "5000"))
 # behind is disconnected (it reconnects and resyncs) so memory stays bounded.
 CLIENT_QUEUE_MAX = int(os.environ.get("TAPESTRY_CLIENT_QUEUE", "256"))
 SEND_TIMEOUT_S = 15.0
+LIVE_BYTES = os.environ.get("TAPESTRY_LIVE_BYTES", "1") != "0"   # v2 viewers that ask (?bytes=1) get live strip pixels on the socket
 DIRECTOR_MIN_INTERVAL_S = 0.5
 CONTROL_TYPES = {"intent", "autopilot", "speed", "skip", "remove", "move", "edit", "play", "clear",
                  "configure", "set_prompt", "queue"}
@@ -430,9 +432,15 @@ def create_app(
         ref = json.dumps({"type": "strip", **strip_ref(strip)})
         status = json.dumps({"type": "status", "buffer": buffer.peek_depth(), "last_index": int(strip.index),
                              "gpu": gpu_stats()})
+        blob = None
         for c in list(clients):
             if c.v2:
                 c.offer(ref)
+                if c.live_bytes:
+                    # Live strip pixels ride the socket right behind the ref, so the live edge never waits on
+                    # the CDN upload (the old 3.5 s hold + 404 retries were the main source of stalls).
+                    blob = blob or encode_strip_message(strip)
+                    c.offer(blob)
                 c.offer(status)
 
     async def clock_loop() -> None:
@@ -535,7 +543,18 @@ def create_app(
             "auto": ({"busy": autopilot.busy, "error": autopilot.last_error, "hour_tokens": autopilot._hour_tokens()}
                      if autopilot else None),
             "overdue": generator.director.overdue() if generator is not None and hasattr(generator.director, "overdue") else 0,
+            "storage": _storage_health(),
+            "persist_backlog": getattr(generator, "_persist_backlog", 0) if generator is not None else 0,
         }
+
+    def _storage_health() -> dict | None:
+        mirror = getattr(getattr(generator, "store", None), "mirror", None)
+        if mirror is None or not hasattr(mirror, "health"):
+            return None
+        try:
+            return mirror.health()
+        except Exception as e:   # health must never 500
+            return {"error": type(e).__name__}
 
     @app.get("/lod/{level}/{chunk}.jpg")
     async def lod_tile(level: int, chunk: int) -> Response:
@@ -687,7 +706,7 @@ def create_app(
         # v2 viewers get small JSON strip refs and load images from the CDN;
         # legacy (cached old JS) viewers still get binary strips.
         v2 = ws.query_params.get("v") == "2" and public_base() is not None
-        viewer = Viewer(v2)
+        viewer = Viewer(v2, v2 and ws.query_params.get("bytes") == "1" and LIVE_BYTES)
         queue = viewer.q
         clients.add(viewer)
         intent_tasks: set[asyncio.Task] = set()
@@ -757,6 +776,9 @@ def create_app(
                         continue
                     if isinstance(item, str):
                         await send_text(item)
+                        continue
+                    if isinstance(item, (bytes, bytearray)):
+                        await asyncio.wait_for(ws.send_bytes(item), SEND_TIMEOUT_S)
                         continue
                     if isinstance(item, dict):
                         await ws.send_json(item)
@@ -896,8 +918,11 @@ def create_app(
                                         ', "gpu": ' + json.dumps(gpu_stats()) + ', "director": ' + director_json() + "}")
                         await ws.send_json(clock_msg())
                     elif t == "history":
-                        start = max(0, int(data.get("start", 0)))
-                        end = min(int(data.get("end", start)), start + 64)
+                        try:
+                            start = max(0, int(data.get("start", 0)))
+                            end = min(int(data.get("end", start)), start + 64)
+                        except (TypeError, ValueError, OverflowError):
+                            continue   # malformed request: ignore it, keep the viewer connected
                         if v2 and not data.get("bytes"):
                             await send_text(json.dumps({"type": "strips", "items": refs_between(start, end)}))
                             continue

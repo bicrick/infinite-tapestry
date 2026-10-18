@@ -71,3 +71,57 @@ def test_slow_viewer_is_dropped_with_bounded_memory():
         assert v.kicked and v.task.cancelled() and v.q.qsize() == v.q.maxsize
 
     asyncio.run(run())
+
+
+def _app():
+    cfg = Config(mock=True, height=32, window_width=64, strip_width=16, overlap=4, buffer_target=3, buffer_min=1)
+    buf = StripBuffer(target=3, minimum=1)
+    gen = StripGenerator(cfg, MockInpainter(cfg), buf)
+    gen.store = _Store()
+    return cfg, buf, gen
+
+
+def test_v2_bytes_viewers_get_live_pixels_right_after_the_ref():
+    from infinite_tapestry.server import MAGIC
+
+    cfg, buf, gen = _app()
+    gen.start()
+    try:
+        with TestClient(create_app(cfg, buf, gen)) as c, c.websocket_connect("/ws?v=2&bytes=1") as ws:
+            last_ref = None
+            for _ in range(400):
+                m = ws.receive()
+                if m.get("text"):
+                    d = json.loads(m["text"])
+                    if d["type"] == "strip":
+                        last_ref = d["i"]
+                    continue
+                b = m["bytes"]
+                assert b[:4] == MAGIC.encode() if isinstance(MAGIC, str) else MAGIC
+                idx = int.from_bytes(b[4:8], "big")
+                assert idx == last_ref, "bytes follow their own ref"
+                break
+            else:
+                raise AssertionError("no live strip bytes")
+    finally:
+        gen.stop()
+
+
+def test_malformed_history_request_keeps_the_viewer_connected():
+    cfg, buf, gen = _app()
+    gen.start()
+    try:
+        with TestClient(create_app(cfg, buf, gen)) as c, c.websocket_connect("/ws?v=2") as ws:
+            ws.send_json({"type": "history", "start": "abc", "end": None})
+            ws.send_json({"type": "history", "start": 0, "end": 0})
+            seen = 0
+            for _ in range(3000):
+                d = json.loads(ws.receive()["text"])
+                if d["type"] == "strips":
+                    seen += 1   # 1st: the connect snapshot; 2nd: the answer to the valid request
+                    if seen == 2:
+                        break
+            else:
+                raise AssertionError("socket stopped answering after a malformed request")
+    finally:
+        gen.stop()
