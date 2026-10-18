@@ -82,15 +82,17 @@ class DiffusersInpainter(Inpainter):
         else:
             from diffusers import DPMSolverMultistepScheduler
 
+            # (10ed92a pasted SDXL model-id logging here: it referenced undefined names and swapped the scheduler
+            # even with LCM-LoRA, so every SD1.5 load - including the SDXL->SD1.5 fallback - raised NameError.)
             logger.info("No LCM-LoRA: using DPM++ 2M Karras")
-            self.model_id = config.sdxl_model if getattr(self, "_fell_back", None) is None else fb
-        logger.info("SDXL inpaint model loaded: %s (unet in_channels=%s)", self.model_id, pipe.unet.config.in_channels)
-        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+            pipe.scheduler = DPMSolverMultistepScheduler.from_config(
                 pipe.scheduler.config,
                 use_karras_sigmas=True,
                 algorithm_type="dpmsolver++",
                 solver_type="midpoint",
             )
+        self.model_id = self.config.inpaint_model
+        logger.info("SD1.5 inpaint model loaded: %s", self.model_id)
 
         if self.config.taesd_model:
             logger.info("Loading TAESD %s …", self.config.taesd_model)
@@ -123,6 +125,7 @@ class DiffusersInpainter(Inpainter):
         seed: int | None = None,
         prompt_b: str | None = None,
         t: float = 0.0,
+        strength: float | None = None,
     ) -> Image.Image:
         torch = self._torch
         generator = None
@@ -152,7 +155,7 @@ class DiffusersInpainter(Inpainter):
             width=image.width,
             height=image.height,
             generator=generator,
-            strength=self.config.strength,
+            strength=self.config.strength if strength is None else float(strength),
         )
         return result.images[0]
 
@@ -177,10 +180,11 @@ def create_inpainter(config: "Config") -> Inpainter:
             return SDXLInpainter(config)
         except Exception:
             logger.exception("SDXL backend failed to load; falling back to SD1.5")
-            from .config import Config
+            from .config import SDXL_PRESET, Config
             fallback = Config()
-            for k in ("height", "window_width", "strip_width", "overlap", "repaint_band", "steps", "guidance_scale",
-                      "seam_retries", "scroll_speed", "scroll_speed_min"):
+            # Undo every SDXL preset key (incl. fresh_anchor, whose partial-strength bridge pass is SDXL-tuned).
+            for k in set(SDXL_PRESET) | {"height", "window_width", "strip_width", "overlap", "repaint_band", "steps",
+                                         "guidance_scale", "seam_retries", "scroll_speed", "scroll_speed_min"}:
                 setattr(config, k, getattr(fallback, k))
             config.context_width = config.window_width - config.strip_width
             config.backend = "sd15"
