@@ -7,16 +7,12 @@ SHA="${1:-}"
 umask 077
 OLD=$(cat /root/.tapestry.env 2>/dev/null || true)
 env | grep -E '^(SUPABASE_|TAPESTRY_|RUNPOD_|R2_)[A-Z0-9_]*=' | while IFS='=' read -r k v; do printf '%s=%q\n' "$k" "$v"; done > /root/.tapestry.env.new
-# A pod created before the R2 keys were restored has none in its pod env (and TAPESTRY_R2=0). If an operator added them
-# to the env file by hand, keep them across container restarts instead of silently dropping back to Supabase only.
+# R2 keys: pod env first; else keep the ones already in the env file; else pull the durable copy from the private
+# Supabase deploy bucket (written by CI, scripts/ci_sync_r2.py). The app does the same at startup and alarms in /health.
 if [ -z "${R2_ACCESS_KEY_ID:-}" ] && printf '%s\n' "$OLD" | grep -q '^R2_ACCESS_KEY_ID='; then
-  grep -v '^TAPESTRY_R2=' /root/.tapestry.env.new > /root/.tapestry.env.tmp && mv /root/.tapestry.env.tmp /root/.tapestry.env.new
-  printf '%s\n' "$OLD" | grep -E '^(R2_[A-Z0-9_]*|TAPESTRY_SUPABASE_PUBLIC)=' >> /root/.tapestry.env.new
+  printf '%s\n' "$OLD" | grep -E '^R2_[A-Z0-9_]*=' >> /root/.tapestry.env.new
   echo "selfboot: kept R2 keys from the previous env file"
 fi
-# R2 is always on: drop any legacy off switch, and if the keys are still missing pull the durable copy from the private
-# Supabase deploy bucket (the app does the same at startup, so this just keeps the env file complete).
-grep -v '^TAPESTRY_R2=' /root/.tapestry.env.new > /root/.tapestry.env.tmp && mv /root/.tapestry.env.tmp /root/.tapestry.env.new
 if ! grep -q '^R2_ACCESS_KEY_ID=' /root/.tapestry.env.new && [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
   if curl -sf -m 20 -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
        "$SUPABASE_URL/storage/v1/object/deploy/secrets/r2.env" | grep -E '^R2_[A-Z0-9_]+=' >> /root/.tapestry.env.new; then

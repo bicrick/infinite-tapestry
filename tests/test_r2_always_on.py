@@ -35,10 +35,9 @@ def test_unreachable_copy_reports_none():
     assert st.ensure_r2_env(env, fetch=boom) == "none"
 
 
-def test_legacy_off_switch_is_ignored(monkeypatch):
+def test_r2_is_built_from_env_keys(monkeypatch):
     for k, v in KEYS.items():
         monkeypatch.setenv(k, v)
-    monkeypatch.setenv("TAPESTRY_R2", "0")
     monkeypatch.setattr(st.R2Public, "__init__", lambda self, *a: None)
     assert st.R2Public.from_env() is not None
 
@@ -170,6 +169,6 @@ def test_provision_puts_r2_in_the_runpod_env():
     assert '"R2_SECRET_ACCESS_KEY"' in out and '"PUBLIC_KEY"' in out and "TAPESTRY_R2\"" not in out
 
 
-def test_selfboot_drops_the_off_switch_and_falls_back_to_the_durable_copy():
+def test_selfboot_falls_back_to_the_durable_copy():
     src = (ROOT / "scripts/pod/selfboot.sh").read_text()
-    assert "grep -v '^TAPESTRY_R2='" in src and "deploy/secrets/r2.env" in src
+    assert "deploy/secrets/r2.env" in src and "TAPESTRY_R2" not in src

@@ -55,7 +55,7 @@ def gql(env, q):
 
 def pod_env(env, pub):
     """RunPod-level env for the new pod: the SSH key plus every app key incl. R2_*, so the keys survive stop/resume
-    (which wipes /root). Same set as web/lib/gpu.js podEnv; never TAPESTRY_R2=0."""
+    (which wipes /root). Same set as web/lib/gpu.js podEnv."""
     pairs = {"PUBLIC_KEY": pub, **{k: env[k] for k in ENV_KEYS if env.get(k)}, **FIXED}
     return ", ".join(f"{{ key: {json.dumps(k)}, value: {json.dumps(v)} }}" for k, v in pairs.items())
 

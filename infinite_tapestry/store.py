@@ -123,16 +123,14 @@ class R2Public:
 
     @classmethod
     def from_env(cls) -> "R2Public | None":
-        """R2 is always the write destination. There is no off switch: a legacy TAPESTRY_R2=0 is ignored, and missing
-        keys are pulled from the durable copy. Only when that fails too does the pod run degraded (loudly)."""
+        """R2 is the only binary store. Missing keys are pulled from the durable copy; only when that fails too does
+        the pod run degraded (loudly: /health status=degraded, strips are not stored)."""
         e = os.environ
-        if e.get("TAPESTRY_R2") == "0":
-            logger.warning("TAPESTRY_R2=0 is ignored: R2 is always the strip write destination")
         cls.creds_source = ensure_r2_env(e)
         missing = [k for k in R2_KEYS if not e.get(k)]
         if missing:
             cls.off_reason = "missing " + ",".join(missing)
-            logger.error("R2 WRITES UNAVAILABLE (%s): strips go to Supabase Storage only. /health status=degraded",
+            logger.error("R2 WRITES UNAVAILABLE (%s): strips are not stored. /health status=degraded",
                          cls.off_reason)
             return None
         try:

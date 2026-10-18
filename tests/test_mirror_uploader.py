@@ -92,7 +92,7 @@ def test_r2_write_check_surfaces_in_health(monkeypatch):
 
 
 def test_r2_off_reason_names_missing_keys_without_values(monkeypatch):
-    for k in ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL", "TAPESTRY_R2"):
+    for k in ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("R2_ACCESS_KEY_ID", "secret-value-123")
     assert st.R2Public.from_env() is None
