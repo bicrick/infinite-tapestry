@@ -1,0 +1,52 @@
+name: Ops
+# Manual operations that need no laptop or box: Actions -> Ops -> Run workflow.
+#   pod-health       sample the prod pod's /health for 2 min (throughput, R2 writes, alarms)
+#   storage-dry-run  plan for moving leftover Supabase Storage binaries to R2 (no changes)
+#   storage-migrate  do it: copy to R2, verify, delete from Supabase (resumable; rerun if the job times out)
+# Redeploys live in CI (Actions -> CI -> Run workflow, optionally force_worker).
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        type: choice
+        options: [pod-health, storage-dry-run, storage-migrate]
+        default: pod-health
+permissions:
+  contents: read
+concurrency:
+  group: ops-${{ inputs.task }}
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      OPS_LOG_DIR: ${{ runner.temp }}/ops-logs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install boto3
+        if: inputs.task != 'pod-health'
+      - name: pod-health
+        if: inputs.task == 'pod-health'
+        run: python3 scripts/ops/pod_health.py 120
+      - name: storage-dry-run
+        if: inputs.task == 'storage-dry-run'
+        run: python3 scripts/ops/storage_migrate.py
+      - name: storage-migrate
+        if: inputs.task == 'storage-migrate'
+        run: python3 scripts/ops/storage_migrate.py --execute
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.task != 'pod-health'
+        with:
+          name: ops-logs
+          path: ${{ runner.temp }}/ops-logs
+          if-no-files-found: ignore

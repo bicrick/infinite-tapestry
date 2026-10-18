@@ -5,7 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:   # manual redeploy of main (web always; worker only if changed unless force_worker)
+    inputs:
+      force_worker:
+        description: "Publish the worker even if its code is unchanged (the pod restarts onto it)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -70,7 +75,8 @@ jobs:
           done
           echo "build + smoke OK"
 
-  # Versioned pod worker: every green main commit becomes deploy/worker/<sha>.tgz; the pod pulls latest on restart.
+  # Versioned pod worker: a green main commit that changed the worker becomes deploy/worker/<sha>.tgz + latest.txt;
+  # the pod's supervisor polls latest.txt and switches to it within ~2 min (rolls back if /health fails).
   publish-worker:
     needs: test
     if: github.event_name != 'pull_request'
@@ -87,7 +93,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: bash scripts/publish_worker.sh
+        run: bash scripts/publish_worker.sh ${{ inputs.force_worker && '--force' || '' }}
 
   # PR-only Vercel preview (no domain aliases). Posts the URL on the PR.
   deploy-preview:
@@ -99,8 +105,8 @@ jobs:
       issues: write
       pull-requests: write
     env:
-      VERCEL_ORG_ID: team_wWQb6uWytPTAvJCeSYirxFb5
-      VERCEL_PROJECT_ID: prj_e5dEKiID5ny43SV89OWxDOvSgjrG
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       HAS_SECRETS: ${{ secrets.VERCEL_TOKEN != '' && secrets.SUPABASE_URL != '' && secrets.SUPABASE_ANON_KEY != '' }}
       HAS_WS_SECRET: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
     steps:
@@ -126,7 +132,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
-          R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
           SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
           TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
           REQUIRE_SUPABASE: "1"
@@ -211,8 +217,8 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
-      VERCEL_ORG_ID: team_wWQb6uWytPTAvJCeSYirxFb5
-      VERCEL_PROJECT_ID: prj_e5dEKiID5ny43SV89OWxDOvSgjrG
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
       # TURNSTILE_SITE_KEY is required too: the config guard below refuses a build whose public config differs from prod.
       HAS_SECRETS: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_BYPASS != '' && secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' && secrets.SUPABASE_ANON_KEY != '' && secrets.TURNSTILE_SITE_KEY != '' }}
     steps:
@@ -237,7 +243,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
-          R2_PUBLIC_URL: https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
           SITE_URL: ${{ vars.SITE_URL || 'https://infinite-tapestry.vercel.app' }}
           TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
           REQUIRE_SUPABASE: "1"
