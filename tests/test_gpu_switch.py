@@ -30,7 +30,7 @@ def test_replacement_pod_env_and_name():
                "const e=g.podEnv({SUPABASE_URL:'u',SUPABASE_SERVICE_ROLE_KEY:'k',RUNPOD_API_KEY:'r',STRIPE_SECRET_KEY:'no'});"
                "console.log(JSON.stringify({e, n:g.replacementName(new Date('2026-10-16T20:05:00Z')), boot:g.BOOT}))")
     e = out["e"]
-    assert e["SUPABASE_URL"] == "u" and e["TAPESTRY_BACKEND"] == "sdxl" and e["TAPESTRY_R2"] == "0"
+    assert e["SUPABASE_URL"] == "u" and e["TAPESTRY_BACKEND"] == "sdxl" and "TAPESTRY_R2" not in e   # R2 is never switched off
     assert "STRIPE_SECRET_KEY" not in e and e["PUBLIC_KEY"].startswith("ssh-ed25519 ")
     assert out["n"] == "tapestry-sdxl-2610162005"   # adoptPod's "tapestry-sdxl-*" rule matches it
     assert "selfboot.sh" in out["boot"] and out["boot"].endswith("exec /start.sh")

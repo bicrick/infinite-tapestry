@@ -538,8 +538,14 @@ def create_app(
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
+        storage = _storage_health()
+        alarms = []
+        if storage is not None and not (storage.get("r2") or {}).get("write_ok"):
+            alarms.append("r2_writes_unavailable: " + str((storage.get("r2") or {}).get("error") or "write check pending"))
         return {
-            "ok": True,
+            "ok": True,   # process alive (the supervisor's signal); degraded features are in status/alarms
+            "status": "degraded" if alarms else "ok",
+            "alarms": alarms,
             "mock": config.mock,
             "buffer": buffer.peek_depth(),
             "strip_index": generator.strip_index if generator else None,
@@ -552,7 +558,7 @@ def create_app(
             "auto": ({"busy": autopilot.busy, "error": autopilot.last_error, "hour_tokens": autopilot._hour_tokens()}
                      if autopilot else None),
             "overdue": generator.director.overdue() if generator is not None and hasattr(generator.director, "overdue") else 0,
-            "storage": _storage_health(),
+            "storage": storage,
             "persist_backlog": getattr(generator, "_persist_backlog", 0) if generator is not None else 0,
         }
 

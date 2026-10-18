@@ -27,7 +27,8 @@ function podEnv(e = process.env) {
   const out = { PUBLIC_KEY: SSH_PUB };
   for (const k of POD_ENV_KEYS) if (e[k]) out[k] = e[k];
   Object.assign(out, POD_FIXED);
-  if (!out.R2_ACCESS_KEY_ID) out.TAPESTRY_R2 = "0";
+  // No TAPESTRY_R2=0 ever: R2 is always the write destination. If R2_* are missing here the pod loads them from the
+  // durable copy in the private Supabase deploy bucket (store.ensure_r2_env) and alarms if that fails too.
   return out;
 }
 const replacementName = (now = new Date()) => "tapestry-sdxl-" + now.toISOString().slice(2, 16).replace(/[-T:]/g, "");

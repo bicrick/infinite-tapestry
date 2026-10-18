@@ -100,6 +100,9 @@ def main(argv: list[str] | None = None) -> int:
     from .ops import OpsLog
 
     ops = OpsLog(generator).start()
+    _mirror = getattr(getattr(generator, "store", None), "mirror", None)
+    if _mirror is not None:   # R2 up/down transitions land in ops_events (admin panel), not just the log
+        _mirror.on_r2_change = lambda ok, why: ops.event("r2_ok" if ok else "r2_degraded", reason=str(why)[:200])
 
     from .interpreter import PromptInterpreter
 

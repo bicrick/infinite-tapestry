@@ -53,13 +53,20 @@ def gql(env, q):
     return j["data"]
 
 
+def pod_env(env, pub):
+    """RunPod-level env for the new pod: the SSH key plus every app key incl. R2_*, so the keys survive stop/resume
+    (which wipes /root). Same set as web/lib/gpu.js podEnv; never TAPESTRY_R2=0."""
+    pairs = {"PUBLIC_KEY": pub, **{k: env[k] for k in ENV_KEYS if env.get(k)}, **FIXED}
+    return ", ".join(f"{{ key: {json.dumps(k)}, value: {json.dumps(v)} }}" for k, v in pairs.items())
+
+
 def create(env, name, max_price):
     pub = KEY.with_suffix(".pub").read_text().strip()
     for gpu in GPUS:
         for cloud in ["SECURE", "COMMUNITY"]:
             q = f'''mutation {{ podFindAndDeployOnDemand(input: {{ cloudType: {cloud}, gpuCount: 1, gpuTypeId: "{gpu}", name: "{name}",
               imageName: "{IMAGE}", containerDiskInGb: 60, volumeInGb: 0, ports: "8000/http,22/tcp", minVcpuCount: 4, minMemoryInGb: 24,
-              env: [{{ key: "PUBLIC_KEY", value: {json.dumps(pub)} }}] }}) {{ id costPerHr machineId }} }}'''
+              env: [{pod_env(env, pub)}] }}) {{ id costPerHr machineId }} }}'''
             try:
                 p = gql(env, q)["podFindAndDeployOnDemand"]
             except Exception as e:
@@ -101,6 +108,10 @@ def main():
     o = a.parse_args()
     env = load_env()
     missing = [k for k in ENV_KEYS if not env.get(k)]
+    r2_missing = [k for k in missing if k.startswith("R2_")]
+    if r2_missing:   # not fatal: the pod loads them from the durable copy (deploy/secrets/r2.env) and alarms otherwise
+        print("WARNING: no " + ", ".join(r2_missing) + " here; the pod will use deploy/secrets/r2.env", flush=True)
+    missing = [k for k in missing if not k.startswith("R2_")]
     if missing:
         sys.exit("missing env: " + ", ".join(missing))
     pid = o.pod or create(env, o.name, o.max_price)
@@ -110,7 +121,7 @@ def main():
         if ssh(addr, "true").returncode == 0:
             break
         time.sleep(10)
-    body = "".join(f"{k}={shlex.quote(env[k])}\n" for k in ENV_KEYS) + "".join(f"{k}={v}\n" for k, v in FIXED.items()) + f"RUNPOD_POD_ID={pid}\n"
+    body = "".join(f"{k}={shlex.quote(env[k])}\n" for k in ENV_KEYS if env.get(k)) + "".join(f"{k}={v}\n" for k, v in FIXED.items()) + f"RUNPOD_POD_ID={pid}\n"
     r = ssh(addr, "umask 077; cat > /root/.tapestry.env", body)
     assert r.returncode == 0, r.stderr[-300:]
     ssh(addr, "cat > /root/run.sh && chmod +x /root/run.sh", RUN_SH)

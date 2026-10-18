@@ -67,7 +67,16 @@ class OpsLog:
         st = g.stats() if g is not None else {}
         self._q.put_nowait(("POST", "ops_heartbeat?on_conflict=id", {
             "id": "pod", "at": _iso(time.time()), "started_at": _iso(self.t0), "strip_index": st.get("strip_index"),
-            "detail": {"release": self.release, "strip_s": st.get("strip_seconds"), "viewers": self.viewers()}}))
+            "detail": {"release": self.release, "strip_s": st.get("strip_seconds"), "viewers": self.viewers(),
+                       "r2": self._r2()}}))
+
+    def _r2(self):
+        """R2 write health for the admin panel: True ok, False degraded (Supabase-only), None unknown."""
+        m = getattr(getattr(self.gen, "store", None), "mirror", None)
+        try:
+            return None if m is None else bool(m.r2_ok() and m.r2_write_ok)
+        except Exception:
+            return None
 
     # ---- lifecycle ----
     def start(self) -> "OpsLog":

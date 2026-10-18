@@ -56,6 +56,48 @@ def _err(e: Exception) -> str:
     return type(e).__name__
 
 
+R2_KEYS = ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL")
+# Durable copy of the R2 write keys in the PRIVATE Supabase `deploy` bucket (service role only). Every pod already holds
+# the service role key, so a pod started without R2 env (stop/resume of an old pod, manual create, wiped /root) still
+# writes R2.
+R2_ENV_OBJECT = os.environ.get("TAPESTRY_R2_ENV_OBJECT", "deploy/secrets/r2.env")
+
+
+def ensure_r2_env(env=None, fetch=None) -> str:
+    """Fill missing R2_* vars from the durable copy. Returns 'env', 'supabase' or 'none'. Never logs values."""
+    env = os.environ if env is None else env
+    if all(env.get(k) for k in R2_KEYS):
+        return "env"
+    url, key = (env.get("SUPABASE_URL") or "").rstrip("/"), env.get("SUPABASE_SERVICE_ROLE_KEY") or ""
+    if not (url and key):
+        return "none"
+
+    def _get() -> bytes:
+        req = urllib.request.Request(f"{url}/storage/v1/object/{R2_ENV_OBJECT}",
+                                     headers={"Authorization": f"Bearer {key}", "apikey": key})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return r.read()
+    try:
+        text = (fetch or _get)().decode("utf-8", "replace")
+    except Exception as e:
+        logger.error("R2 keys missing from env and the durable copy (%s) could not be read: %s", R2_ENV_OBJECT, _err(e))
+        return "none"
+    got = 0
+    for line in text.splitlines():
+        line = line.strip().removeprefix("export ")
+        if "=" not in line or line.startswith("#"):
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip(), v.strip().strip('"').strip("'")
+        if k.startswith("R2_") and v and not env.get(k):
+            env[k] = v
+            got += 1
+    ok = all(env.get(k) for k in R2_KEYS)
+    logger.warning("R2 keys were missing from the pod env; loaded %d from %s (%s)", got, R2_ENV_OBJECT,
+                   "complete" if ok else "STILL INCOMPLETE")
+    return "supabase" if ok else "none"
+
+
 class R2Public:
     """Public strip/tile CDN on Cloudflare R2 (S3 API, zero egress fees)."""
 
@@ -71,16 +113,22 @@ class R2Public:
                                config=Config(retries={"max_attempts": 3}, connect_timeout=10, read_timeout=30))
         self._cors: tuple[float, bool] = (0.0, False)
 
-    off_reason = ""   # why R2 is not in use (surfaced in /health); never contains secret values
+    off_reason = ""     # why R2 is not in use (surfaced in /health); never contains secret values
+    creds_source = ""   # "env" | "supabase" (durable copy) | "none"
 
     @classmethod
     def from_env(cls) -> "R2Public | None":
+        """R2 is always the write destination. There is no off switch: a legacy TAPESTRY_R2=0 is ignored, and missing
+        keys are pulled from the durable copy. Only when that fails too does the pod run degraded (loudly)."""
         e = os.environ
-        need = ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL")
-        missing = [k for k in need if not e.get(k)]
-        if missing or e.get("TAPESTRY_R2", "1") == "0":
-            cls.off_reason = "TAPESTRY_R2=0" if e.get("TAPESTRY_R2", "1") == "0" else "missing " + ",".join(missing)
-            logger.warning("R2 WRITES OFF (%s): strips go to Supabase Storage only", cls.off_reason)
+        if e.get("TAPESTRY_R2") == "0":
+            logger.warning("TAPESTRY_R2=0 is ignored: R2 is always the strip write destination")
+        cls.creds_source = ensure_r2_env(e)
+        missing = [k for k in R2_KEYS if not e.get(k)]
+        if missing:
+            cls.off_reason = "missing " + ",".join(missing)
+            logger.error("R2 WRITES UNAVAILABLE (%s): strips go to Supabase Storage only. /health status=degraded",
+                         cls.off_reason)
             return None
         try:
             return cls(e["R2_ENDPOINT"], e["R2_ACCESS_KEY_ID"], e["R2_SECRET_ACCESS_KEY"],
@@ -143,8 +191,33 @@ class SupabaseMirror:
         for n in range(self.UPLOAD_WORKERS):
             threading.Thread(target=self._run, args=(self._q, True), name=f"mirror-{n}", daemon=True).start()
         threading.Thread(target=self._run, args=(self._slow, False), name="mirror-slow", daemon=True).start()
-        if self.r2 is not None:
-            threading.Thread(target=self._r2_check, name="r2-check", daemon=True).start()
+        threading.Thread(target=self._r2_watch, name="r2-watch", daemon=True).start()
+
+    R2_RECHECK_S = float(os.environ.get("TAPESTRY_R2_RECHECK_S", "300"))
+    on_r2_change = None   # optional callback(ok: bool, reason: str), e.g. an ops event for the admin panel
+
+    def r2_ok(self) -> bool:
+        return self.r2 is not None and self.r2_write_ok is not False
+
+    def _r2_watch(self) -> None:
+        """Write check now, then every few minutes while degraded: re-reads keys (env or the durable copy), so a fixed
+        key heals without a restart; logs an ERROR each round so a Supabase-only pod is never silent."""
+        last = None
+        while True:
+            if self.r2 is None:
+                self.r2 = R2Public.from_env()
+            if self.r2 is not None:
+                self._r2_check()
+            ok = self.r2 is not None and self.r2_write_ok is True
+            if not ok:
+                logger.error("R2 DEGRADED: %s", self.r2_error or R2Public.off_reason or "write check failed")
+            if ok != last and self.on_r2_change:
+                try:
+                    self.on_r2_change(ok, "" if ok else (self.r2_error or R2Public.off_reason))
+                except Exception:
+                    pass
+            last = ok
+            time.sleep(self.R2_RECHECK_S if not ok else max(self.R2_RECHECK_S, 1800))
 
     UPLOAD_WORKERS = int(os.environ.get("TAPESTRY_UPLOAD_WORKERS", "4"))
     PRIO_STRIP, PRIO_ROW, PRIO_TILE = 0, 1, 2
@@ -162,8 +235,8 @@ class SupabaseMirror:
 
     def health(self) -> dict:
         r2 = ({"configured": True, "write_ok": self.r2_write_ok, "error": self.r2_error, "failed": self.r2_failed,
-               "cors": bool(self.r2._cors[1])} if self.r2 is not None
-              else {"configured": False, "write_ok": False, "error": R2Public.off_reason})
+               "cors": bool(self.r2._cors[1]), "source": R2Public.creds_source} if self.r2 is not None
+              else {"configured": False, "write_ok": False, "error": R2Public.off_reason, "source": R2Public.creds_source})
         return {"r2": r2, "uploaded": self.uploaded, "failed": self.failed, "queue": self._q.qsize(),
                 "slow_queue": self._slow.qsize(), "last_error": self.last_error,
                 "supabase_public": self._supabase_public_too()}
