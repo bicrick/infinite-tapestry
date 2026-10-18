@@ -242,20 +242,17 @@ jobs:
           TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
           REQUIRE_SUPABASE: "1"
         run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
-      # CI is the source of truth for the R2 write keys: missing secret = failed deploy (pods would start without R2).
-      - name: Sync R2 keys (GitHub secrets -> Vercel env prod+preview, pod durable copy); never echoes values
+      # GitHub is the source of truth for every runtime secret (scripts/ci/secrets.json): synced into Vercel env and the
+      # pod's durable R2 copy; a required secret missing everywhere fails the deploy. Values are never printed.
+      - name: Sync secrets (GitHub -> Vercel env, pod durable copy)
         if: env.HAS_SECRETS == 'true'
         env:
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          VARS_JSON: ${{ toJSON(vars) }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python3 scripts/ci_sync_r2.py sync
+        run: python3 scripts/ci/sync_secrets.py sync
       - name: Deploy to production, smoke-test, then point the domains at it
         if: env.HAS_SECRETS == 'true'
         env:
@@ -301,4 +298,4 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python3 scripts/ci_sync_r2.py check
+        run: python3 scripts/ci/sync_secrets.py check

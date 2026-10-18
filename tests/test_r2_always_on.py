@@ -137,16 +137,27 @@ def test_watchdog_heals_after_key_rotation(monkeypatch):
 
 def test_ci_sync_fails_loudly_without_r2_secrets():
     env = {"PATH": os.environ["PATH"], "R2_ENDPOINT": "x"}
-    r = subprocess.run([sys.executable, str(ROOT / "scripts/ci_sync_r2.py"), "sync"], capture_output=True, text=True, env=env)
+    r = subprocess.run([sys.executable, str(ROOT / "scripts/ci/sync_secrets.py"), "sync"], capture_output=True, text=True, env=env)
     assert r.returncode == 1 and "::error::R2 secrets missing" in r.stdout and "x" not in r.stdout.split("missing")[0][-3:]
     assert "R2_ACCESS_KEY_ID" in r.stdout
 
 
-def test_ci_workflow_syncs_and_checks_r2():
+def test_ci_workflow_syncs_every_secret_and_checks_r2():
     wf = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert "scripts/ci_sync_r2.py sync" in wf and "scripts/ci_sync_r2.py check" in wf
+    assert "scripts/ci/sync_secrets.py sync" in wf and "scripts/ci/sync_secrets.py check" in wf
+    assert "SECRETS_JSON: ${{ toJSON(secrets) }}" in wf and "VARS_JSON: ${{ toJSON(vars) }}" in wf
+
+
+def test_manifest_covers_every_secret_the_web_app_reads():
+    import re
+    man = json.loads((ROOT / "scripts/ci/secrets.json").read_text())
     for k in ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL", "R2_BUCKET", "R2_ACCOUNT_ID"):
-        assert f"{k}: ${{{{ secrets.{k} }}}}" in wf
+        assert man[k].get("pod") and man[k]["required"]
+    src = "".join(p.read_text() for p in (ROOT / "web").rglob("*.js") if "node_modules" not in p.parts)
+    used = set(re.findall(r'env\("([A-Z0-9_]+)"', src)) | set(re.findall(r"process\.env\.([A-Z0-9_]+)", src))
+    secretish = {k for k in used if re.search(r"SECRET|KEY|SALT|TOKEN", k)} - {"ANTHROPIC_API_KEY", "STRIPE_TAX_CODE"}
+    assert secretish <= set(man), sorted(secretish - set(man))
+
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")

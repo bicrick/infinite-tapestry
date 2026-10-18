@@ -8,7 +8,7 @@ umask 077
 OLD=$(cat /root/.tapestry.env 2>/dev/null || true)
 env | grep -E '^(SUPABASE_|TAPESTRY_|RUNPOD_|R2_)[A-Z0-9_]*=' | while IFS='=' read -r k v; do printf '%s=%q\n' "$k" "$v"; done > /root/.tapestry.env.new
 # R2 keys: pod env first; else keep the ones already in the env file; else pull the durable copy from the private
-# Supabase deploy bucket (written by CI, scripts/ci_sync_r2.py). The app does the same at startup and alarms in /health.
+# Supabase deploy bucket (written by CI, scripts/ci/sync_secrets.py). The app does the same at startup and alarms in /health.
 if [ -z "${R2_ACCESS_KEY_ID:-}" ] && printf '%s\n' "$OLD" | grep -q '^R2_ACCESS_KEY_ID='; then
   printf '%s\n' "$OLD" | grep -E '^R2_[A-Z0-9_]*=' >> /root/.tapestry.env.new
   echo "selfboot: kept R2 keys from the previous env file"
