@@ -58,8 +58,8 @@ _STYLE_NOTE = (
 
 AUTO_SYSTEM = f"""You are the autopilot of an endless, horizontally scrolling image that {_BACKEND_GEOM} paints strip by strip. Nobody is steering right now, so you decide what comes next, forever.
 Be inventive and surprising: fun, strange, beautiful or funny ideas, always different from the recent scenes.
-Each prompt is SHORT and SIMPLE: about 5-20 words of plain language saying what the scene is. No piles of descriptors, no quality words, no camera, lens or film terms (unless that is the idea itself).
-Style: there is NO default style. Invent the look yourself (any medium, era or vibe from anywhere in the world and history), and give each new scene or story a look of its own. Inside a story, every scene keeps the story's one look. Write the look INTO the prompt in a few words at the start, because only the prompt is painted; style = that look as a short label.
+Each prompt is SHORT and SIMPLE: about 5-20 words of plain language saying what the scene is. No piles of descriptors or quality words.
+Look: the renderer is a PHOTOREAL model, so most scenes (about two of every three) are PHOTOGRAPHS: a real-looking photo with a photographic look such as cinematic photo, documentary photo, aerial drone photograph, macro photograph, underwater photograph, long-exposure night photo. The rest may be stylized (any painted, graphic or crafted medium from anywhere in the world and history), never two stylized scenes in a row. Follow the LOOK PLAN when one is given. Inside a story, every scene keeps the story's one look. Write the look INTO the prompt in a few words at the start, because only the prompt is painted; style = that look as a short label.
 Originality: keep inventing new subjects, places and situations: everyday life, machines, animals, food, sports, history, the future, deserts, cities, kitchens, factories, outer space, tiny worlds. Every planning call is a chance to go somewhere the tapestry has not been yet.
 Functional needs only: one continuous scene that can extend sideways (not one centered object), no text, frames or borders. {_COMPOSITION_NOTE}
 Never: nudity or sexual content, children/minors, hateful slurs or symbols, recognizable real people.
@@ -152,7 +152,8 @@ class PromptInterpreter:
         if keep_style:
             user += f"\nThese scenes belong to one story: every scene uses exactly this look: {keep_style}."
         elif looks:
-            user += "\nLooks already used recently (use a clearly DIFFERENT medium for every new scene, and different from each other): " + ", ".join(dict.fromkeys(looks))
+            user += ("\nLooks already used recently (vary them: a stylized scene uses a medium not in this list; photographs may "
+                     "repeat but change the kind of photo): " + ", ".join(dict.fromkeys(looks)))
         if vibe:
             user += f"\nViewer's standing vibe to lean toward (loosely): {vibe[:200]}"
         if brief:

@@ -25,13 +25,14 @@ SUBJECTS = ["animals with jobs", "machines and engines", "food and cooking", "sp
             "tools and workshops", "games and toys", "celebrations and parades", "transport and travel", "science lab experiments",
             "monsters and myths", "geology and crystals", "birds", "everyday objects at giant scale", "fashion and fabric",
             "space exploration", "farms and harvests", "trains", "circuses and fairs", "medieval knights", "cowboys and frontiers"]
+# Stylized looks for the free (non-photo) slots; photographic looks live in looks.PHOTO_LOOKS.
 LOOKS = ["crayon drawing", "claymation", "linocut print", "pixel art", "1980s airbrush poster", "comic book ink", "tin toy diorama",
          "risograph print", "chalk on a blackboard", "knitted wool", "papercraft", "low-poly 3D", "vintage travel poster",
-         "blueprint diagram", "1970s sci-fi paperback cover", "children's picture book", "graffiti mural", "stop-motion felt",
-         "lego bricks", "marker sketch", "psychedelic 60s poster", "Polaroid photo", "documentary photo", "Renaissance fresco",
-         "cel-shaded cartoon", "mosaic tiles", "woodcut", "propaganda-style poster art", "art nouveau illustration", "neon sign",
-         "chrome 3D render", "Saturday-morning cartoon", "oil painting", "glossy magazine photo", "scientific illustration",
-         "cross-stitch", "watercolor field sketch", "16-bit video game", "Bauhaus geometric print", "film noir photo"]
+         "blueprint diagram", "1970s sci-fi paperback cover", "graffiti mural", "stop-motion felt",
+         "lego bricks", "marker sketch", "psychedelic 60s poster", "Renaissance fresco",
+         "cel-shaded cartoon", "mosaic tiles", "woodcut", "art nouveau illustration", "neon sign",
+         "chrome 3D render", "Saturday-morning cartoon", "scientific illustration",
+         "cross-stitch", "16-bit video game", "Bauhaus geometric print"]
 
 _STOP = set("the a an of in on at and to with by from for into over under beneath above below within its his her their my our".split())
 
@@ -42,9 +43,14 @@ def motif_run(titles: list[str], top: int = 4, min_count: int = 3) -> list[str]:
     return [w for w, n in collections.Counter(words).most_common(top) if n >= min_count]
 
 
-def spark(rng: random.Random | None = None) -> dict[str, str]:
+def spark(rng: random.Random | None = None, photo: bool | None = None) -> dict[str, str]:
+    """photo=True: a photographic look; False: a stylized one; None: photographic about two times in three."""
+    from .looks import PHOTO_LOOKS
     r = rng or random
-    return {"era": r.choice(ERAS), "place": r.choice(PLACES), "subject": r.choice(SUBJECTS), "look": r.choice(LOOKS)}
+    if photo is None:
+        photo = r.random() < 0.67
+    return {"era": r.choice(ERAS), "place": r.choice(PLACES), "subject": r.choice(SUBJECTS),
+            "look": r.choice(PHOTO_LOOKS if photo else LOOKS)}
 
 
 def spark_line(s: dict[str, str]) -> str:

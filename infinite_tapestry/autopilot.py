@@ -12,15 +12,15 @@ from typing import Any, Callable
 
 from .prompts import make_scene, soft_title
 from .moods import MoodRotator
-from .styles import explicit_lora
+from . import looks
 from .themes import HeadlineCache, ThemeMemory, brief, clean_title, mentions_minor, pick_mode
 
 logger = logging.getLogger(__name__)
 
 VARIATIONS = [
     "seen through warped glass", "at a stranger scale", "in shifting iridescent light",
-    "slowly melting and reforming", "overgrown with luminous moss", "rendered as a faded fresco",
-    "under a second, larger moon", "made of folded paper", "submerged in amber haze",
+    "slowly melting and reforming", "overgrown with luminous moss", "at first light",
+    "under a second, larger moon", "after heavy rain", "submerged in amber haze",
 ]
 
 
@@ -52,7 +52,8 @@ def momentum_brief(recent: list[dict]) -> str:
             steps.append(f"scene {n}: free choice, loosely linked to the previous scene")
     return ("THEME MOMENTUM: a viewer just played the idea \"" + idea + "\" (scene \"" + str(u.get("title", "")) + "\"). "
             "Do not jump to something unrelated. " + "; ".join(steps) + ". Keep the idea's tone (if it was gross or absurd, "
-            "stay gross or absurd). Theme momentum overrides the usual repeat rules for this world.")
+            "stay gross or absurd; if the viewer named no art medium, their world is photographic). Theme momentum overrides the "
+            "usual repeat rules for this world.")
 
 
 def story_prompt(style: str, prompt: str) -> str:
@@ -105,7 +106,7 @@ def director_brief(recent: list[dict], journey: dict | None, steer: str, flavor:
         if spark:
             lines.append(spark_line(spark))
     lines.append("Keep the hand-off smooth: the first new scene can share one color, light or shape with the last one.")
-    lines.append("Titles: an evocative 2-4 word name, like a painting's title, built from this scene's own subject and place.")
+    lines.append("Titles: an evocative 2-4 word name built from this scene's own subject and place.")
     if flavor_text and not on_journey:   # mid-story: no outside flavor pulling it off course
         lines.append(f"Optional flavor for a detour or a new story (ignore if it breaks the flow): {flavor_text}")
     if steer:
@@ -301,6 +302,10 @@ class Autopilot:
             last_user = max((i for i, r in enumerate(recent) if r.get("origin") == "user"), default=None)
             since = len(recent) - 1 - last_user if last_user is not None else 99
             mood = ""
+            auto_styles = [str(r.get("style") or "") for r in d.recent(20) if r.get("origin") == "auto"]
+            req = looks.slots(auto_styles, 2)
+            if self.journey and req[0] and not looks.is_photo(self.journey.get("style")):
+                self.journey = None   # a stylized story ends when the photo quota needs the next slot
             if mom:   # a viewer's idea just played: stay in its world, then drift away (unchanged)
                 self.last_mode = "momentum"
                 text = mom
@@ -312,8 +317,9 @@ class Autopilot:
                 mood = self.moods.next(2)
                 self.last_mode = "director"
                 from .variety import spark
-                text = director_brief(d.recent(20), self.journey, self.steer, mood, self.moods.brief(mood), spark())
+                text = director_brief(d.recent(20), self.journey, self.steer, mood, self.moods.brief(mood), spark(photo=req[0]))
             keep = (self.journey or {}).get("style", "") if (not mom and self.journey) else ""
+            text += "\n" + looks.brief(req)
             plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text, keep)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
@@ -327,7 +333,7 @@ class Autopilot:
                 if not mom and self.memory.is_repeat(x["title"]):  # exact same title only
                     continue
                 kept.append(x)
-            plan["scenes"] = kept
+            plan["scenes"] = [looks.finalize(x, req[i] if i < len(req) else True) for i, x in enumerate(kept)]
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
             dec = plan.get("director") or {}
@@ -356,7 +362,7 @@ class Autopilot:
                 self.memory.add(s.get("title", ""))
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
                               s.get("hold"), source="", origin="auto", style=s.get("style"), beats=s.get("beats"),
-                              lora=explicit_lora(s["prompt"])) for s in plan["scenes"]])   # LoRA only if the prompt names it
+                              lora=None) for s in plan["scenes"]])   # Auto never loads a style LoRA (user words only)
             self._failures = 0
             self.last_error = ""
             self._next_allowed = time.monotonic() + self.min_interval

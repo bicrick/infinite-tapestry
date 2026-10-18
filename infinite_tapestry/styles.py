@@ -1,4 +1,4 @@
-"""Style LoRAs (SDXL). Claude picks a style per scene; weights ramp across transitions.
+"""Style LoRAs (SDXL), used only when a user's own words ask for one; weights ramp across transitions.
 
 Each style: LoRA repo + file, a trigger phrase prepended to the prompt, and a default weight.
 "none" means the base model's own look. Unavailable LoRAs are skipped at load time.
@@ -49,7 +49,8 @@ def ramp(style_a: str | None, style_b: str | None, t: float) -> dict[str, float]
 
 
 # LoRAs are reserved for looks the photoreal base can't do well, and only when a
-# person explicitly asks for them. Autopilot never loads a LoRA.
+# person explicitly asks for them in their own words (user ideas). Autopilot never loads a LoRA
+# (autopilot.py passes lora=None even if its prompt names watercolor/pixel art/papercut).
 _ASK = {"pixel art": ("pixel art", "pixel-art", "pixelart", "8-bit", "8 bit", "16-bit", "16 bit"),
         "watercolor": ("watercolor", "watercolour"),
         "papercut": ("papercut", "paper cut", "paper-cut", "cut paper")}
