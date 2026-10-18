@@ -302,7 +302,9 @@ class Autopilot:
             since = len(recent) - 1 - last_user if last_user is not None else 99
             mood = ""
             auto_styles = [str(r.get("style") or "") for r in d.recent(20) if r.get("origin") == "auto"]
-            if self.journey and not looks.story_may_continue(auto_styles, self.journey.get("style")):
+            capped = bool(self.journey) and not looks.story_may_continue(
+                auto_styles, self.journey.get("style"), len(self.journey.get("scenes") or []))
+            if capped:
                 self.journey = None   # one look may not run on: the story ends, the next scene changes family
             fams = looks.plan(auto_styles, 2)
             if mom:   # a viewer's idea just played: stay in its world, then drift away (unchanged)
@@ -344,12 +346,14 @@ class Autopilot:
             dec = plan.get("director") or {}
             if not mom and dec:
                 prev = self.journey or {}
-                if dec.get("move") in ("journey", "continue") and dec.get("total"):
+                if capped:
+                    self.journey = None   # Haiku may say "continue", but this story is over
+                elif dec.get("move") in ("journey", "continue") and dec.get("total"):
                     same = prev and (dec.get("move") == "continue" or (dec.get("journey") or "") == prev.get("journey"))
                     j = dict(dec)
                     # a story keeps its premise, look and scene list across planning calls
                     j["premise"] = (prev.get("premise") if same else "") or dec.get("premise", "")
-                    j["style"] = (prev.get("style") if same else "") or dec.get("style", "")
+                    j["style"] = (prev.get("style") if same else "") or plan["scenes"][0].get("style") or dec.get("style", "")
                     j["journey"] = dec.get("journey") or (prev.get("journey") if same else "")
                     j["scenes"] = (list(prev.get("scenes") or []) if same else []) + [s.get("title", "") for s in plan["scenes"]]
                     self.journey = j

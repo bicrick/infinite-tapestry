@@ -46,13 +46,17 @@ _KEYS: list[tuple[str, tuple[str, ...]]] = [
                "astrophotograph", "magazine")),
 ]
 
+LABEL_LEN = 24
+STORY_MAX = 4     # a story keeps one look for at most 4 scenes, then Auto changes family
 RECENT = 6        # recent Auto scenes the variety rule looks at
 AVOID_LAST = 3    # a new (non-story) scene's family differs from the last 3 Auto scenes' families
 MAX_SHARE = 2     # ...and no family may hold more than 2 of the last 6 (a story may run 3 in a row, then ends)
 
 
 def family(label: str | None) -> str:
-    s = str(label or "").lower().strip()
+    # Classify the stored label (scene labels are cut to 24 chars) so a hybrid like "cel-shaded cartoon and
+    # glossy 3D" counts as the same family before and after it is stored.
+    s = str(label or "").lower().strip()[:LABEL_LEN]
     if not s or s == "none":
         return ""
     for fam, words in _KEYS:
@@ -73,8 +77,11 @@ def blocked(recent_styles: list[str]) -> set[str]:
     return out
 
 
-def story_may_continue(recent_styles: list[str], story_style: str | None) -> bool:
-    """A story keeps its one look for at most 3 Auto scenes in a row, and its family under 4 of the last 6."""
+def story_may_continue(recent_styles: list[str], story_style: str | None, scenes_so_far: int = 0) -> bool:
+    """A story keeps its one look for at most STORY_MAX scenes, at most 3 Auto scenes of its family in a row
+    before another plan, and its family under 4 of the last 6."""
+    if scenes_so_far >= STORY_MAX:
+        return False
     f = family(story_style)
     if not f or f == "other":
         return True
