@@ -63,10 +63,12 @@ R2_KEYS = ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC
 R2_ENV_OBJECT = os.environ.get("TAPESTRY_R2_ENV_OBJECT", "deploy/secrets/r2.env")
 
 
-def ensure_r2_env(env=None, fetch=None) -> str:
-    """Fill missing R2_* vars from the durable copy. Returns 'env', 'supabase' or 'none'. Never logs values."""
+def ensure_r2_env(env=None, fetch=None, force: bool = False) -> str:
+    """Fill missing R2_* vars from the durable copy. Returns 'env', 'supabase' or 'none'. Never logs values.
+    force=True (key rotation: the current keys stopped working) re-reads the copy and OVERWRITES env values; it then
+    returns 'supabase' only if at least one value actually changed."""
     env = os.environ if env is None else env
-    if all(env.get(k) for k in R2_KEYS):
+    if not force and all(env.get(k) for k in R2_KEYS):
         return "env"
     url, key = (env.get("SUPABASE_URL") or "").rstrip("/"), env.get("SUPABASE_SERVICE_ROLE_KEY") or ""
     if not (url and key):
@@ -89,10 +91,13 @@ def ensure_r2_env(env=None, fetch=None) -> str:
             continue
         k, v = line.split("=", 1)
         k, v = k.strip(), v.strip().strip('"').strip("'")
-        if k.startswith("R2_") and v and not env.get(k):
+        if k.startswith("R2_") and v and (not env.get(k) or (force and env.get(k) != v)):
             env[k] = v
             got += 1
     ok = all(env.get(k) for k in R2_KEYS)
+    if force:
+        logger.warning("R2 key refresh from %s: %d value(s) changed", R2_ENV_OBJECT, got)
+        return "supabase" if ok and got else "none"
     logger.warning("R2 keys were missing from the pod env; loaded %d from %s (%s)", got, R2_ENV_OBJECT,
                    "complete" if ok else "STILL INCOMPLETE")
     return "supabase" if ok else "none"
@@ -213,6 +218,13 @@ class SupabaseMirror:
                 self.r2 = R2Public.from_env()
             if self.r2 is not None:
                 self._r2_check()
+                if self.r2_write_ok is False and ensure_r2_env(os.environ, force=True) == "supabase":
+                    # keys were rotated (CI refreshed the durable copy): rebuild the client with the new ones
+                    fresh = R2Public.from_env()
+                    if fresh is not None:
+                        self.r2 = fresh
+                        R2Public.creds_source = "supabase"
+                        self._r2_check()
             ok = self.r2 is not None and self.r2_write_ok is True
             if not ok:
                 logger.error("R2 DEGRADED: %s", self.r2_error or R2Public.off_reason or "write check failed")
@@ -222,7 +234,11 @@ class SupabaseMirror:
                 except Exception:
                     pass
             last = ok
-            time.sleep(self.R2_RECHECK_S if not ok else max(self.R2_RECHECK_S, 1800))
+            # healthy: re-check every 30 min, or as soon as uploads start failing (e.g. a revoked key)
+            wait, seen = (self.R2_RECHECK_S if not ok else max(self.R2_RECHECK_S, 1800)), self.r2_failed
+            t_end = time.time() + wait
+            while time.time() < t_end and not (ok and self.r2_failed - seen >= 3):
+                time.sleep(min(15.0, max(0.05, t_end - time.time())))
 
     UPLOAD_WORKERS = int(os.environ.get("TAPESTRY_UPLOAD_WORKERS", "4"))
     PRIO_STRIP, PRIO_ROW, PRIO_TILE = 0, 1, 2

@@ -99,6 +99,57 @@ def test_watchdog_heals_when_keys_appear(monkeypatch):
     assert m.r2_write_ok is True and m.health()["r2"]["configured"]
 
 
+def test_forced_refresh_overwrites_rotated_keys_and_reports_change():
+    env = {**KEYS, "SUPABASE_URL": "https://p.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "srk"}
+    rotated = {**KEYS, "R2_SECRET_ACCESS_KEY": "sec2"}
+    body = "".join(f"{k}={v}\n" for k, v in rotated.items()).encode()
+    assert st.ensure_r2_env(env, fetch=lambda: body, force=True) == "supabase" and env["R2_SECRET_ACCESS_KEY"] == "sec2"
+    assert st.ensure_r2_env(env, fetch=lambda: body, force=True) == "none"   # nothing changed this time
+
+
+def test_watchdog_heals_after_key_rotation(monkeypatch):
+    monkeypatch.setattr(st.SupabaseMirror, "R2_RECHECK_S", 0.05)
+
+    class _R2:
+        bucket, _cors = "b", (0.0, True)
+
+        def __init__(self, good):
+            self.good = good
+
+        def put(self, *a):
+            if not self.good:
+                raise RuntimeError("InvalidAccessKeyId")
+
+    made = {"n": 0}
+
+    def from_env(cls):
+        made["n"] += 1
+        return _R2(made["n"] > 1)   # first client has the revoked key, the rebuilt one the rotated key
+    monkeypatch.setattr(st.R2Public, "from_env", classmethod(from_env))
+    monkeypatch.setattr(st, "ensure_r2_env", lambda env=None, fetch=None, force=False: "supabase" if force else "env")
+    m = st.SupabaseMirror("https://x.supabase.co", "k", prefix="t")
+    import time
+    for _ in range(100):
+        if m.r2_write_ok:
+            break
+        time.sleep(0.02)
+    assert m.r2_write_ok is True and made["n"] == 2 and st.R2Public.creds_source == "supabase"
+
+
+def test_ci_sync_fails_loudly_without_r2_secrets():
+    env = {"PATH": os.environ["PATH"], "R2_ENDPOINT": "x"}
+    r = subprocess.run([sys.executable, str(ROOT / "scripts/ci_sync_r2.py"), "sync"], capture_output=True, text=True, env=env)
+    assert r.returncode == 1 and "::error::R2 secrets missing" in r.stdout and "x" not in r.stdout.split("missing")[0][-3:]
+    assert "R2_ACCESS_KEY_ID" in r.stdout
+
+
+def test_ci_workflow_syncs_and_checks_r2():
+    wf = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "scripts/ci_sync_r2.py sync" in wf and "scripts/ci_sync_r2.py check" in wf
+    for k in ("R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL", "R2_BUCKET", "R2_ACCOUNT_ID"):
+        assert f"{k}: ${{{{ secrets.{k} }}}}" in wf
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
 def test_gpu_js_pod_env_carries_r2_and_never_disables_it():
     script = "const {podEnv}=require('./web/lib/gpu.js'); console.log(JSON.stringify([podEnv(%s), podEnv({})]))" % json.dumps(

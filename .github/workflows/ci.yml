@@ -242,6 +242,20 @@ jobs:
           TAPESTRY_GOOGLE_LOGIN: ${{ vars.TAPESTRY_GOOGLE_LOGIN || 'false' }}
           REQUIRE_SUPABASE: "1"
         run: bash scripts/build_web.sh "$RUNNER_TEMP/web"
+      # CI is the source of truth for the R2 write keys: missing secret = failed deploy (pods would start without R2).
+      - name: Sync R2 keys (GitHub secrets -> Vercel env prod+preview, pod durable copy); never echoes values
+        if: env.HAS_SECRETS == 'true'
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_PUBLIC_URL: ${{ secrets.R2_PUBLIC_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python3 scripts/ci_sync_r2.py sync
       - name: Deploy to production, smoke-test, then point the domains at it
         if: env.HAS_SECRETS == 'true'
         env:
@@ -282,3 +296,9 @@ jobs:
           curl -sf -X POST "$SUPABASE_URL/rest/v1/deploy_log" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
             -H "Content-Type: application/json" -H "Prefer: return=minimal" \
             -d "{\"kind\":\"web\",\"sha\":\"$GITHUB_SHA\",\"url\":\"$URL\",\"run_id\":\"$GITHUB_RUN_ID\"}" || echo "deploy_log write failed (non-fatal)"
+      - name: Post-deploy check - prod pod writes R2 (storage.r2.write_ok)
+        if: env.HAS_SECRETS == 'true'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python3 scripts/ci_sync_r2.py check
