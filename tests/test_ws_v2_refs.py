@@ -125,3 +125,22 @@ def test_malformed_history_request_keeps_the_viewer_connected():
                 raise AssertionError("socket stopped answering after a malformed request")
     finally:
         gen.stop()
+
+
+def test_render_settings_tune_sdxl_sampler_live():
+    from types import SimpleNamespace
+
+    from infinite_tapestry.server import apply_render_settings
+
+    cfg = Config(mock=True)
+    cfg.backend, cfg.steps, cfg.guidance_scale = "sdxl", 18, 6.0
+    gen = SimpleNamespace(config=cfg, director=SimpleNamespace())
+    out = apply_render_settings({"steps": 26, "cfg": 6.5}, gen)
+    assert (cfg.steps, cfg.guidance_scale) == (26, 6.5) and out["steps"] == 26
+    apply_render_settings({"steps": 99}, gen)
+    assert cfg.steps == 40                       # clamped
+    apply_render_settings({}, gen)
+    assert cfg.steps == 40                       # absent keys keep the current value
+    cfg.backend = "klein"
+    apply_render_settings({"steps": 20}, gen)
+    assert cfg.steps == 40                       # distilled backends are not touched

@@ -62,7 +62,16 @@ def apply_render_settings(r: dict, generator) -> dict:
     bs = num("bridge_strength", 0.3, 1.0, float)
     if bs is not None:
         cfg.anchor_bridge_strength = bs
-    out.update(seam_px=cfg.anchor_seam_px, bridge_strength=cfg.anchor_bridge_strength)
+    # Sampler A/B without a restart (absent keys keep the preset): denoise steps and CFG for SDXL.
+    if getattr(cfg, "backend", "") == "sdxl":
+        stp = num("steps", 10, 40)
+        if stp is not None:
+            cfg.steps = stp
+        g = num("cfg", 3.0, 9.0, float)
+        if g is not None:
+            cfg.guidance_scale = g
+    out.update(seam_px=cfg.anchor_seam_px, bridge_strength=cfg.anchor_bridge_strength, steps=cfg.steps,
+               cfg=cfg.guidance_scale)
     return out
 
 
