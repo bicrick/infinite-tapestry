@@ -13,7 +13,7 @@ RELEASE_POLL_S=${RELEASE_POLL_S:-120}
     [ -f /root/supervise.pause ] && continue
     set -a; . /root/.tapestry.env 2>/dev/null; set +a
     [ -n "${SUPABASE_URL:-}" ] || continue
-    NEW=$(curl -sf --max-time 15 -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+    NEW=$(curl -sf --retry 3 --retry-all-errors --max-time 15 -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
           "$SUPABASE_URL/storage/v1/object/deploy/worker/latest.txt?t=$(date +%s)" | tr -dc 'a-f0-9' | head -c 40) || continue
     CUR=$(basename "$(readlink -f /root/it)")
     [ -n "$NEW" ] && [ "$NEW" != "$CUR" ] && [ "$NEW" != "$BAD" ] || continue
