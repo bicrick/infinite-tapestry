@@ -75,7 +75,7 @@ USER_NEGATIVE = ("text, letters, words, watermark, signage, frame, border, split
                  "nsfw, nude, naked, nudity, sexual, nipples, cleavage, erotic")
 MIN_TRANSITION = 1  # strips; scenes change every ~10-15 s (blend 2-4 + hold 1-3 at ~2.7 s/strip)
 MAX_TRANSITION = 3
-MAX_HOLD_USER = 4  # klein is coherent: short scenes (~10-15 s)
+MAX_HOLD_USER = 4  # short user scenes (~10-15 s)
 MAX_HOLD = 4  # scenes should switch often; long holds read as stalls
 _scene_ids = __import__("itertools").count(1)
 
@@ -509,11 +509,6 @@ class LiveDirector:
             return ", ".join(x for x in (USER_NEGATIVE, extra) if x)
         return ", ".join(x for x in (self.negative_prompt, extra, QUALITY_NEGATIVE) if x)
 
-    def title_for(self, t: float) -> str:
-        with self._lock:
-            scene = self._target if (self._target and t >= 0.5) else self._current
-            return scene["title"]
-
     def to_dict(self) -> dict:
         with self._lock:
             return {
@@ -545,11 +540,6 @@ class LiveDirector:
             self.loop = bool(d.get("loop", False))
             _scene_ids = __import__("itertools").count(int(d.get("next_id", 1)) + 1)
 
-    def flagged_scene(self) -> dict:
-        """The scene currently being painted (target if blending), for strike bookkeeping."""
-        with self._lock:
-            return dict(self._target or self._current or {})
-
     def drop_flagged(self, at: int) -> None:
         """Abandon the scene being painted after an explicit-content flag; resume on Auto."""
         with self._lock:
@@ -560,14 +550,6 @@ class LiveDirector:
                 if safe:
                     self._current = safe
             self._active_since = at
-
-    def safe_prompt(self) -> str:
-        """Most recent Auto scene prompt to repaint with after an explicit-content flag."""
-        with self._lock:
-            for s in reversed(self.history + self._queue):
-                if s.get("origin") == "auto" and s.get("prompt"):
-                    return s["prompt"]
-        return "a wide empty desert highway at dusk"
 
     def caption(self) -> dict:
         """Scene the most recent strip mostly shows (target once past halfway through a blend)."""

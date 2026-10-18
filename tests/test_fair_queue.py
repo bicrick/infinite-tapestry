@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from infinite_tapestry import crowd as crowd_mod
-from infinite_tapestry.crowd import BUSY_HOLD, BUSY_PENDING, Crowd, direct_plan
+from infinite_tapestry.crowd import BUSY_HOLD, BUSY_PENDING, Crowd
 from tests.test_crowd_features import FakeDirector, FakeInterpreter, FakeSupa
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,11 +55,6 @@ def test_busy_queue_uses_atomic_fair_pick_and_short_holds():
     assert [sc["idea_ids"] for sc in d.added] == [[3], [9]]  # one scene per idea, in order, never woven
     assert all(sc["hold"] == BUSY_HOLD for sc in d.added)
     assert 2 <= BUSY_HOLD <= 3
-
-
-def test_direct_plan_hold_default_and_busy():
-    assert direct_plan(["x"])["scenes"][0]["hold"] == 4
-    assert direct_plan(["x"], hold=2)["scenes"][0]["hold"] == 2
 
 
 def test_gpu_rate_default_is_real_runpod_rate():

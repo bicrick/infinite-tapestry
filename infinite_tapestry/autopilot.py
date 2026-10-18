@@ -13,7 +13,7 @@ from typing import Any, Callable
 from .prompts import make_scene, soft_title
 from .moods import MoodRotator
 from . import looks, pools
-from .themes import HeadlineCache, ThemeMemory, brief, clean_title, mentions_minor, pick_mode
+from .themes import HeadlineCache, ThemeMemory, clean_title, mentions_minor
 
 logger = logging.getLogger(__name__)
 

@@ -277,9 +277,6 @@ class SupabaseMirror:
     def supabase_public_base(self) -> str:
         return f"{self.url}/storage/v1/object/public/{self.public_bucket}/{self.prefix}/strips/"
 
-    def r2_live(self) -> bool:
-        return bool(self.r2 and self.r2.cors_ok())
-
     def public_base(self) -> str:
         """Where viewers load strips: always R2 when it is configured (new strips exist nowhere else). Supabase only
         when the pod has no R2 at all (degraded; old strips still load from there)."""

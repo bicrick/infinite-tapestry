@@ -55,15 +55,6 @@ class Config:
     takeover_cfg_boost: float = 3.0  # extra CFG during a user takeover (CFG models)
     scene_change_repaint: float = 0.7  # fraction of context repainted while blending into a new scene
     user_cfg_boost: float = 1.5  # extra CFG for user ideas
-    dup_check: bool = False  # reject strips that clone visible context (klein preset turns it on)
-    dup_threshold: float = 0.8
-    dup_retries: int = 2
-    pan_variations: bool = False  # vary each strip's framing within a scene so subjects don't tile
-    vision_transitions: bool = False  # Auto looks at the screen and inserts bridge strips before each scene
-    context_ref: bool = False  # klein: pass a downscaled view of the visible window as a reference image
-    klein_blend: str = "snap"  # klein prompt change: "snap" at t>=0.5 or "slerp" embeddings across the blend
-    context_mask_px: int = 0  # mask (repaint) this many px of far-left context so the model can't copy it
-    seam_feather: int = 48  # klein: px ramp blending new pixels over kept context
     fresh_anchor: bool = False  # scene change = fresh txt2img window + seam bridge (no old layout carry-over)
     anchor_bridge_px: int = 128  # px of the new scene (past the crossfade) the bridge pass may repaint
     anchor_seam_px: int = 192  # crossfade width at a fresh-anchor seam (admin live setting, <= overlap)
@@ -169,16 +160,13 @@ def config_from_args(args: Any) -> Config:
         device="cpu" if args.mock else args.device,
         backend=getattr(args, "backend", None) or "sd15",
     )
-    if kw["backend"] in ("sdxl", "klein"):
+    if kw["backend"] == "sdxl":
         base = Config()
         for k, v in SDXL_PRESET.items():
             if k in kw and kw[k] == getattr(base, k):
                 kw[k] = v
             elif k not in kw:
                 kw[k] = v
-    if kw["backend"] == "klein":
-        for k, v in KLEIN_PRESET.items():
-            kw[k] = v
     return Config(**kw)
 
 
@@ -189,12 +177,3 @@ SDXL_PRESET: dict[str, Any] = {
     "height": 1024, "window_width": 1024, "strip_width": 256, "overlap": 192, "repaint_band": 128,
     "steps": 26, "guidance_scale": 6.5, "seam_retries": 1, "fresh_anchor": True, "scroll_speed": 60.0, "scroll_speed_min": 16.0,
 }
-
-
-# FLUX.2 [klein] 4B (Apache-2.0): SDXL geometry, 4 distilled steps, no CFG.
-# Narrow repaint band + no 70% scene-change repaint: a wide repainted band got cross-faded over
-# the old pixels (ghosting) and let klein redraw whole compositions each strip. Bakeoff: tapestry-samples/blend.
-KLEIN_PRESET: dict[str, Any] = {"steps": 3, "fresh_anchor": False, "guidance_scale": 1.0, "user_cfg_boost": 0.0, "repaint_band": 48,
-                                "scene_change_repaint": 0.0, "dup_check": True,
-                                "seam_retries": 1, "pan_variations": False,
-                                "vision_transitions": True}

@@ -14,7 +14,6 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from .prompts import soft_title
 
 logger = logging.getLogger(__name__)
 
@@ -56,38 +55,6 @@ Functional needs only: one continuous scene that can extend sideways (not one ce
 Never: nudity or sexual content, children/minors, hateful slurs or symbols, recognizable real people.
 transition = strips to blend in (2-3), hold = strips to stay (2-4).
 Reply with ONLY JSON: {{"scenes":[{{"title":"2-4 word name","prompt":"...","negative":"","transition":2,"hold":3,"style":"the look in 2-4 words"}}],"note":"one short sentence"}}"""
-_IMMERSIVE_NOTE = (
-    "\nSubject and framing are OPEN: any subject at any scale and any framing is welcome: vast places, interiors, "
-    "close-ups, macro details, single objects, materials and textures, patterns, abstract art. Take the idea LITERALLY: "
-    "if it asks for a close-up or a texture, fill the frame with exactly that; if it names a place, show that place. "
-    "Do not reinterpret a material, texture or object request as a landscape or environment."
-)
-_CINEMA_NOTE = (
-    "\nCinematography (do this for EVERY scene before writing): pick the camera that best shows THIS subject, e.g. "
-    "aerial wide for a stadium, extreme macro for a texture or material, close-up for an object, low angle for monuments, "
-    "handheld in a market. Choose lens (14mm ultra-wide, 35mm, 85mm, 100mm macro), time of day, lighting and weather on purpose. "
-    "Write a rich prompt with ONE clear focal subject, crowds and people when the place would have them, visible motion "
-    "(motion blur, flying sparks, waving flags, rain streaks), and depth layers (foreground / midground / background). "
-    "Mini narrative: give each scene \"beats\": 1-2 full prompts that play in order across its strips, same subject, "
-    "a different framing or moment (keep the requested framing: a close-up idea stays close). \"prompt\" = the first beat."
-)
-_AUTO_RENDER_NOTE = (
-    "\nRenderer strengths (Auto only): the image model is WEAKEST at hyperreal scenes built around people (faces, crowds, "
-    "street scenes, people doing things). Favor nature, fractals, abstract worlds, textures and materials, cosmic and "
-    "underwater scenes, landscapes, and architecture WITHOUT people. If people appear at all, keep them tiny, distant "
-    "silhouettes, never the subject. Any look is fine: photoreal, painterly, illustrated or abstract, whatever makes the "
-    "scene most striking. style = a short label for the look, e.g. \"photo\", \"oil painting\", \"fractal art\"."
-)
-_AUTO_CINEMA_NOTE = (
-    "\nCinematography (every scene): pick the camera that best shows THIS place (ultra-wide vista, drone over terrain, "
-    "low angle up a structure, close-up of an object, macro of a texture or material), plus lens, time of day, light and weather on purpose. ONE clear focal "
-    "subject, visible motion (drifting particles, flowing water or fabric, swirling light), depth layers "
-    "(foreground / midground / background). Give each scene \"beats\": 1-2 full prompts that play in order across its "
-    "strips (same subject, different framing or moment). \"prompt\" = the first beat."
-)
-
-
-
 class PromptInterpreter:
     def __init__(self, api_key: str | None = None, model: str | None = None, timeout: float = 45.0) -> None:
         self.api_key = api_key if api_key is not None else (os.environ.get("TAPESTRY_ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY", ""))
@@ -251,7 +218,6 @@ def assemble_plan(core: str, title: Any = None, hold: int = 3) -> dict[str, Any]
                         "transition": 1, "hold": hold, "beats": []}]}
 
 
-
 _REFUSAL = re.compile(
     r"\b(i can(?:no|')t|i won't|i will not|i'm (?:not able|unable)|i am (?:not able|unable)|cannot (?:help|create|assist)|"
     r"not comfortable|against (?:my|the) (?:guidelines|policy)|i'd rather not|instead, (?:how about|i can))",
@@ -274,7 +240,6 @@ def short_prompt(p: str, max_words: int = 20) -> str:
 
 def is_refusal(text: str) -> bool:
     return bool(_REFUSAL.search(text or ""))
-
 
 
 def parse_plan(text: str) -> dict[str, Any]:

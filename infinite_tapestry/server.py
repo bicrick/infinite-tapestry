@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 if TYPE_CHECKING:
@@ -499,13 +499,6 @@ def create_app(
         a = clock_task.get("auto")
         if autopilot and (a is None or a.done()):
             clock_task["auto"] = asyncio.get_running_loop().create_task(autopilot.run())
-        tr = clock_task.get("trans")
-        if (generator is not None and getattr(config, "vision_transitions", False) and not config.mock
-                and interpreter.enabled and (tr is None or tr.done())):
-            from .transitions import Transitioner
-
-            app.state.transitioner = getattr(app.state, "transitioner", None) or Transitioner(generator.director, generator, interpreter)
-            clock_task["trans"] = asyncio.get_running_loop().create_task(app.state.transitioner.run())
 
     app.state.config = config
     app.state.buffer = buffer
@@ -985,8 +978,6 @@ def create_app(
                         elif t == "move":
                             d.move(int(sid), int(data.get("to", 0)))
                         elif t == "edit":
-                            from .guard import is_blocked
-
                             prompt = data.get("prompt")
                             from .guard import is_disallowed
 

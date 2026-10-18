@@ -61,12 +61,6 @@ def has_cliche(text: str) -> bool:
     return bool(_CLICHE_RE.search(text or ""))
 
 
-def find_cliche(text: str) -> str | None:
-    """The (normalized) classic subject a scene uses, e.g. 'nebula', or None."""
-    m = _CLICHE_RE.search(text or "")
-    return m.group(1).lower() if m else None
-
-
 class HeadlineCache:
     def __init__(self, feeds: list[str] | None = None, refresh_s: float = REFRESH_S, timeout: float = 8.0) -> None:
         self.feeds = feeds if feeds is not None else (

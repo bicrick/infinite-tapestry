@@ -41,7 +41,7 @@ function matchesCap(cap, it) {
   const title = String(cap.title || "").trim();
   const body = String(it.body || "").trim();
   if (!title || !body) return true;
-  // direct_plan titles are body[:40]; Haiku titles may differ — handle is enough then.
+  // titles may be rewritten by the interpreter; the handle is enough then.
   if (body.startsWith(title) || title === body.slice(0, 40)) return true;
   return awaitingOn.size <= 1;
 }

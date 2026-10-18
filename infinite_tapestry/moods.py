@@ -60,14 +60,6 @@ class MoodRotator:
         self.left -= scenes
         return self.current
 
-    @staticmethod
-    def relax_cliche(key: str) -> bool:
-        return bool(key in _BY_KEY and _BY_KEY[key][3])
-
-    @staticmethod
-    def is_beautiful(key: str) -> bool:
-        return bool(key in _BY_KEY and _BY_KEY[key][2])
-
     def brief(self, key: str) -> str:
         m = _BY_KEY[key]
         extra = (" This is a BEAUTY mood: no humor, no gags, no animals doing jobs, no mashing an ordinary/bureaucratic "
@@ -86,6 +78,3 @@ class MoodRotator:
                 + extra + f" Variation seed {seed}: let it push you to an unexpected subject, place and palette.")
 
 
-def beautiful_share() -> float:
-    tot = sum(m[1] for m in MOODS)
-    return sum(m[1] for m in MOODS if m[2]) / tot

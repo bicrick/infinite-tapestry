@@ -20,18 +20,9 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from . import pools
-from .prompts import make_scene, soft_title
+from .prompts import make_scene
 
 
-
-def direct_plan(bodies: list[str], hold: int = 4) -> dict:
-    """One scene per idea, the user's own words verbatim (+ a neutral quality hint; no framing or subject imposed)."""
-    scenes = []
-    for b in bodies:
-        b = " ".join(str(b).split())[:400]
-        scenes.append({"title": soft_title(b), "prompt": f"{b}, rich detail",
-                       "negative": "", "transition": 1, "hold": hold})
-    return {"scenes": scenes, "note": "straight to your idea", "source": "direct", "model": None}
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +94,6 @@ class Crowd:
     busy = False                         # fair-queue mode (more than BUSY_PENDING waiting)
     pending: list = []
     viewers = staticmethod(lambda: 0)   # set by the server: live viewer count
-    _prio_run = 0                        # priority picks since the last free one (fairness interleave)
     _limits: dict = {}
     _limits_at = 0.0
 
@@ -121,8 +111,7 @@ class Crowd:
                 "busy": int(self._limits.get("busy_pending") or BUSY_PENDING)}
 
     def _pick(self, rows: list, n: int, busy: bool, ratio: int) -> list:
-        """Busy: donor/boosted ideas jump ahead, interleaved `ratio` priority : 1 free so free ideas still play.
-        Rows arrive in the mode's order (FIFO or votes); priority rows keep boost-then-that order."""
+        """Fair pick (`ratio` is unused; kept for the call signature)."""
         # Everyone waits their turn; no paid or donor priority, no curation. Busy: take turns by
         # submitter (round-robin, one idea per person per round, arrival/vote order within each).
         # Quiet: plain order, so one person may queue as much as they like.
@@ -144,15 +133,6 @@ class Crowd:
                     out.append(v[k])
             k += 1
         return out
-        prio = sorted([r for r in rows if r.get("_prio")], key=lambda r: -(r.get("boost_cents") or 0))
-        free = [r for r in rows if not r.get("_prio")]
-        out = []
-        while len(out) < n and (prio or free):
-            if prio and (self._prio_run < ratio or not free):
-                out.append(prio.pop(0)); self._prio_run += 1
-            else:
-                out.append(free.pop(0)); self._prio_run = 0
-        return out  # cached pool ideas still waiting (for the canonical upcoming list)
 
     _title_tasks: set = set()
     user_acted: Callable[[], None] = staticmethod(lambda: None)

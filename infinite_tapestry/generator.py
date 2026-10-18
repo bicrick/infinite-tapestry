@@ -59,16 +59,6 @@ def seam_score(img: Image.Image, x0: int, x1: int) -> float:
     return float(score.max())
 
 
-# The panorama travels through one world: each strip gets a different framing so the
-# model doesn't redraw the same focal subject (farmhouse, dog crowd) side by side.
-PAN_CUES = [
-    "The camera pans right to a different part of the same place, new foreground details, varied composition",
-    "Further along: open space and depth, a different landmark of this world, the main subject smaller in the distance",
-    "Panning on: close foreground elements of this world on the right, different arrangement, no repeated objects",
-    "Continuing the journey: a new area of this world with different scale and layout, fresh details",
-]
-
-
 class StripGenerator:
     """Produces strips on a worker thread into a StripBuffer."""
 
@@ -211,16 +201,6 @@ class StripGenerator:
         if band and user_takeover and not cfg.mock:
             band = max(band, ctx_w - int(getattr(cfg, "takeover_seam_px", 96)))
         self.last_band = band
-        hide = int(getattr(cfg, "context_mask_px", 0) or 0)
-        if hide and self._strip_index > 0 and not cfg.mock:
-            # Show the model only the context next to the seam; masking the far-left context
-            # stops it from copying whole objects it can see (klein in-context repetition).
-            band = max(band, 0)
-            import numpy as np
-
-            m = np.asarray(mask).copy()
-            m[:, :min(hide, ctx_w - band - 32)] = 255
-            mask = Image.fromarray(m, mode="L")
         if band:
             import numpy as np
 
@@ -231,7 +211,7 @@ class StripGenerator:
         if hasattr(self.inpainter, "guidance"):
             user_scene = (scene_meta or {}).get("origin") == "user"
             boost = getattr(cfg, "user_cfg_boost", 1.5) if user_scene else 0.0
-            if user_takeover and cfg.guidance_scale > 1.5:   # CFG models only (klein is distilled, guidance 1.0)
+            if user_takeover and cfg.guidance_scale > 1.5:
                 boost = max(boost, getattr(cfg, "takeover_cfg_boost", 3.0))
             self.inpainter.guidance = cfg.guidance_scale + boost
         from .guard import is_disallowed
@@ -255,23 +235,11 @@ class StripGenerator:
         if hasattr(self.inpainter, "set_styles"):
             self.inpainter.set_styles(ramp(style_a, style_b, blend_t if prompt_b else 0.0))
         seed = cfg.seed + self._strip_index
-        if getattr(cfg, "pan_variations", False) and not cfg.mock and not user_scene:
-            cue = PAN_CUES[self._strip_index % len(PAN_CUES)]
-            prompt_a = f"{prompt_a}. {cue}"
-            if prompt_b:
-                prompt_b = f"{prompt_b}. {cue}"
         if hasattr(self.inpainter, "set_ref") and hasattr(self.director, "ref_ids"):
             from . import refs as _refs
 
             rid, rscale = _refs.schedule(*self.director.ref_ids(), blend_t if prompt_b else 0.0)
             self.inpainter.set_ref(rid, _refs.get(rid), rscale)
-            if rid is None and getattr(cfg, "context_ref", False) and not cfg.mock and self._strip_index > 0 and not user_scene:
-                # Full-composition awareness: a downscaled view of what's on screen (last ~8 strips)
-                # rides along as a klein reference image; the thin band still pins the seam.
-                cw = min(canvas.width, cfg.strip_width * 8)
-                view = canvas.crop((canvas.width - cw, 0, canvas.width, canvas.height))
-                view = view.resize((max(64, cw * 384 // canvas.height // 16 * 16), 384), Image.Resampling.BILINEAR)
-                self.inpainter.set_ref("ctx", view, 1.0)
 
         # Fresh anchor on a scene change: paint the new scene from scratch (no tapestry context, so the
         # old horizon / bands / rows can't carry over), then join it to the tapestry with a bridge inpaint
@@ -310,19 +278,6 @@ class StripGenerator:
             logger.info("Strip %d attempt %d looks seamed (score %.1f); retrying", self._strip_index, k, score)
         self.last_seam_score = best_score
         generated = best
-        # Near-duplicate guard: the new strip must not be a copy of something already visible in
-        # the context (klein can clone the crowd/objects it sees). Regenerate with a fresh seed.
-        self.last_dup_score = 0.0
-        if getattr(cfg, "dup_check", False) and self._strip_index > 0 and not cfg.mock:
-            for k in range(int(getattr(cfg, "dup_retries", 2))):
-                d = dup_score(generated, window, ctx_w, cfg.window_width - margin)
-                self.last_dup_score = d
-                if d < cfg.dup_threshold:
-                    break
-                logger.info("Strip %d repeats its context (dup %.2f); regenerating", self._strip_index, d)
-                generated = self.inpainter.generate(
-                    image=window, mask=mask, prompt=prompt_a, negative_prompt=self.director.negative_for(blend_t),
-                    seed=seed + 31337 * (k + 1), prompt_b=prompt_b, t=blend_t)
         if generated.size != window.size:
             generated = generated.resize(window.size, Image.Resampling.LANCZOS)
 
@@ -637,27 +592,3 @@ def rebuild_canvas(strips: list, overlap: int) -> Image.Image | None:
         c.paste(im, (out.width - ov, 0))
         out = c
     return out
-
-
-def dup_score(generated: Image.Image, window: Image.Image, ctx_w: int, right: int) -> float:
-    """Max normalised correlation between the newly painted strip and any same-width slice of the
-    visible context (64 px steps), on small high-passed grayscale thumbnails. ~1.0 = cloned content."""
-    import numpy as np
-
-    def thumb(img):
-        g = np.asarray(img.convert("L").resize((max(1, img.width // 16), max(1, img.height // 16)),
-                                                Image.Resampling.BILINEAR), dtype=np.float32)
-        return g
-    w = right - ctx_w
-    if w <= 0:
-        return 0.0
-    new = thumb(generated.crop((ctx_w, 0, right, generated.height)))
-    new = new - new.mean(); nn = float(np.sqrt((new * new).sum())) or 1.0
-    best = 0.0
-    for x in range(0, ctx_w - w + 1, 64):
-        old = thumb(window.crop((x, 0, x + w, window.height)))
-        if old.shape != new.shape:
-            continue
-        old = old - old.mean(); on = float(np.sqrt((old * old).sum())) or 1.0
-        best = max(best, float((new * old).sum() / (nn * on)))
-    return best

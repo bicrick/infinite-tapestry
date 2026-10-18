@@ -141,6 +141,6 @@ def test_render_settings_tune_sdxl_sampler_live():
     assert cfg.steps == 40                       # clamped
     apply_render_settings({}, gen)
     assert cfg.steps == 40                       # absent keys keep the current value
-    cfg.backend = "klein"
+    cfg.backend = "sd15"
     apply_render_settings({"steps": 20}, gen)
-    assert cfg.steps == 40                       # distilled backends are not touched
+    assert cfg.steps == 40                       # the SD1.5 fallback keeps its own preset

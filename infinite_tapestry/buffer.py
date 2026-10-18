@@ -69,9 +69,6 @@ class StripBuffer:
         with self._cond:
             return max(0, self._produced - self._acknowledged)
 
-    def is_low(self) -> bool:
-        return self.depth() < self.minimum
-
     def needs_fill(self) -> bool:
         with self._cond:
             return (not self._closed) and (self._produced - self._acknowledged) < self.target
