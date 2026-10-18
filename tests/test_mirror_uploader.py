@@ -12,35 +12,47 @@ def _mirror(monkeypatch, r2=None, workers=2):
     return m
 
 
+class _GateR2:
+    bucket, public_url, _cors = "b", "https://pub", (0.0, True)
+
+    def __init__(self, put):
+        self._put = put
+
+    def put(self, key, data, ctype):
+        if key.endswith("write-check.txt"):
+            return
+        self._put(key)
+
+    def cors_ok(self):
+        return True
+
+
 def test_row_written_only_after_its_image(monkeypatch):
-    m = _mirror(monkeypatch)
     order = []
     lock = threading.Lock()
 
-    def req(method, path, data=None, ctype=""):
+    def put(key):
         time.sleep(0.05)
         with lock:
-            order.append(("img", path))
-        return b""
-    monkeypatch.setattr(m, "_req", req)
+            order.append(("img", key))
+    m = _mirror(monkeypatch, r2=_GateR2(put))
     m.put("public:strips/00000001.webp", b"x", "image/webp", after=lambda: order.append(("row", 1)))
     for _ in range(100):
         if ("row", 1) in order:
             break
         time.sleep(0.02)
-    assert order.index(("img", "public:strips/00000001.webp")) < order.index(("row", 1))
+    assert order.index(("img", "live-test/strips/00000001.webp")) < order.index(("row", 1))
 
 
 def test_strips_jump_ahead_of_tiles(monkeypatch):
-    m = _mirror(monkeypatch, workers=1)
     gate = threading.Event()
     seen = []
 
-    def req(method, path, data=None, ctype=""):
+    def put(key):
         gate.wait(2)
-        seen.append(path)
-        return b""
-    monkeypatch.setattr(m, "_req", req)
+        seen.append(key)
+    m = _mirror(monkeypatch, r2=_GateR2(put), workers=1)
+    time.sleep(0.05)
     m.put("public:lod/1/000001.jpg", b"t", "image/jpeg")   # occupies the single worker
     time.sleep(0.05)
     m.put("public:lod/1/000002.jpg", b"t", "image/jpeg")
@@ -50,7 +62,7 @@ def test_strips_jump_ahead_of_tiles(monkeypatch):
         if len(seen) == 3:
             break
         time.sleep(0.02)
-    assert seen.index("public:strips/00000009.webp") < seen.index("public:lod/1/000002.jpg")
+    assert seen.index("live-test/strips/00000009.webp") < seen.index("live-test/lod/1/000002.jpg")
 
 
 class _R2:
@@ -85,17 +97,3 @@ def test_r2_off_reason_names_missing_keys_without_values(monkeypatch):
     monkeypatch.setenv("R2_ACCESS_KEY_ID", "secret-value-123")
     assert st.R2Public.from_env() is None
     assert "R2_ENDPOINT" in st.R2Public.off_reason and "secret-value-123" not in st.R2Public.off_reason
-
-
-def test_dual_write_keeps_supabase_copy_for_fallback(monkeypatch):
-    r2 = _R2(False)
-    m = _mirror(monkeypatch, r2=r2)
-    monkeypatch.setenv("TAPESTRY_SUPABASE_PUBLIC", "1")
-    sb = []
-    monkeypatch.setattr(m, "_req", lambda method, path, data=None, ctype="": sb.append(path) or b"")
-    m.put("public:strips/00000005.webp", b"s", "image/webp")
-    for _ in range(100):
-        if sb and "live-test/strips/00000005.webp" in r2.keys:
-            break
-        time.sleep(0.02)
-    assert sb == ["public:strips/00000005.webp"] and "live-test/strips/00000005.webp" in r2.keys

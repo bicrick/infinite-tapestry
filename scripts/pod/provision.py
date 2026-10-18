@@ -15,7 +15,7 @@ GPUS = ["NVIDIA GeForce RTX 4090", "NVIDIA RTX A5000", "NVIDIA GeForce RTX 3090"
 KEY = pathlib.Path.home() / ".ssh/rp_tapestry"
 ENV_KEYS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "TAPESTRY_ANTHROPIC_API_KEY", "RUNPOD_API_KEY",
             "R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL", "R2_BUCKET"]
-FIXED = {"TAPESTRY_BACKEND": "sdxl", "TAPESTRY_SUPABASE_PUBLIC": "1", "TAPESTRY_STORAGE_PREFIX": "live-sdxl", "TAPESTRY_GPU_CENTS_PER_HOUR": "89", "TAPESTRY_SITE_URL": "https://infinitetapestry.app"}
+FIXED = {"TAPESTRY_BACKEND": "sdxl", "TAPESTRY_STORAGE_PREFIX": "live-sdxl", "TAPESTRY_GPU_CENTS_PER_HOUR": "89", "TAPESTRY_SITE_URL": "https://infinitetapestry.app"}
 RUN_SH = """#!/bin/bash
 set -a; . /root/.tapestry.env; set +a
 cd /root/it

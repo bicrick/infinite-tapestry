@@ -25,7 +25,6 @@ if ! grep -q '^R2_ACCESS_KEY_ID=' /root/.tapestry.env.new && [ -n "${SUPABASE_UR
     echo "selfboot: WARNING R2 keys unavailable (app will alarm in /health)"
   fi
 fi
-grep -q '^TAPESTRY_SUPABASE_PUBLIC=' /root/.tapestry.env.new || echo 'TAPESTRY_SUPABASE_PUBLIC=1' >> /root/.tapestry.env.new
 mv /root/.tapestry.env.new /root/.tapestry.env
 umask 022
 cat > /root/run.sh <<'R'

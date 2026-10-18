@@ -109,7 +109,7 @@ def test_gpu_js_pod_env_carries_r2_and_never_disables_it():
     full, bare = json.loads(r.stdout)
     assert all(full[k] == v for k, v in KEYS.items())
     assert "TAPESTRY_R2" not in full and "TAPESTRY_R2" not in bare
-    assert full["TAPESTRY_SUPABASE_PUBLIC"] == "1"
+    assert "TAPESTRY_SUPABASE_PUBLIC" not in full   # no Supabase Storage copies any more
 
 
 def test_provision_puts_r2_in_the_runpod_env():

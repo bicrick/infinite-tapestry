@@ -183,6 +183,7 @@ class SupabaseMirror:
         self._seq_lock = threading.Lock()
         self.uploaded = 0
         self.failed = 0
+        self.dropped = 0
         self.last_error = ""
         self.r2 = R2Public.from_env()
         self.r2_write_ok: bool | None = None
@@ -239,7 +240,7 @@ class SupabaseMirror:
               else {"configured": False, "write_ok": False, "error": R2Public.off_reason, "source": R2Public.creds_source})
         return {"r2": r2, "uploaded": self.uploaded, "failed": self.failed, "queue": self._q.qsize(),
                 "slow_queue": self._slow.qsize(), "last_error": self.last_error,
-                "supabase_public": self._supabase_public_too()}
+                "dropped_no_r2": self.dropped, "supabase_storage_writes": 0}
 
     @classmethod
     def from_env(cls) -> "SupabaseMirror | None":
@@ -260,17 +261,22 @@ class SupabaseMirror:
         return bool(self.r2 and self.r2.cors_ok())
 
     def public_base(self) -> str:
-        """Where viewers load strips: R2 once it serves CORS, else the Supabase public bucket."""
-        if self.r2_live():
+        """Where viewers load strips: always R2 when it is configured (new strips exist nowhere else). Supabase only
+        when the pod has no R2 at all (degraded; old strips still load from there)."""
+        if self.r2 is not None:
+            if not self.r2.cors_ok():
+                logger.warning("R2 public bucket answered without CORS; viewers fall back to Supabase for old strips")
             return f"{self.r2.public_url}/{self.prefix}/strips/"
         return self.supabase_public_base()
 
     def fallback_base(self) -> str | None:
-        return self.supabase_public_base() if self.r2_live() else None
+        """Read-only fallback for strips written before R2-only (the old R2 gap is being backfilled)."""
+        return self.supabase_public_base() if self.r2 is not None else None
 
-    def _supabase_public_too(self) -> bool:
-        # Keep the Supabase copy until browsers can read R2; TAPESTRY_SUPABASE_PUBLIC=1 forces dual writes.
-        return os.environ.get("TAPESTRY_SUPABASE_PUBLIC") == "1" or not self.r2_live()
+    def r2_key(self, path: str) -> str:
+        """Every binary asset lives on R2 under the session prefix: public:strips/x -> live-sdxl/strips/x,
+        canvas.png -> live-sdxl/canvas.png, crops/x -> live-sdxl/crops/x."""
+        return f"{self.prefix}/{path[len('public:'):] if path.startswith('public:') else path}"
 
     def _req(self, method: str, path: str, data: bytes | None = None, ctype: str = "application/octet-stream") -> bytes:
         bucket = self.bucket
@@ -296,9 +302,6 @@ class SupabaseMirror:
                 self._slow.put_nowait((path, data, ctype, after))
                 return
             prio = self.PRIO_STRIP if path.startswith("public:strips/") else self.PRIO_TILE
-            if prio == self.PRIO_STRIP and self.r2 is not None and self._supabase_public_too():
-                # Two independent jobs, so a slow Supabase copy never delays the R2 (primary) one.
-                self._q.put_nowait((prio, self._next(), "supabase:" + path, data, ctype, None))
             self._q.put_nowait((prio, self._next(), path, data, ctype, after))
         except queue.Full:
             self.failed += 1
@@ -373,8 +376,9 @@ class SupabaseMirror:
         return out
 
     def get(self, path: str) -> bytes | None:
-        if path.startswith("public:") and self.r2:
-            data = self.r2.get(f"{self.prefix}/{path[len('public:'):]}")
+        """R2 first; Supabase Storage is read-only fallback for old objects written before R2-only (never written now)."""
+        if self.r2:
+            data = self.r2.get(self.r2_key(path))
             if data:
                 return data
         try:
@@ -390,11 +394,20 @@ class SupabaseMirror:
                 try:
                     if path == "__call__":
                         data()
-                    elif path.startswith("supabase:"):
-                        self._req("POST", path[len("supabase:"):], data, ctype)
-                    elif path.startswith("public:") and self.r2:
+                    elif self.r2 is None:
+                        # R2-only: binary assets never go to Supabase Storage. The pod keeps its local copy and
+                        # /health is degraded until the watchdog brings R2 back.
+                        self.dropped += 1
+                        self.last_error = f"{path}: R2 unavailable ({R2Public.off_reason})"
+                        if after is not None:   # metadata (strip row) is relational data: still written
+                            try:
+                                after()
+                            except Exception as e:
+                                logger.warning("post-upload step for %s failed: %s", path, _err(e))
+                        break
+                    else:
                         try:
-                            self.r2.put(f"{self.prefix}/{path[len('public:'):]}", data, ctype)
+                            self.r2.put(self.r2_key(path), data, ctype)
                             if self.r2_write_ok is False:
                                 logger.info("R2 writes recovered")
                             self.r2_write_ok, self.r2_error = True, ""
@@ -405,8 +418,6 @@ class SupabaseMirror:
                                 self.r2_write_ok = False
                                 logger.error("R2 UPLOAD %s FAILED: %s", path, self.r2_error)
                             raise
-                    else:
-                        self._req("POST", path, data, ctype)
                     self.uploaded += 1
                     if after is not None:
                         try:
