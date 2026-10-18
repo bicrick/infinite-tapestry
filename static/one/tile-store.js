@@ -155,7 +155,7 @@ const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);
   const compQ = [];
   function drop(e) {
     if (e.page) { e.page.free.push(e.slot); e.page = null; } else if (e.t) { gl.deleteTexture(e.t); bytes -= e.bytes; }
-    tex.delete(e.key);
+    tex.delete(e.key); e.state = "dropped"; e.t = null; // tipSrc may still hold it: never re-composite a freed atlas slot (another strip lives there now)
   }
   function evict() {
     const ready = []; for (const e of tex.values()) if (e.state === "ready" && !COARSE(e.level) && !e.pin && e.used < frameNo && !e.page) ready.push(e);
@@ -185,8 +185,15 @@ const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);
     const out = []; for (const [p, q] of s) { const l = out[out.length - 1]; if (l && p <= l[1] + 1e-6) l[1] = Math.max(l[1], q); else out.push([p, q]); }
     e.spans = out;
   }
+  // A strip spans [g - overlap, g + 1]: its left inpainting overlap paints over the previous strip (classic draws the
+  // whole bitmap at g*core - overlap, in g order). Dropping it left a hard edge at every strip / chunk boundary.
+  const ovU = (s) => (s.level === 0 && !s.chunk && s.w && s.h ? Math.max(0, s.w - s.h / 4) / (s.h / 4) : 0);
+  const covers = (e, a, b) => !!(e.spans && e.spans.some(([p, q]) => p <= a && q >= b));
   function compositeInto(dst, s, ca = -Infinity, cb = Infinity) {
-    const a = Math.max(dst.u0, s.u0, ca), b = Math.min(dst.u1, s.u1, cb); if (b <= a) return null;
+    // A strip must not paint over the NEXT strip's overlap once that is already in the tile (from a pod chunk or
+    // strip g+1): stop at g+1-overlap. (Drawing the full core erased it: a hard edge one strip right of each new strip.)
+    const ov = ovU(s); if (ov && covers(dst, s.u1 - ov, s.u1)) cb = Math.min(cb, s.u1 - ov);
+    const a = Math.max(dst.u0, s.u0 - ov, ca), b = Math.min(dst.u1, s.u1, cb); if (b <= a) return null;
     const p = ppu(dst.level), x0 = (a - dst.u0) * p, x1 = (b - dst.u0) * p;
     if (x1 - x0 < 1) return null; // sub-pixel: wait until the span is wide enough (the cascade retries with the merged span)
     let su0, su1, sv0 = 0, sv1 = 1;
@@ -201,9 +208,27 @@ const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);
   function compositeUp(s) {
     if (!M || s.u1 <= M.units) return;
     tipSrc.set(s.key, s); if (tipSrc.size > 4000) tipSrc.delete(tipSrc.keys().next().value);
-    const l = s.level === 0 ? 1 : s.level, U = upt(l);
-    for (let t = Math.floor(s.u0 / U); t * U < s.u1; t++) { const d = tileFor(l, t); if (d) { const r = compositeInto(d, s); if (r) cascade(d, r[0], r[1]); } }
+    // Strips go straight into L1..L3, each level with its own "don't erase the next overlap" guard. (Cascading
+    // the L1 result up copied the whole L1 span, which re-erased the next strip's overlap at L2/L3.)
+    if (s.level === 0 && !s.chunk) { redrawStrip(s.u0); seamFix(s); return; }
+    const l = s.level, U = upt(l), a0 = s.u0 - ovU(s);
+    for (let t = Math.floor(a0 / U); t * U < s.u1; t++) { const d = tileFor(l, t); if (d) { const r = compositeInto(d, s); if (r) cascade(d, r[0], r[1]); } }
+    seamFix(s);
   }
+  // Order repair. (1) A strip landing after strip g+1 just covered g+1's overlap: redraw g+1 on top.
+  // (2) Pod chunk tiles (p1/p2/p3) are composites cut at chunk edges, so each chunk's FIRST strip has lost its left
+  // overlap (a hard edge every 16 strips at the live edge). After a chunk lands, redraw the full-res strip at each
+  // 16-strip boundary inside it (requested by the tiles pass) so the overlap is back, then cascade it up.
+  function redrawStrip(g) {
+    const t = tipSrc.get("s/" + g); if (!t || t.state !== "ready" || !t.t) return;
+    // straight into L1..L3 (the coarser chunk levels may exist without the L1 tile under them), then cascade above L3
+    for (let l = 1; l <= 3; l++) { const U = upt(l); for (let k = Math.floor((g - ovU(t)) / U); k * U < g + 1; k++) { const d = tileFor(l, k); if (d) { const r = compositeInto(d, t); if (r && l === 3) cascade(d, r[0], r[1]); } } }
+  }
+  function seamFix(s) {
+    if (s.level === 0 && !s.chunk) { redrawStrip(s.u0 + 1); return; }
+    const base = SDXL0(); for (let g = base + Math.ceil((s.u0 - base) / 16) * 16; g <= s.u1; g += 16) redrawStrip(g);
+  }
+  const chunkSeams = (u0, u1) => { const base = SDXL0(), out = []; for (let g = base + Math.ceil((u0 - base) / 16) * 16; g < u1; g += 16) out.push(g); return out; };
   function cascade(e, a, b) {
     const l = e.level + 1; if (l > 7) return;
     const sp = e.spans.find(([p, q]) => p <= a && q >= b) || [a, b];
@@ -229,7 +254,10 @@ const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);
     if (!M || dst.u1 <= M.units) return;
     pullFromBelow(dst); if (!tileFor(dst.level, Math.round(dst.u0 / upt(dst.level)))) return; // widened before any tip draw // a server tile landed: redraw the tip sources it overlaps (it was built before them)
     if (!M || dst.u1 <= M.units) return;
-    for (const s of tipSrc.values()) if (s.state === "ready" && s.t && s.u1 > dst.u0 && s.u0 < dst.u1 && (s.level === 0 ? dst.level === 1 : s.chunk === dst.level)) { const r = compositeInto(dst, s); if (r) cascade(dst, r[0], r[1]); }
+    // chunks first, then strips in g order (later strips' overlaps must land on top)
+    const list = []; for (const s of tipSrc.values()) if (s.state === "ready" && s.t && s.u1 > dst.u0 && s.u0 - 1 < dst.u1 && (s.level === 0 ? dst.level <= 3 : s.chunk === dst.level)) list.push(s); // strips too at L2/L3: they restore the chunk-edge overlaps
+    list.sort((p, q) => (q.level - p.level) || (p.u0 - q.u0));
+    for (const s of list) { const r = compositeInto(dst, s); if (r) cascade(dst, r[0], r[1]); }
   }
 
   // ---------- live ingest hooks ----------
@@ -261,7 +289,7 @@ const bm=await createImageBitmap(await r.blob());self.postMessage({id,bm},[bm]);
     init(glCtx, manifest, opts = {}) { gl = glCtx; M = manifest; apiBase = opts.apiBase || ""; onDirty = opts.onDirty || onDirty; },
     setManifest(m) { M = m; },
     get manifest() { return M; },
-    request, pump, flush, peek, peekKey, state, stripUrl, tileUrl, chunkUrl, CH, ppu,
+    request, pump, flush, peek, peekKey, state, stripUrl, tileUrl, chunkUrl, CH, ppu, chunkSeams,
     beginFrame(t, fast) { now = t; frameNo++; uploadMax = fast ? 1 : 3; uploadBudget = fast ? 2 : 4; },
     // Permanent backstop, requested before anything else: every L7..L5 tile, and every complete p3 live chunk past
     // the pyramid (256 strips each), so all of history up to the head has pixels at the coarse levels.

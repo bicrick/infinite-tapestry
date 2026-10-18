@@ -31,7 +31,7 @@
     bbuf = gl.createBuffer();
   }
   const layout = { bandY: 0, sLive: 100 };
-  const covered = [], sharpL = [];
+  const covered = [], sharpL = []; let lastGaps = [[0, 1]]; // boot counts as holes
   let bg = [0.02, 0.02, 0.024], verts = new Float32Array(6 * 5 * 64), cols = new Float32Array(0);
   const pass = {
     name: "tiles", order: 10, layout, levelFor,
@@ -83,17 +83,22 @@
       const vel = Math.sign(c.velocity || 0);
       const ts = s * Math.pow(2, c.target.zoom - c.zoom), tmid = c.target.centerTime, tu0 = tmid - W / 2 / ts, tu1 = Math.min(head, tmid + W / 2 / ts);
       const TL = levelFor(ts * dpr), L = levelFor(s * dpr), base = M.strips.sdxl.g0;
+      // Holes on screen (boot, a long jump): coarsest first so the whole band paints at once, then sharpen (prod's
+      // coarse-to-sharp, never an empty or half-filled band while the sharp level loads).
+      const holes = !!(lastGaps && lastGaps.length);
       for (let l = TL; l <= Math.min(7, Math.max(1, TL) + 2); l++) {
         const U = l === 0 ? 1 : M.levels[l - 1].units_per_tile;
         const t0 = Math.max(0, Math.floor(tu0 / U) - (vel < 0 ? 1 : 0)), t1 = Math.floor((tu1 - 1e-6) / U) + (vel > 0 ? 1 : 0);
         if (t1 - t0 > 48) continue;
         for (let t = t0; t <= t1; t++) {
-          const prio = (l - TL) * 1000 + Math.abs((t + 0.5) * U - tmid) * ts / 10;
+          const prio = (holes ? (Math.min(7, Math.max(1, TL) + 2) - l) : (l - TL)) * 1000 + Math.abs((t + 0.5) * U - tmid) * ts / 10;
           if (l === 0) { if (t < head) tiles.request(0, t, prio); continue; }
           if (t < M.levels[l - 1].tiles && (t + 1) * U <= M.units + U) tiles.request(l, t, prio);
           if ((t + 1) * U > M.units && l <= 3) { // past the pyramid: the live chunks of the same scale (complete ones)
             const N = tiles.CH[l]; for (let ch = Math.max(0, Math.floor((Math.max(t * U, M.units) - base) / N)); base + (ch + 1) * N <= Math.min(head, (t + 1) * U + N); ch++) tiles.request(l, ch, prio + 1, "p" + l + "/" + ch);
           }
+          if ((t + 1) * U > M.units && l <= 2 && U <= 64) { const sm = tiles.chunkSeams(Math.max(t * U, M.units), Math.min(head, (t + 1) * U)); // chunk-edge strips: restore their overlap (tile-store seamFix)
+            for (const g of sm) tiles.request(0, g, prio + 3); }
           if ((t + 1) * U > M.units && l <= 1) for (let g = Math.max(M.units, t * U); g < Math.min(head, (t + 1) * U); g++) tiles.request(0, g, prio + 2); // newest strips (incomplete chunk)
         }
       }
@@ -152,7 +157,7 @@
       cols.fill(0); for (let i = 0; i < covered.length; i += 2) { const a = Math.max(0, Math.floor(covered[i])), bb = Math.min(cols.length, Math.ceil(covered[i + 1])), v = sharpL[i / 2] ? 1 : 0.5; for (let x2 = a; x2 < bb; x2++) if (cols[x2] < v) cols[x2] = v; }
       for (let x2 = 0; x2 < Math.min(cols.length, Math.floor(xmin)); x2++) cols[x2] = 1; for (let x2 = Math.ceil(xmax); x2 < cols.length; x2++) cols[x2] = 1; // outside history: nothing to fill
       tiles.setCoverage(gaps, { y: y0, h: bandH }, cols);
-      f.band = { y: y0, h: bandH }; f.gaps = gaps; f.level = L; f.X = X;
+      f.band = { y: y0, h: bandH }; f.gaps = gaps; lastGaps = gaps; f.level = L; f.X = X;
     },
   };
   T.passes = T.passes || {}; T.passes.tiles = pass;

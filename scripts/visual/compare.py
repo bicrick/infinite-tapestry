@@ -21,7 +21,7 @@ def strip_url(g):
     i = g - SX["g0"]; return f"{R2}/live-sdxl/strips/{i:08d}.{'webp' if i >= SX['webp_from'] else 'jpg'}"
 def reference(c, W, Hb):
     s = c["s"]; u0 = c["center"] - W / 2 / s; u1 = c["center"] + W / 2 / s
-    ref = Image.new("RGB", (W, Hb)); head = M["units"]
+    ref = Image.new("RGB", (W, Hb)); head = int(c.get("head") or M["units"])
     if u1 - u0 <= 320:
         gs = [g for g in range(max(0, int(u0) - 2), min(head, int(u1) + 2))]
         with cf.ThreadPoolExecutor(16) as ex: ims = list(ex.map(lambda g: get(strip_url(g)), gs))
@@ -57,7 +57,7 @@ cases = json.load(open(os.path.join(out, "cases.json"))); fails = 0; rows = []
 for c in cases:
     ours = Image.open(os.path.join(out, c["name"] + ".png")).convert("RGB"); W, Hb = ours.size
     k = W / c["W"]; c = dict(c, s=c["s"] * k, W=W)  # device pixels
-    ref, u0, u1 = reference(c, W, Hb); head_x = (M["units"] - u0) * c["s"]
+    ref, u0, u1 = reference(c, W, Hb); head_x = (min(c.get("head") or M["units"], M["units"] if os.environ.get("PYR_ONLY") else 1e12) - u0) * c["s"]
     cut = int(max(0, min(W, head_x))) if head_x < W else W  # ignore beyond the pyramid's end (live chunks)
     o, r = ours.crop((0, 0, cut, Hb)), ref.crop((0, 0, cut, Hb))
     blur = lambda im: im.resize((max(1, cut // 8), max(1, Hb // 8)), Image.BOX)

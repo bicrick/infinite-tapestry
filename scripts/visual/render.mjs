@@ -10,11 +10,12 @@ const res = [];
 for (const g of POS) for (const z of ZS) for (const mode of MODES) {
   const p = await b.newPage({ viewport: { width: 1024, height: 600 }, deviceScaleFactor: +(process.env.DPR || 1) });
   if (mode === "coarse") await p.route(COARSE_BLOCK, (r) => r.abort());
+  if (mode === "chunks") await p.route(/\/live-sdxl\/strips\/|\/tm\/strips\//, (r) => r.abort()); // live edge: pod chunk tiles only
   await p.goto(`${base}/one-3c9d1f.html?t=s${g}&z=${z}`);
   await p.addStyleTag({ content: ".one-ui,.ui,#cmd,.dock,.top,.veil,#live-btn{visibility:hidden!important}" });
   await p.waitForFunction(() => window.__one && window.__one.ready, null, { timeout: 20000 });
   await p.waitForTimeout(+(process.env.WAIT || 7000));
-  const geo = await p.evaluate(() => { const c = Tapestry.camera.get(), f = Tapestry.renderer.lastCtx; return { center: c.centerTime, s: c.s, zoom: c.zoom, band: f.band, level: f.level, W: innerWidth }; });
+  const geo = await p.evaluate(() => { const c = Tapestry.camera.get(), f = Tapestry.renderer.lastCtx; return { center: c.centerTime, head: c.head, s: c.s, zoom: c.zoom, band: f.band, level: f.level, W: innerWidth }; });
   const name = `g${g}_z${z}_${mode}`;
   await p.screenshot({ path: `${out}/${name}.png`, clip: { x: 0, y: Math.round(geo.band.y) + 1, width: 1024, height: Math.max(8, Math.floor(geo.band.h) - 2) } });
   res.push({ name, g, z, mode, ...geo }); console.log(name, JSON.stringify(geo)); await p.close();
