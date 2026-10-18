@@ -256,6 +256,8 @@ def create_app(
         crowd = Crowd(supa, generator.director, interpreter, generator,
                       broadcast=lambda m: broadcast(m), on_change=lambda: broadcast_director(), mock=config.mock)
         crowd.viewers = lambda: len(clients)   # priority queue engages with a big audience
+        if autopilot is not None:   # an Auto plan in flight when an idea lands is stale: replan from the idea
+            crowd.user_acted = autopilot.user_acted
     if generator is not None:   # reactions on the scene on stage stretch its hold (LiveDirector._hold_len)
         generator.director.heat = lambda since: sum(sum(reactions.by_strip[i].values()) for i in range(since, since + 40) if i in reactions.by_strip)
     app.state.crowd = crowd

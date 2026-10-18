@@ -243,6 +243,14 @@ class LiveDirector:
                 pass
         return base
 
+    def _advance_after(self) -> int:
+        """Strips the stage scene holds before the next queued scene starts. A viewer's idea waiting behind an
+        Auto scene cuts it short (the normal blend still runs): an Auto scene that had just started used to play
+        its full width (up to auto_max strips) first, ~50 s live."""
+        if self._queue and self._queue[0].get("origin") == "user" and (self._current or {}).get("origin") == "auto":
+            return 0
+        return self._hold_len(self._current)
+
     def _begin(self, scene: dict, at: int) -> None:
         if self._target is not None:
             self._promote(self._target)
@@ -463,7 +471,7 @@ class LiveDirector:
                     self._active_since = strip_index
                 else:
                     return self._beat(self._current, strip_index, last=True), self._beat(self._target, 0), max(0.0, t)
-            if self._queue and strip_index - self._active_since >= self._hold_len(self._current):
+            if self._queue and strip_index - self._active_since >= self._advance_after():
                 nxt = self._queue.pop(0)
                 if self.loop:
                     self._queue.append(dict(nxt))

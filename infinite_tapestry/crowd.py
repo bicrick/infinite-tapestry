@@ -155,6 +155,7 @@ class Crowd:
         return out  # cached pool ideas still waiting (for the canonical upcoming list)
 
     _title_tasks: set = set()
+    user_acted: Callable[[], None] = staticmethod(lambda: None)
 
     async def _retitle(self, scene_id: int, body: str, cur: str) -> None:
         """Haiku's short title for a text idea, applied once it arrives (the scene already started with a local one)."""
@@ -321,6 +322,7 @@ class Crowd:
         if not queued:
             return
         self.director.add_user([sc for _, sc, _ in queued])
+        self.user_acted()
         for r, sc, plan in queued:
             try:
                 age = time.time() - datetime.fromisoformat(str(r.get("created_at")).replace("Z", "+00:00")).timestamp()

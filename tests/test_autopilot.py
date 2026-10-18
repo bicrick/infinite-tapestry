@@ -93,3 +93,22 @@ def test_token_budget_is_hourly():
     assert ap._can_call()
     ap._spent.append((time.monotonic(), 1500))
     assert not ap._can_call()
+
+
+def test_user_idea_cuts_a_just_started_auto_scene():
+    d = LiveDirector("seed", hold=0, blend=2)
+    d.widths = {"auto": (18, 18), "user": (5, 7)}
+    d.add([make_scene("long auto", origin="auto", transition=2)])
+    for i in range(1, 40):
+        p = d.frame_for(i)
+        if d.state()["current_scene"]["prompt"] == "long auto" and d.target is None:
+            break
+    start = i
+    d.add_user([make_scene("my idea", origin="user", transition=1)])
+    seen = None
+    for k in range(start + 1, start + 10):
+        a, b, t = d.frame_for(k)
+        if "my idea" in (a, b):
+            seen = k
+            break
+    assert seen is not None and seen - start <= 2
