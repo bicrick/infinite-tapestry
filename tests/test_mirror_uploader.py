@@ -97,3 +97,14 @@ def test_r2_off_reason_names_missing_keys_without_values(monkeypatch):
     monkeypatch.setenv("R2_ACCESS_KEY_ID", "secret-value-123")
     assert st.R2Public.from_env() is None
     assert "R2_ENDPOINT" in st.R2Public.off_reason and "secret-value-123" not in st.R2Public.off_reason
+
+
+def test_strip_rows_are_batched_into_one_request(monkeypatch):
+    m = _mirror(monkeypatch)
+    calls = []
+    monkeypatch.setattr(m, "_rest", lambda method, path, body=None, prefer="": calls.append((path, len(body))))
+    from infinite_tapestry.buffer import Strip
+    for i in range(5):
+        m.save_strip_row(Strip(index=i, width=1, height=1, overlap=0, jpeg=b"RIFF0000WEBP", prompt="p"))
+    assert calls == []
+    assert m.flush_rows() == 5 and calls == [("strips?on_conflict=session,idx", 5)]

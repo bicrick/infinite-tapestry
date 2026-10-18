@@ -493,20 +493,36 @@ class Crowd:
                         last_meter = time.monotonic()
                         await self.meter()
                     await self.refresh_pending()
+                    if self.pending:
+                        self.wake_ideas()   # a pending idea the site didn't announce still starts within a tick
                     await self.track_landing()
                 except Exception:
                     logger.exception("crowd tick failed")
-                await asyncio.sleep(3)
+                await asyncio.sleep(self.TICK_S)
         finally:
             ideas.cancel()
 
-    IDEA_POLL_S = 1.0
+    # Supabase request budget (free plan log ingestion): the site announces each submit over the WebSocket
+    # ("idea_added" -> wake_ideas), so ideas still start within ~1 s without polling every second. The timed pull
+    # is only a fallback. Was 1 s poll x 3 requests + a 3 s tick (~13k requests/hour); now ~1.5k/hour.
+    IDEA_POLL_S = 15.0
+    TICK_S = 10.0
+    _wake: "asyncio.Event | None" = None
+
+    def wake_ideas(self) -> None:
+        if self._wake is not None:
+            self._wake.set()
 
     async def _idea_loop(self) -> None:
-        """New ideas are picked up within ~1 s (was every 3 s, behind the meter/pending/landing calls)."""
+        self._wake = asyncio.Event()
         while True:
+            try:
+                await asyncio.wait_for(self._wake.wait(), self.IDEA_POLL_S)
+            except asyncio.TimeoutError:
+                pass
+            self._wake.clear()
             try:
                 await self.pull_ideas()
             except Exception:
                 logger.exception("idea pull failed")
-            await asyncio.sleep(self.IDEA_POLL_S)
+            await asyncio.sleep(1.0)   # coalesce bursts of wakes

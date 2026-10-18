@@ -184,6 +184,9 @@ class SupabaseMirror:
         self.uploaded = 0
         self.failed = 0
         self.dropped = 0
+        self._rows: list[dict] = []
+        self._rows_lock = threading.Lock()
+        self.row_batches = 0
         self.last_error = ""
         self.r2 = R2Public.from_env()
         self.r2_write_ok: bool | None = None
@@ -193,6 +196,7 @@ class SupabaseMirror:
             threading.Thread(target=self._run, args=(self._q, True), name=f"mirror-{n}", daemon=True).start()
         threading.Thread(target=self._run, args=(self._slow, False), name="mirror-slow", daemon=True).start()
         threading.Thread(target=self._r2_watch, name="r2-watch", daemon=True).start()
+        threading.Thread(target=self._row_flusher, name="row-flush", daemon=True).start()
 
     R2_RECHECK_S = float(os.environ.get("TAPESTRY_R2_RECHECK_S", "300"))
     on_r2_change = None   # optional callback(ok: bool, reason: str), e.g. an ops event for the admin panel
@@ -334,12 +338,31 @@ class SupabaseMirror:
                "overlap": s.overlap, "prompt": s.prompt[:500], "path": f"{self.prefix}/strips/{s.index:08d}.{ext}",
                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(s.created_at or time.time())),
                "scene": s.scene}
-        call = lambda: self._rest("POST", "strips?on_conflict=session,idx", [row],  # noqa: E731
-                                  "resolution=merge-duplicates,return=minimal")
-        if now:
-            self.db_async(call, slow=False)
-        else:
-            call()   # already on an uploader thread (runs right after the image landed)
+        # Batched: one upsert per ROW_FLUSH_S instead of one request per strip (Supabase request/log budget).
+        with self._rows_lock:
+            self._rows.append(row)
+
+    ROW_FLUSH_S = float(os.environ.get("TAPESTRY_ROW_FLUSH_S", "10"))
+
+    def flush_rows(self) -> int:
+        with self._rows_lock:
+            rows, self._rows = self._rows, []
+        if not rows:
+            return 0
+        try:
+            self._rest("POST", "strips?on_conflict=session,idx", rows, "resolution=merge-duplicates,return=minimal")
+            self.row_batches += 1
+            return len(rows)
+        except Exception as e:
+            logger.warning("strip rows batch (%d) failed: %s; retrying next flush", len(rows), _err(e))
+            with self._rows_lock:
+                self._rows = rows + self._rows if len(self._rows) < 2000 else self._rows
+            return 0
+
+    def _row_flusher(self) -> None:
+        while True:
+            time.sleep(self.ROW_FLUSH_S)
+            self.flush_rows()
 
     def save_state_row(self, state: dict) -> None:
         row = {"id": self.prefix, "strip_index": int(state.get("strip_index", 0)), "data": state,

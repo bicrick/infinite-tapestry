@@ -551,6 +551,12 @@ class StripGenerator:
         pool = getattr(self, "_persist_pool", None)
         if pool is not None:
             pool.submit(lambda: None).result(timeout=timeout)
+        mirror = getattr(getattr(self, "store", None), "mirror", None)
+        if mirror is not None and hasattr(mirror, "flush_rows"):
+            try:
+                mirror.flush_rows()   # batched strip rows land before a restart
+            except Exception:
+                pass
 
     def _record_time(self, dt: float) -> None:
         a = self._ema_alpha

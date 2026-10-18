@@ -922,6 +922,8 @@ def create_app(
                         pass  # acks are server-side now (shared timeline)
                     elif t in ("upcoming_request", "idea_added"):
                         if t == "idea_added" and crowd:
+                            if hasattr(crowd, "wake_ideas"):
+                                crowd.wake_ideas()   # pick it up now (the timed pull is only a slow fallback)
                             try:
                                 await crowd.refresh_pending()
                             except Exception:

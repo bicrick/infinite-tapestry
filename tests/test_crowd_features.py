@@ -196,3 +196,8 @@ def test_duplicate_idea_on_stage_is_merged_not_replayed():
     asyncio.run(c.pull_ideas())
     assert not d.added
     assert any(x[0] == "PATCH" and x[1] == "ideas?id=eq.21" and (x[2] or {}).get("status") == "played" for x in s.calls)
+
+
+def test_idea_loop_is_event_driven_not_a_1s_poll():
+    from infinite_tapestry.crowd import Crowd
+    assert Crowd.IDEA_POLL_S >= 10 and Crowd.TICK_S >= 10 and hasattr(Crowd, "wake_ideas")
