@@ -227,6 +227,9 @@ class SDXLInpainter(Inpainter):
         self._ref_id, self._ref_scale, self._ref_embeds = None, 0.0, {}
         if getattr(config, "ip_adapter", True):
             self._load_ip_adapter()
+        # CFG truncation drops the unconditional half of the batch mid-run; the IP-Adapter image embeds are built
+        # for the doubled batch before the loop, so trim them to the UNet's actual batch.
+        pipe.unet.register_forward_pre_hook(ip_embeds_match_batch, with_kwargs=True)
         logger.info("SDXL inpaint ready (styles: %s)", ", ".join(self.loaded) or "none")
 
     def _load_ip_adapter(self) -> None:
@@ -323,6 +326,10 @@ class SDXLInpainter(Inpainter):
         if self._ip:
             self._pipe.set_ip_adapter_scale(self._ref_scale)
             ip_kw["ip_adapter_image_embeds"] = self._ref_embeds.get(self._ref_id, self._blank) if self._ref_scale > 0 else self._blank
+        cut = float(getattr(self.config, "cfg_cut", 1.0) or 1.0)
+        if 0.0 < cut < 1.0 and self.guidance > 1.0:
+            ip_kw["callback_on_step_end"] = cfg_cut_callback(cut)
+            ip_kw["callback_on_step_end_tensor_inputs"] = list(CFG_BATCHED)
         out = self._pipe(
             prompt_embeds=pe, negative_prompt_embeds=ne, pooled_prompt_embeds=pp, negative_pooled_prompt_embeds=npp,
             image=image.convert("RGB"), mask_image=mask.convert("L"),
@@ -331,6 +338,44 @@ class SDXLInpainter(Inpainter):
             **ip_kw,
         )
         return out.images[0]
+
+
+# Loop tensors the SDXL inpaint pipeline concatenates as [uncond, cond] for classifier-free guidance.
+CFG_BATCHED = ("prompt_embeds", "add_text_embeds", "add_time_ids", "mask", "masked_image_latents")
+
+
+def cfg_cut_callback(cut: float):
+    """callback_on_step_end that switches CFG off after round(cut * steps) steps: guidance_scale -> 0 (the pipeline
+    then stops doubling the latents) and every [uncond, cond] loop tensor is cut to its cond half."""
+    def cb(pipe, i, t, kw):
+        n = int(getattr(pipe, "_num_timesteps", 0) or 0)
+        stop = max(1, int(round(n * cut)))
+        if i + 1 != stop or getattr(pipe, "_guidance_scale", 0) <= 1.0 or stop >= n:
+            return {}
+        pipe._guidance_scale = 0.0
+        out = {}
+        for k in CFG_BATCHED:
+            v = kw.get(k)
+            if v is not None and v.shape[0] >= 2 and v.shape[0] % 2 == 0:
+                out[k] = v.chunk(2)[1]
+        return out
+    return cb
+
+
+def ip_embeds_match_batch(module, args, kwargs):
+    """UNet forward pre-hook: keep only the cond half of IP-Adapter image embeds when the batch is no longer doubled."""
+    ack = kwargs.get("added_cond_kwargs")
+    if not ack or "image_embeds" not in ack:
+        return None
+    sample = args[0] if args else kwargs.get("sample")
+    emb = ack["image_embeds"]
+    if sample is None or not isinstance(emb, (list, tuple)) or not emb:
+        return None
+    n = sample.shape[0]
+    if all(e.shape[0] <= n for e in emb):
+        return None
+    kwargs["added_cond_kwargs"] = {**ack, "image_embeds": [e[-n:] if e.shape[0] > n else e for e in emb]}
+    return args, kwargs
 
 
 def prefill_masked(image: Image.Image, mask: Image.Image, seed: int = 0, mode: str = "ramp", ramp_px: int = 96) -> Image.Image:

@@ -70,8 +70,11 @@ def apply_render_settings(r: dict, generator) -> dict:
         g = num("cfg", 3.0, 9.0, float)
         if g is not None:
             cfg.guidance_scale = g
+        cc = num("cfg_cut", 0.3, 1.0, float)
+        if cc is not None:
+            cfg.cfg_cut = cc
     out.update(seam_px=cfg.anchor_seam_px, bridge_strength=cfg.anchor_bridge_strength, steps=cfg.steps,
-               cfg=cfg.guidance_scale)
+               cfg=cfg.guidance_scale, cfg_cut=getattr(cfg, "cfg_cut", 1.0))
     return out
 
 

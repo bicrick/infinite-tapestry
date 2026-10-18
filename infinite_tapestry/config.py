@@ -34,6 +34,9 @@ class Config:
     seed: int = 42
     steps: int = 20
     guidance_scale: float = 5.0  # DPM++ default; use ~1.0-1.5 with LCM-LoRA
+    # CFG truncation: classifier-free guidance only for the first cfg_cut fraction of the denoise steps; the rest run
+    # the conditional branch alone (half the UNet batch). Late steps refine detail, where guidance changes little.
+    cfg_cut: float = 1.0
     strength: float = 1.0  # <1.0 truncates the LCM schedule; masked area stays black
 
     # Model IDs (community mirrors; runwayml inpaint repo is gone)
