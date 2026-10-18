@@ -52,8 +52,7 @@ def momentum_brief(recent: list[dict]) -> str:
             steps.append(f"scene {n}: free choice, loosely linked to the previous scene")
     return ("THEME MOMENTUM: a viewer just played the idea \"" + idea + "\" (scene \"" + str(u.get("title", "")) + "\"). "
             "Do not jump to something unrelated. " + "; ".join(steps) + ". Keep the idea's tone (if it was gross or absurd, "
-            "stay gross or absurd; if the viewer named no art medium, their world is photographic). Theme momentum overrides the "
-            "usual repeat rules for this world.")
+            "stay gross or absurd). Theme momentum overrides the usual repeat rules for this world.")
 
 
 def story_prompt(style: str, prompt: str) -> str:
@@ -303,9 +302,9 @@ class Autopilot:
             since = len(recent) - 1 - last_user if last_user is not None else 99
             mood = ""
             auto_styles = [str(r.get("style") or "") for r in d.recent(20) if r.get("origin") == "auto"]
-            req = looks.slots(auto_styles, 2)
-            if self.journey and req[0] and not looks.is_photo(self.journey.get("style")):
-                self.journey = None   # a stylized story ends when the photo quota needs the next slot
+            if self.journey and not looks.story_may_continue(auto_styles, self.journey.get("style")):
+                self.journey = None   # one look may not run on: the story ends, the next scene changes family
+            fams = looks.plan(auto_styles, 2)
             if mom:   # a viewer's idea just played: stay in its world, then drift away (unchanged)
                 self.last_mode = "momentum"
                 text = mom
@@ -317,9 +316,10 @@ class Autopilot:
                 mood = self.moods.next(2)
                 self.last_mode = "director"
                 from .variety import spark
-                text = director_brief(d.recent(20), self.journey, self.steer, mood, self.moods.brief(mood), spark(photo=req[0]))
+                text = director_brief(d.recent(20), self.journey, self.steer, mood, self.moods.brief(mood), spark(family=fams[0]))
             keep = (self.journey or {}).get("style", "") if (not mom and self.journey) else ""
-            text += "\n" + looks.brief(req)
+            if not keep:   # a story keeps its own look; otherwise each scene gets a fresh, unblocked family
+                text += "\n" + looks.brief(fams)
             plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text, keep)
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
@@ -333,7 +333,12 @@ class Autopilot:
                 if not mom and self.memory.is_repeat(x["title"]):  # exact same title only
                     continue
                 kept.append(x)
-            plan["scenes"] = [looks.finalize(x, req[i] if i < len(req) else True) for i, x in enumerate(kept)]
+            if not keep:
+                hist = list(auto_styles)
+                for i, x in enumerate(kept):
+                    looks.enforce(x, fams[i] if i < len(fams) else looks.plan(hist, 1)[0], hist)
+                    hist.append(str(x.get("style") or ""))
+            plan["scenes"] = kept
             if not plan["scenes"]:
                 raise RuntimeError("blocked plan")
             dec = plan.get("director") or {}

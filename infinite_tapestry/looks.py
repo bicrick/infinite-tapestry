@@ -1,101 +1,130 @@
-"""Auto's look mix. The renderer (RealVisXL) is a photoreal model, so Auto leans photographic:
-about two of every three Auto scenes get a photographic look: a stylized scene is only allowed right
-after two photographic ones (P P S P P S ...), so even if Auto takes every free slot stylized the mix stays ~67% photo. User ideas are never touched (their words, verbatim)."""
+"""Auto's look variety. There is NO default style: each new Auto scene draws its look family at random
+(uniformly) from the families that have NOT been used recently, so no medium (watercolor, oil, photo, ...)
+can dominate or keep recurring. User ideas are never touched (their words, verbatim)."""
 
 from __future__ import annotations
 
 import random
 import re
 
-PHOTO_SHARE = 0.6        # minimum photographic share over the recent window
-WINDOW = 5               # recent Auto scenes the quota looks at
+# Families and example looks (equal footing; the examples only seed Haiku's own invention).
+FAMILIES: dict[str, list[str]] = {
+    "photo": ["documentary photo", "aerial drone photograph", "macro photograph", "long-exposure night photo",
+              "underwater photograph", "Polaroid snapshot", "wildlife photograph", "street photograph"],
+    "film": ["1970s film still", "film noir still", "Technicolor movie still", "VHS camcorder frame",
+             "wide anamorphic film still", "silent-film still"],
+    "3d": ["chrome 3D render", "low-poly 3D", "isometric 3D render", "claymation", "glossy CGI animation still",
+           "voxel art"],
+    "painting": ["oil painting", "watercolor", "gouache", "Renaissance fresco", "ink wash painting", "acrylic pour",
+                 "impressionist painting"],
+    "illustration": ["comic book ink", "cel-shaded cartoon", "children's picture book", "marker sketch",
+                     "scientific illustration", "art nouveau illustration", "anime background", "crayon drawing",
+                     "chalk on a blackboard"],
+    "print": ["linocut print", "risograph print", "woodcut", "vintage travel poster", "psychedelic 60s poster",
+              "Bauhaus geometric print", "blueprint diagram", "Japanese woodblock print", "screen print"],
+    "craft": ["knitted wool", "papercraft", "stop-motion felt", "cross-stitch", "lego bricks", "mosaic tiles",
+              "stained glass", "tin toy diorama", "batik textile"],
+    "digital": ["pixel art", "16-bit video game", "neon sign", "glitch art", "vaporwave", "ASCII-style terminal art"],
+}
 
-PHOTO_LOOKS = ["cinematic photo", "documentary photo", "landscape photograph", "aerial drone photograph",
-               "macro photograph", "underwater photograph", "long-exposure night photo", "golden hour photograph",
-               "wildlife photograph", "architectural photograph", "35mm film photo", "editorial magazine photo",
-               "misty morning photograph", "astrophotography", "street photograph", "film noir photo",
-               "Polaroid photo", "glossy product photo", "nature documentary still", "storm chaser photograph"]
+# Classifier keywords, checked in this order (first match wins).
+_KEYS: list[tuple[str, tuple[str, ...]]] = [
+    ("craft", ("knit", "wool", "felt", "papercraft", "paper cut", "papercut", "origami", "cross-stitch", "embroider",
+               "lego", "brick", "mosaic", "stained glass", "tin toy", "diorama", "batik", "textile", "quilt",
+               "collage", "enamel", "ceramic", "clay figure", "macrame", "tapestry weave")),
+    ("digital", ("pixel", "8-bit", "16-bit", "video game", "neon", "glitch", "vaporwave", "ascii", "synthwave")),
+    ("3d", ("3d", "render", "cgi", "low-poly", "voxel", "claymation", "isometric")),
+    ("print", ("print", "woodcut", "woodblock", "linocut", "risograph", "poster", "engraving", "etching",
+               "blueprint", "screen print", "lithograph", "letterpress", "cyanotype")),
+    ("painting", ("paint", "watercolo", "gouache", "pastel", "oil", "fresco", "ink wash", "sumi", "impasto",
+                  "acrylic", "tempera", "impressionis", "canvas", "mural")),
+    ("illustration", ("illustrat", "drawing", "sketch", "cartoon", "anime", "manga", "comic", "picture book",
+                      "storybook", "crayon", "chalk", "marker", "doodle", "cel-shaded", "ink", "graphic novel")),
+    ("film", ("film still", "movie still", "film noir", "technicolor", "vhs", "camcorder", "anamorphic", "cinema",
+              "cinematic", "silent-film", "super 8", "16mm")),
+    ("photo", ("photo", "polaroid", "snapshot", "35mm", "dslr", "drone", "documentary", "realistic", "hyperreal",
+               "astrophotograph", "magazine")),
+]
 
-_PHOTO_WORDS = ("photo", "photograph", "cinematic", "film still", "documentary", "polaroid", "35mm", "realistic",
-                "photoreal", "hyperreal", "astrophotography", "dslr", "drone shot", "documentary still")
-# Painterly/graphic media: a label naming one of these is stylized even if it also says "photo".
-_ART_WORDS = ("paint", "watercolo", "gouache", "pastel", "illustrat", "drawing", "sketch", "ink", "woodcut",
-              "woodblock", "linocut", "print", "poster", "cartoon", "anime", "comic", "crayon", "chalk", "fresco",
-              "mosaic", "stained glass", "embroider", "cross-stitch", "felt", "claymation", "pixel", "papercraft",
-              "collage", "engraving", "picture book", "storybook", "lego", "diorama", "low-poly", "3d render")
-_ART_RE = re.compile(r"\b(art|arts|artwork|artistic)\b")
-
-PHOTO_NEGATIVE = ("painting, watercolor, oil painting, illustration, drawing, sketch, cartoon, anime, "
-                  "brushstrokes, canvas texture, signature")
+RECENT = 6        # recent Auto scenes the variety rule looks at
+AVOID_LAST = 3    # a new (non-story) scene's family differs from the last 3 Auto scenes' families
+MAX_SHARE = 2     # ...and no family may hold more than 2 of the last 6 (a story may run 3 in a row, then ends)
 
 
-def is_photo(label: str | None) -> bool:
-    s = str(label or "").lower()
+def family(label: str | None) -> str:
+    s = str(label or "").lower().strip()
     if not s or s == "none":
-        return False
-    if any(w in s for w in _ART_WORDS) or _ART_RE.search(s):
-        return False
-    # labels are cut to 24 chars ("glossy 1920s magazine ph"): a trailing "ph"/"pho"/"phot" is a photo
-    return any(w in s for w in _PHOTO_WORDS) or bool(re.search(r"\bph(o|ot)?$", s))
+        return ""
+    for fam, words in _KEYS:
+        if any(w in s for w in words):
+            return fam
+    if re.search(r"\bph(o|ot)?$", s):   # labels are cut to 24 chars ("glossy 1920s magazine ph")
+        return "photo"
+    return "other"
 
 
-def photo_needed(recent_styles: list[str]) -> bool:
-    """True if the next Auto scene must be photographic (recent_styles oldest first, Auto scenes only)."""
-    if not recent_styles:
-        return True
-    if len(recent_styles) < 2 or not (is_photo(recent_styles[-1]) and is_photo(recent_styles[-2])):
-        return True   # a stylized scene only after two photographic ones
-    win = recent_styles[-WINDOW:]
-    return sum(is_photo(s) for s in win) / len(win) < PHOTO_SHARE
-
-
-def slots(recent_styles: list[str], n: int) -> list[bool]:
-    """Photo requirement for each of the next n scenes (simulating that required slots become photo
-    and free slots become stylized, the worst case for the quota)."""
-    hist, out = list(recent_styles), []
-    for _ in range(n):
-        need = photo_needed(hist)
-        out.append(need)
-        hist.append("photo" if need else "art")
+def blocked(recent_styles: list[str]) -> set[str]:
+    """Families the next Auto scene may not use (recent_styles oldest first, Auto scenes only)."""
+    fams = [family(s) for s in recent_styles if family(s)]
+    out = set(fams[-AVOID_LAST:])
+    win = fams[-RECENT:]
+    out |= {f for f in set(win) if win.count(f) >= MAX_SHARE}
+    out.discard("other")
     return out
 
 
-def brief(req: list[bool]) -> str:
-    parts = []
-    for i, need in enumerate(req, 1):
-        parts.append(f"scene {i}: PHOTOGRAPHIC look (a real photograph: e.g. " + ", ".join(random.sample(PHOTO_LOOKS, 3))
-                     + "), no painting or illustration" if need else
-                     f"scene {i}: free look (a photograph, or any painted/graphic/crafted medium)")
-    return ("LOOK PLAN (required; the renderer is a photoreal model): " + "; ".join(parts) +
+def story_may_continue(recent_styles: list[str], story_style: str | None) -> bool:
+    """A story keeps its one look for at most 3 Auto scenes in a row, and its family under 4 of the last 6."""
+    f = family(story_style)
+    if not f or f == "other":
+        return True
+    fams = [family(s) for s in recent_styles if family(s)]
+    run = 0
+    for x in reversed(fams):
+        if x != f:
+            break
+        run += 1
+    return run < 3 and fams[-RECENT:].count(f) < 4
+
+
+def plan(recent_styles: list[str], n: int, rng: random.Random | None = None) -> list[str]:
+    """Family for each of the next n scenes: uniform random among the families not blocked."""
+    r = rng or random
+    hist, out = list(recent_styles), []
+    for _ in range(n):
+        allowed = [f for f in FAMILIES if f not in blocked(hist)] or list(FAMILIES)
+        f = r.choice(allowed)
+        out.append(f)
+        hist.append(FAMILIES[f][0])
+    return out
+
+
+def brief(fams: list[str], rng: random.Random | None = None) -> str:
+    r = rng or random
+    parts = [f"scene {i}: a {f.upper()} look (e.g. " + ", ".join(r.sample(FAMILIES[f], min(3, len(FAMILIES[f]))))
+             + ", or your own look in that family)" for i, f in enumerate(fams, 1)]
+    return ("LOOK PLAN (required, for variety; no style is the default): " + "; ".join(parts) +
             ". Write the look as the first words of the prompt and as style.")
 
 
 _LEAD = re.compile(r"^\s*([^,]{1,60}),\s*")
 
 
-def force_photo(scene: dict, rng: random.Random | None = None) -> dict:
-    """Make an Auto scene photographic when the quota required it but the plan came back stylized."""
+def enforce(scene: dict, fam: str, recent_styles: list[str], rng: random.Random | None = None) -> dict:
+    """If the plan came back in a blocked family, swap its look for one from the planned family."""
     r = rng or random
     st = str(scene.get("style") or "")
-    if is_photo(st):
+    got = family(st)
+    if got and got != "other" and got not in blocked(recent_styles):
         return scene
-    look = r.choice(PHOTO_LOOKS)
+    if got == "" and fam == "":
+        return scene
+    look = r.choice(FAMILIES.get(fam) or FAMILIES["photo"])
     p = str(scene.get("prompt") or "")
     m = _LEAD.match(p)
-    if m and (not st or st.lower() in m.group(1).lower() or m.group(1).lower() in st.lower()
-              or any(w in m.group(1).lower() for w in _ART_WORDS)):
-        p = p[m.end():]   # drop the stylized look clause the plan led with
+    if m and (family(m.group(1)) not in ("", "other") or (st and st.lower() in m.group(1).lower())):
+        p = p[m.end():]   # drop the look clause the plan led with
     scene["prompt"] = f"{look}, {p}".strip(" ,")
     scene["style"] = look
     scene["beats"] = []
-    return scene
-
-
-def finalize(scene: dict, need_photo: bool) -> dict:
-    """Apply the slot decision; photographic Auto scenes also get anti-painting negatives."""
-    if need_photo:
-        force_photo(scene)
-    if is_photo(scene.get("style")):
-        neg = str(scene.get("negative") or "")
-        scene["negative"] = ", ".join(x for x in (neg, PHOTO_NEGATIVE) if x)
     return scene

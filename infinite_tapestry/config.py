@@ -87,7 +87,7 @@ class Config:
     # One generic seed scene; Claude's autopilot takes it from there.
     prompts: list[tuple[int, str]] = field(
         default_factory=lambda: [
-            (0, "cinematic landscape photograph, a wide misty valley at dawn, natural light"),
+            (0, "a wide valley at dawn with mist drifting between the hills"),
         ]
     )
     autopilot: bool = True

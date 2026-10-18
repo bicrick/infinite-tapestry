@@ -9,7 +9,6 @@ from infinite_tapestry.generator import StripGenerator
 from infinite_tapestry.interpreter import (
     AUTO_SYSTEM,
     SYSTEM,
-    _STYLE_NOTE,
     PromptInterpreter,
     fallback_plan,
     parse_plan,
@@ -96,15 +95,11 @@ def test_parse_plan_refusal_and_empty_still_raise():
         parse_plan('{"scenes":[{"title":"T","prompt":"trunc')
 
 
-def test_style_note_defaults_photoreal():
-    note = _STYLE_NOTE.lower()
-    assert "photoreal" in note and "60%" in note and "40%" in note
-    assert "more than 2 stylized" in note and "hyperreal" in note
-    # Both system prompts carry the note and mention SDXL without dropping SD 1.5.
-    # User ideas: faithful cleanup, no photoreal quota; Auto keeps its own look notes.
-    assert _STYLE_NOTE not in SYSTEM and _STYLE_NOTE not in AUTO_SYSTEM
+def test_no_default_style():
+    # User ideas: faithful cleanup, no style quota; Auto has no default style (variety via the LOOK PLAN).
+    assert "60%" not in SYSTEM and "60%" not in AUTO_SYSTEM
     low_a = AUTO_SYSTEM.lower()
-    assert "photoreal" in low_a and "two of every three" in low_a and "5-20 words" in low_a and "look plan" in low_a
+    assert "no default style" in low_a and "5-20 words" in low_a and "look plan" in low_a and "photoreal" not in low_a
     assert "SDXL" in SYSTEM and "SD 1.5" in SYSTEM
     for sys in (AUTO_SYSTEM,):  # user ideas are verbatim text; composition notes only steer Auto
         assert "SDXL" in sys and "SD 1.5" in sys
