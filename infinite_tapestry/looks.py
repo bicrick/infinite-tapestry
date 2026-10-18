@@ -126,7 +126,10 @@ def enforce(scene: dict, fam: str, recent_styles: list[str], rng: random.Random 
         return scene
     if got == "" and fam == "":
         return scene
-    look = r.choice(FAMILIES.get(fam) or FAMILIES["photo"])
+    bl = blocked(recent_styles)
+    if fam not in FAMILIES or fam in bl:   # the plan's family may have been taken by an earlier scene of this batch
+        fam = r.choice([f for f in FAMILIES if f not in bl] or list(FAMILIES))
+    look = r.choice(FAMILIES[fam])
     p = str(scene.get("prompt") or "")
     m = _LEAD.match(p)
     if m and (family(m.group(1)) not in ("", "other") or (st and st.lower() in m.group(1).lower())):

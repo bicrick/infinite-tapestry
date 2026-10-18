@@ -12,7 +12,7 @@ from typing import Any, Callable
 
 from .prompts import make_scene, soft_title
 from .moods import MoodRotator
-from . import looks
+from . import looks, pools
 from .themes import HeadlineCache, ThemeMemory, brief, clean_title, mentions_minor, pick_mode
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,10 @@ VARIATIONS = [
     "slowly melting and reforming", "overgrown with luminous moss", "at first light",
     "under a second, larger moon", "after heavy rain", "submerged in amber haze",
 ]
+
+PLAN_TIMEOUT_S = 45.0     # an autoplan that hasn't answered by then is abandoned (fallback scene, backoff)
+CFG_TIMEOUT_S = 20.0
+OVERDUE_STRIPS = 3        # stage scene this far past its width with nothing queued -> a fallback scene now
 
 
 MOMENTUM_STEPS = 5  # auto scenes after a user idea before the normal mix resumes
@@ -136,8 +140,11 @@ class Autopilot:
         self.vibe = ""
         self.low_water = low_water
         self.min_interval = min_interval
+        # Rolling hourly budget (was a lifetime 6M-token cap that never reset: after ~1-2 days of uptime Auto
+        # fell back to re-running its last prompt with a modifier forever).
         self.token_budget = token_budget if token_budget is not None else int(
-            os.environ.get("TAPESTRY_AUTOPILOT_TOKEN_BUDGET", "6000000"))
+            os.environ.get("TAPESTRY_AUTOPILOT_TOKENS_PER_HOUR", "600000"))
+        self._spent: list[tuple[float, int]] = []   # (monotonic time, tokens) per autoplan call, last hour
         self.max_calls_per_hour = max_calls_per_hour
         self._calls: list[float] = []
         self._next_allowed = 0.0
@@ -168,7 +175,7 @@ class Autopilot:
         return {
             "enabled": self.enabled, "vibe": self.vibe, "busy": self.busy,
             "error": self.last_error, "tokens": getattr(self.interpreter, "tokens_used", 0),
-            "budget": self.token_budget, "mode": self.last_mode, "mood": self.last_mood,
+            "budget": self.token_budget, "hour_tokens": self._hour_tokens(), "mode": self.last_mode, "mood": self.last_mood,
             "paused": self.admin_paused, "theme": self.admin_theme,
             "story": ({"id": self.story["id"], "title": self.story["title"], "scenes": len(self.story["scenes"])}
                       if self.story else None),
@@ -239,6 +246,11 @@ class Autopilot:
         self.epoch += 1
         self._next_allowed = min(self._next_allowed, time.monotonic() + 1.0)
 
+    def _hour_tokens(self) -> int:
+        now = time.monotonic()
+        self._spent = [x for x in self._spent if now - x[0] < 3600]
+        return sum(n for _, n in self._spent)
+
     def _can_call(self) -> bool:
         now = time.monotonic()
         self._calls = [t for t in self._calls if now - t < 3600]
@@ -246,27 +258,32 @@ class Autopilot:
             getattr(self.interpreter, "enabled", False)
             and now >= self._next_allowed
             and len(self._calls) < self.max_calls_per_hour
-            and getattr(self.interpreter, "tokens_used", 0) < self.token_budget
+            and self._hour_tokens() < self.token_budget
         )
 
-    def _variation(self) -> None:
-        """Claude unavailable and nothing queued: drift with a light variation."""
+    def _variation(self, reason: str = "") -> None:
+        """Claude unavailable/slow and nothing queued: a FRESH scene from the variety pools (new subject, place
+        and look family), never the last prompt replayed with a modifier (that read as 'stuck on one prompt')."""
         d = self.director
         if d.upcoming_count() > 0:
             return
-        # Vary the last AUTO scene (never re-run a user's idea as filler), and keep it short so it can't
-        # sit on screen for a minute (was transition 20 + hold 16 strips).
-        autos = [r for r in d.recent(12) if r.get("origin") != "user" and r.get("source") != "variation"]
-        cur = autos[-1] if autos else {"prompt": "a quiet endless meadow under drifting clouds", "title": "Drifting Meadow"}
-        base = cur["prompt"].split(", seen through")[0]
-        mod = random.choice(VARIATIONS)
-        d.add([make_scene(f"{base}, {mod}", cur.get("negative", ""), soft_title(cur["title"]),
-                          2, 3, source="variation", origin="auto", style=cur.get("style"))])
+        from .variety import spark
+        auto_styles = [str(r.get("style") or "") for r in d.recent(20) if r.get("origin") == "auto"]
+        fam = looks.plan(auto_styles, 1)[0]
+        sp = spark(family=fam)
+        subject = sp["subject"]
+        prompt = f"{sp['look']}, {subject} in {sp['place']}, {sp['era']}, {random.choice(VARIATIONS)}"
+        title = soft_title(f"{subject.split(' and ')[0].title()} in {sp['place'].replace('the ', '').title()}", 40)
+        d.add([make_scene(prompt, "", title, 2, None, source="variation", origin="auto", style=sp["look"])])
+        logger.info("autopilot fallback scene (%s): %s", reason or "no plan", title)
         self.on_change()
 
     async def tick(self) -> None:
         d = self.director
         waiting = self.pressure()
+        # Hang guard (runs even while a plan is in flight): the stage never holds one scene far past its width.
+        if self.enabled and not self.admin_paused and hasattr(d, "overdue") and d.overdue() >= OVERDUE_STRIPS:
+            self._variation("stage overdue" + (", plan in flight" if self.busy else ""))
         if waiting and hasattr(d, "trim_auto") and d.trim_auto(2):
             self.on_change()
         if not self.enabled or self.admin_paused or self.busy or d.upcoming_count() >= (2 if waiting else self.low_water):
@@ -278,19 +295,19 @@ class Autopilot:
             self._done_pids.add(pid)
             self.story = None
             try:
-                await asyncio.to_thread(self.story_done, pid)
+                await pools.control(self.story_done, pid, timeout=CFG_TIMEOUT_S)
             except Exception:
                 logger.warning("story done write failed")
             if self.config_fetch:  # pick up the next playlist entry right away
                 try:
-                    self.apply_config(await asyncio.to_thread(self.config_fetch))
+                    self.apply_config(await pools.control(self.config_fetch, timeout=CFG_TIMEOUT_S))
                 except Exception:
                     pass
             if self.story and self._story_tick():
                 return
         if not self._can_call():
-            if time.monotonic() >= self._next_allowed or not getattr(self.interpreter, "enabled", False):
-                self._variation()
+            # Backoff, budget or no key: keep the stage moving with fresh fallback scenes.
+            self._variation("budget" if self._hour_tokens() >= self.token_budget else "backoff")
             return
         self.busy = True
         epoch = self.epoch
@@ -322,7 +339,13 @@ class Autopilot:
             keep = (self.journey or {}).get("style", "") if (not mom and self.journey) else ""
             if not keep:   # a story keeps its own look; otherwise each scene gets a fresh, unblocked family
                 text += "\n" + looks.brief(fams)
-            plan = await asyncio.to_thread(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text, keep)
+            t0, tok0 = time.monotonic(), getattr(self.interpreter, "tokens_used", 0)
+            try:
+                plan = await pools.control(self.interpreter.autoplan, recent[-8:], self.vibe, 2, text, keep,
+                                           timeout=PLAN_TIMEOUT_S)
+            finally:
+                self._spent.append((time.monotonic(), max(0, getattr(self.interpreter, "tokens_used", 0) - tok0)))
+            plan_s = time.monotonic() - t0
             if epoch != self.epoch:
                 return  # user steered meanwhile; next tick plans from their scene
             from .guard import is_disallowed
@@ -366,7 +389,7 @@ class Autopilot:
                     self.decision_log({**dec, "titles": [s.get("title", "") for s in plan["scenes"]]})
                 except Exception:
                     pass
-            logger.info("autoplan mood=%s move=%s titles=%s", mood or self.last_mode, dec.get("move"), [s.get("title") for s in plan["scenes"]])
+            logger.info("autoplan %.1fs mood=%s move=%s titles=%s", plan_s, mood or self.last_mode, dec.get("move"), [s.get("title") for s in plan["scenes"]])
             for s in plan["scenes"]:
                 self.memory.add(s.get("title", ""))
             d.add([make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), s.get("transition"),
@@ -377,11 +400,11 @@ class Autopilot:
             self._next_allowed = time.monotonic() + self.min_interval
         except Exception as e:
             self._failures += 1
-            self.last_error = str(e)[:120]
+            self.last_error = (str(e) or type(e).__name__)[:120]
             backoff = min(120.0, 5.0 * 2 ** (self._failures - 1))
             self._next_allowed = time.monotonic() + backoff
             logger.warning("Autopilot call failed (%s); backing off %.0fs", self.last_error, backoff)
-            self._variation()
+            self._variation("plan failed")
         finally:
             self.busy = False
             self.on_change()
@@ -436,7 +459,7 @@ class Autopilot:
             if self.config_fetch and time.monotonic() - last_cfg > 15:
                 last_cfg = time.monotonic()
                 try:
-                    self.apply_config(await asyncio.to_thread(self.config_fetch))
+                    self.apply_config(await pools.control(self.config_fetch, timeout=CFG_TIMEOUT_S))
                 except Exception:
                     logger.warning("auto_config fetch failed")
             try:

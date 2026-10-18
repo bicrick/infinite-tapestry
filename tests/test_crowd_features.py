@@ -13,6 +13,10 @@ class FakeSupa:
 
     def rest(self, method, path, body=None, prefer=None):
         self.calls.append((method, path, body))
+        if method == "PATCH" and prefer == "return=representation" and "id=in.(" in path:
+            # like PostgREST: the rows this request actually changed (all, unless a test says otherwise)
+            ids = path.split("id=in.(")[1].split(")")[0].split(",")
+            return [{"id": int(i)} for i in ids if int(i) not in getattr(self, "taken", ())]
         if method == "GET":
             for key, rows in self.get_map.items():
                 if path.startswith(key) or key in path:
@@ -92,6 +96,8 @@ def test_pull_ideas_rejects_when_all_scenes_disallowed(monkeypatch):
     d = FakeDirector()
     d.cur = None
     monkeypatch.setattr("infinite_tapestry.guard.is_disallowed", lambda *a, **k: True)
+    monkeypatch.setattr("infinite_tapestry.interpreter.assemble_plan",
+                        lambda core, title=None, hold=3: {"scenes": [{"title": "x", "prompt": "nope"}]})
     c = Crowd(s, d, FakeInterpreter([{"title": "x", "prompt": "nope"}]), None, lambda m: None, lambda: None, mock=True)
     asyncio.run(c.pull_ideas())
     assert not d.added
@@ -161,3 +167,32 @@ def test_plan_sends_images_as_content_blocks():
 def test_queue_mode_threshold():
     from infinite_tapestry.crowd import queue_mode
     assert queue_mode(0) == "fifo" and queue_mode(3) == "fifo" and queue_mode(4) == "vote"
+
+
+def test_pull_ideas_starts_text_idea_without_haiku_and_skips_rows_claimed_elsewhere():
+    rows = [{"id": 11, "handle": "ada", "body": "a red kite", "image_path": None},
+            {"id": 12, "handle": "bob", "body": "a blue boat", "image_path": None}]
+    s = FakeSupa(get_map={"ideas?status=eq.pending": rows})
+    s.taken = {12}                       # another pod claimed idea 12 first
+    d = FakeDirector(); d.cur = None
+
+    class NoCall(FakeInterpreter):
+        enabled = False
+        def plan(self, *a, **k):
+            raise AssertionError("text ideas must not wait on Haiku")
+    c = Crowd(s, d, NoCall(), None, lambda m: None, lambda: None, mock=True)
+    c._limits_at = 1e18
+    asyncio.run(c.pull_ideas())
+    assert [sc["idea_ids"] for sc in d.added] == [[11]] and d.added[0]["prompt"] == "a red kite"
+
+
+def test_duplicate_idea_on_stage_is_merged_not_replayed():
+    rows = [{"id": 21, "handle": "ada", "body": "Marvel  superheros", "image_path": None}]
+    s = FakeSupa(get_map={"ideas?status=eq.pending": rows})
+    d = FakeDirector()
+    d.cur = {"title": "m", "origin": "user", "source": "marvel superheros", "idea_ids": [20]}
+    c = Crowd(s, d, FakeInterpreter(), None, lambda m: None, lambda: None, mock=True)
+    c._limits_at = 1e18
+    asyncio.run(c.pull_ideas())
+    assert not d.added
+    assert any(x[0] == "PATCH" and x[1] == "ideas?id=eq.21" and (x[2] or {}).get("status") == "played" for x in s.calls)

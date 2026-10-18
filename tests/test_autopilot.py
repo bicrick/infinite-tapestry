@@ -42,7 +42,9 @@ def test_autopilot_failure_backs_off_with_variation():
     ap = Autopilot(d, FakeAuto(fail=True), min_interval=0)
     asyncio.run(ap.tick())
     items = d.state()["items"]
-    assert len(items) == 1 and items[0]["origin"] == "auto" and "glass forest" in items[0]["prompt"]
+    # fallback is a FRESH scene (new subject/place/look), never the last prompt replayed with a modifier
+    assert len(items) == 1 and items[0]["origin"] == "auto" and "glass forest" not in items[0]["prompt"]
+    assert items[0]["source"] == "variation" and items[0]["title"]
     assert ap.last_error and ap._next_allowed > 0
 
 
@@ -53,3 +55,41 @@ def test_autopilot_respects_disable_and_budget():
     ap.enabled = False
     asyncio.run(ap.tick())
     assert fi.n == 0 and not d.state()["items"]
+
+
+class SlowAuto(FakeAuto):
+    def autoplan(self, *a, **k):
+        import time
+        time.sleep(1.0)
+        return super().autoplan(*a, **k)
+
+
+def test_hung_plan_is_abandoned_and_stage_kept_moving(monkeypatch):
+    import infinite_tapestry.autopilot as A
+    monkeypatch.setattr(A, "PLAN_TIMEOUT_S", 0.2)
+    d = LiveDirector("a glass forest", hold=0, blend=2)
+    ap = Autopilot(d, SlowAuto(), min_interval=0)
+    asyncio.run(ap.tick())
+    items = d.state()["items"]
+    assert ap.last_error and not ap.busy and len(items) == 1 and items[0]["source"] == "variation"
+
+
+def test_overdue_stage_gets_fallback_even_while_busy():
+    d = LiveDirector("a glass forest", hold=0, blend=2)
+    ap = Autopilot(d, FakeAuto(), min_interval=0)
+    ap.busy = True                      # a plan is "in flight"
+    for i in range(40):
+        d.frame_for(i)                  # nothing queued: the seed scene runs long
+    assert d.overdue() >= 3
+    asyncio.run(ap.tick())
+    assert [i["source"] for i in d.state()["items"]] == ["variation"]
+
+
+def test_token_budget_is_hourly():
+    import time
+    d = LiveDirector("x", hold=0, blend=2)
+    ap = Autopilot(d, FakeAuto(), min_interval=0, token_budget=1000)
+    ap._spent = [(time.monotonic() - 3700, 5000)]   # spent over an hour ago: forgotten
+    assert ap._can_call()
+    ap._spent.append((time.monotonic(), 1500))
+    assert not ap._can_call()

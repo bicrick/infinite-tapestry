@@ -19,6 +19,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from . import pools
 from .prompts import make_scene, soft_title
 
 
@@ -153,6 +154,19 @@ class Crowd:
                 out.append(free.pop(0)); self._prio_run = 0
         return out  # cached pool ideas still waiting (for the canonical upcoming list)
 
+    _title_tasks: set = set()
+
+    async def _retitle(self, scene_id: int, body: str, cur: str) -> None:
+        """Haiku's short title for a text idea, applied once it arrives (the scene already started with a local one)."""
+        try:
+            plan = await pools.control(self.interpreter.plan, body, cur, None, None, timeout=30)
+            title = ((plan.get("scenes") or [{}])[0] or {}).get("title")
+            if plan.get("source") == "haiku" and title and hasattr(self.director, "retitle"):
+                self.director.retitle(scene_id, title)
+                self.on_change()
+        except Exception:
+            pass
+
     def state(self) -> dict:
         hours = None
         if self.fuel_cents is not None:
@@ -161,21 +175,32 @@ class Crowd:
                 "hours": None if hours is None else round(hours, 2), "out": self.out_of_fuel,
                 "gpu_cents_per_hour": GPU_CENTS_PER_HOUR, "queue_mode": self.queue_mode}
 
+    MAX_QUEUED_IDEAS = 3   # user scenes queued ahead (FIFO); more wait in the pool so the line/ETA stays honest
+
     def _audience_pending(self) -> bool:
+        return self._queued_ideas() >= self.MAX_QUEUED_IDEAS
+
+    def _queued_ideas(self) -> int:
         st = self.director.state()
         items = st["items"] + ([st["target_scene"]] if st.get("target_scene") else [])
-        return any(i.get("origin") == "user" for i in items)
+        return sum(1 for i in items if i.get("origin") == "user")
+
+    def _on_stage_bodies(self) -> set:
+        """Normalized bodies of user scenes queued or on stage (duplicate-idea guard)."""
+        st = self.director.state()
+        items = st["items"] + [x for x in (st.get("target_scene"), st.get("current_scene")) if x]
+        return {" ".join(str(i.get("source") or "").lower().split()) for i in items if i.get("origin") == "user"}
 
     async def refresh_pending(self) -> None:
         """Cache the waiting pool (canonical play order, with place + honest ETA) for the Next sheet."""
         try:
-            rows = await asyncio.to_thread(self.supa.rest, "POST", "rpc/fair_line", {"p_limit": 20})
+            rows = await pools.control(self.supa.rest, "POST", "rpc/fair_line", {"p_limit": 20})
             rows = [{"id": r["id"], "handle": r.get("handle"), "body": (r.get("body") or "")[:200],
                      "image": bool(r.get("image_path")), "votes": r.get("votes") or 0,
                      "place": r.get("place"), "eta": r.get("eta_s")} for r in (rows or [])]
         except Exception:
             order = "created_at.asc" if self.queue_mode == "fifo" else "votes.desc,created_at.asc"
-            rows = await asyncio.to_thread(
+            rows = await pools.control(
                 self.supa.rest, "GET", f"ideas?status=eq.pending&order={order}&limit=20&select=id,handle,body,image_path,votes")
             rows = [{"id": r["id"], "handle": r.get("handle"), "body": (r.get("body") or "")[:200],
                      "image": bool(r.get("image_path")), "votes": r.get("votes") or 0} for r in (rows or [])]
@@ -186,29 +211,29 @@ class Crowd:
     async def pull_ideas(self) -> None:
         if self._audience_pending():
             return
-        rows = await asyncio.to_thread(
+        rows = await pools.control(
             self.supa.rest, "GET",
             "ideas?status=eq.pending&order=created_at.asc&limit=40&select=id")
         n_pending = len(rows or [])
         mode = queue_mode(n_pending)
-        knobs = await asyncio.to_thread(self._knobs)
+        knobs = await pools.control(self._knobs)
         busy = self.viewers() >= knobs["viewers"] or n_pending >= knobs["pending"]
         if mode != self.queue_mode:
             self.queue_mode = mode
             self.broadcast({"type": "fuel", "fuel": self.state()})
         order = "created_at.asc" if mode == "fifo" else "votes.desc,created_at.asc"
         # FIFO: weave one idea at a time, in arrival order, so each starts right away.
-        want = 1 if mode == 'fifo' else 3
+        want = max(1, self.MAX_QUEUED_IDEAS - self._queued_ideas()) if mode == "fifo" else 3
         self.busy = n_pending > knobs.get("busy", BUSY_PENDING)
         if self.busy:
             # Fair queue: one idea per person per round, votes + waiting-time score, pick cooldown and
             # expiry, chosen atomically in Supabase (already marked playing). No LLM involved.
-            rows = await asyncio.to_thread(self.supa.rest, "POST", "rpc/pick_ideas", {"p_n": want})
+            rows = await pools.control(self.supa.rest, "POST", "rpc/pick_ideas", {"p_n": want})
         else:
-            rows = await asyncio.to_thread(
+            rows = await pools.control(
                 self.supa.rest, "GET",
                 f"ideas?status=eq.pending&order={order}&limit={40 if busy else want}"
-                "&select=id,handle,body,votes,boost_cents,image_path,user_id,guest_id")
+                "&select=id,handle,body,votes,boost_cents,image_path,user_id,guest_id,created_at")
         if not rows:
             return
         rows = self._pick(rows, want, busy, knobs["ratio"])
@@ -217,28 +242,53 @@ class Crowd:
         for r in rows:
             why = hard_block_reason(r.get("body") or "")
             if why:
-                await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}", {"status": "rejected"}, "return=minimal")
-                await asyncio.to_thread(self.supa.audit, "idea_hard_block", str(r["id"]), {"reason": why})
+                await pools.control(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}", {"status": "rejected"}, "return=minimal")
+                await pools.control(self.supa.audit, "idea_hard_block", str(r["id"]), {"reason": why})
                 continue
             img = None
             if r.get("image_path"):
-                img = await asyncio.to_thread(self._load_ref, r["image_path"])
+                img = await pools.control(self._load_ref, r["image_path"])
                 if img is None:
-                    await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}", {"status": "rejected"}, "return=minimal")
-                    await asyncio.to_thread(self.supa.audit, "nsfw_ref_block", str(r["id"]), {"path": r["image_path"]})
+                    await pools.control(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}", {"status": "rejected"}, "return=minimal")
+                    await pools.control(self.supa.audit, "nsfw_ref_block", str(r["id"]), {"path": r["image_path"]})
                     continue
             kept.append((r, img))
         if not kept:
             return
         ids = ",".join(str(r["id"]) for r, _ in kept)
-        await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=in.({ids})&status=eq.pending",
-                                {"status": "playing", "picked_at": datetime.now(timezone.utc).isoformat()}, "return=minimal")
+        if not self.busy:   # pick_ideas (busy mode) already claimed atomically in Supabase
+            claimed = await pools.control(self.supa.rest, "PATCH", f"ideas?id=in.({ids})&status=eq.pending",
+                                          {"status": "playing", "picked_at": datetime.now(timezone.utc).isoformat()},
+                                          "return=representation")
+            if isinstance(claimed, list):   # another pod (or a withdraw) took the rest
+                got = {str(c.get("id")) for c in claimed if isinstance(c, dict)}
+                kept = [(r, img) for r, img in kept if str(r["id"]) in got]
+            if not kept:
+                return
+        # Duplicate guard: the same words already queued/on stage are merged into that scene, not played twice.
+        stage = self._on_stage_bodies()
+        dups = [r for r, _ in kept if " ".join(str(r.get("body") or "").lower().split())[:200] in stage]
+        for r in dups:
+            await pools.control(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
+                                {"status": "played", "played_at": datetime.now(timezone.utc).isoformat(),
+                                 "plan": {"duplicate": True}}, "return=minimal")
+        kept = [(r, img) for r, img in kept if r not in dups]
+        if not kept:
+            return
         st = self.director.state()
         cur = st["target"] or st["current"]
         # Each idea is its own scene, planned independently (never woven together), queued in order.
-        plans = await asyncio.gather(*[
-            asyncio.to_thread(self.interpreter.plan, r.get("body") or "", cur, None, [img] if img else None)
-            for r, img in kept])
+        from .interpreter import assemble_plan
+
+        async def plan_for(r, img):
+            if img is None:   # text: the prompt is the user's words verbatim; the Haiku title follows asynchronously
+                core = " ".join(str(r.get("body") or "").split())[:500]
+                return {**assemble_plan(core, None), "note": "your words, verbatim", "image_flags": [], "source": "local"}
+            try:   # image ideas still need Haiku's vision moderation before anything is painted
+                return await pools.control(self.interpreter.plan, r.get("body") or "", cur, None, [img], timeout=60)
+            except Exception:
+                return {"scenes": [], "source": "error", "image_flags": []}
+        plans = await asyncio.gather(*[plan_for(r, img) for r, img in kept])
         from . import refs as _refs
         from .guard import is_disallowed
         from .styles import explicit_lora
@@ -247,8 +297,8 @@ class Crowd:
             rid = str(r["id"])
             if img and (_refs.blocked(plan.get("image_flags")) or plan.get("source") != "haiku"):
                 # Vision moderation flagged (or couldn't check) the reference image: reject, never render it.
-                await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{rid}", {"status": "rejected"}, "return=minimal")
-                await asyncio.to_thread(self.supa.audit, "ref_block", rid, {"flags": plan.get("image_flags"), "source": plan.get("source")})
+                await pools.control(self.supa.rest, "PATCH", f"ideas?id=eq.{rid}", {"status": "rejected"}, "return=minimal")
+                await pools.control(self.supa.audit, "ref_block", rid, {"flags": plan.get("image_flags"), "source": plan.get("source")})
                 continue
             body = r.get("body") or ""
             scenes = [make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""), 1,   # 1-strip takeover
@@ -258,8 +308,8 @@ class Crowd:
                       if (body and s["prompt"].startswith(" ".join(body.split()))) or not is_disallowed(s["prompt"])]
             if not scenes:
                 # Nothing survived the guard: don't leave the idea stuck as playing.
-                await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{rid}", {"status": "rejected"}, "return=minimal")
-                await asyncio.to_thread(self.supa.audit, "director_reject", rid, {"reason": "all_scenes_disallowed"})
+                await pools.control(self.supa.rest, "PATCH", f"ideas?id=eq.{rid}", {"status": "rejected"}, "return=minimal")
+                await pools.control(self.supa.audit, "director_reject", rid, {"reason": "all_scenes_disallowed"})
                 continue
             sc = scenes[0]
             sc["by"] = "@" + str(r.get("handle") or "someone")
@@ -272,11 +322,21 @@ class Crowd:
             return
         self.director.add_user([sc for _, sc, _ in queued])
         for r, sc, plan in queued:
+            try:
+                age = time.time() - datetime.fromisoformat(str(r.get("created_at")).replace("Z", "+00:00")).timestamp()
+            except Exception:
+                age = -1.0
+            logger.info("idea %s queued (%s) %.1fs after submit: %s", r["id"], plan.get("source"), age, sc["title"])
+            if plan.get("source") == "local" and getattr(self.interpreter, "enabled", False):
+                t = asyncio.get_running_loop().create_task(self._retitle(sc["id"], r.get("body") or "", cur))
+                self._title_tasks.add(t)
+                t.add_done_callback(self._title_tasks.discard)
+        for r, sc, plan in queued:
             # Stay `playing` until track_landing sees the idea leave the stage; store the plan so a
             # restart before landing can recover (see recover_interrupted).
-            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
+            await pools.control(self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
                                     {"plan": {"titles": [sc["title"]], "source": plan.get("source")}}, "return=minimal")
-            await asyncio.to_thread(self.supa.audit, "director_merge", str(r["id"]), {"titles": [sc["title"]], "by": sc["by"]})
+            await pools.control(self.supa.audit, "director_merge", str(r["id"]), {"titles": [sc["title"]], "by": sc["by"]})
             self.broadcast({"type": "activity", "text": (r.get("body") or "")[:200], "titles": [sc["title"]], "by": sc["by"]})
         self.on_change()
 
@@ -292,15 +352,15 @@ class Crowd:
             rows = [{"delta_cents": -round(gpu, 4), "reason": "gpu_burn", "ref": os.environ.get("RUNPOD_POD_ID", "")}]
             if claude_cents > 0:
                 rows.append({"delta_cents": -round(claude_cents, 4), "reason": "claude_burn", "ref": str(tokens)})
-            await asyncio.to_thread(self.supa.rest, "POST", "fuel_ledger", rows, "return=minimal")
-        st = await asyncio.to_thread(self.supa.rest, "GET", "fuel_status?select=balance_cents")
+            await pools.control(self.supa.rest, "POST", "fuel_ledger", rows, "return=minimal")
+        st = await pools.control(self.supa.rest, "GET", "fuel_status?select=balance_cents")
         self.fuel_cents = float(st[0]["balance_cents"]) if st else 0.0
         was = self.out_of_fuel
         self.out_of_fuel = self.fuel_cents <= 0
         self.broadcast({"type": "fuel", "fuel": self.state()})
         # Fuel is display-only: the GPU runs 24/7. The only stop is the RunPod credit guard ($0.50).
         if self.out_of_fuel and not was and self.burn:
-            await asyncio.to_thread(self.supa.audit, "out_of_fuel", os.environ.get("RUNPOD_POD_ID", ""), {"cents": self.fuel_cents})
+            await pools.control(self.supa.audit, "out_of_fuel", os.environ.get("RUNPOD_POD_ID", ""), {"cents": self.fuel_cents})
 
     on_event = None   # set by main: OpsLog.event
     _ref_clf: Any = False
@@ -356,11 +416,11 @@ class Crowd:
         started = getattr(self, "_landing", {})
         for i in live - set(started):
             started[i] = idx
-            await asyncio.to_thread(self.supa.rest, "PATCH", f"ideas?id=eq.{i}&start_strip=is.null", {"start_strip": idx}, "return=minimal")
+            await pools.control(self.supa.rest, "PATCH", f"ideas?id=eq.{i}&start_strip=is.null", {"start_strip": idx}, "return=minimal")
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         for i in set(started) - live:
             started.pop(i)
-            await asyncio.to_thread(
+            await pools.control(
                 self.supa.rest, "PATCH", f"ideas?id=eq.{i}",
                 {"end_strip": idx, "status": "played", "played_at": now}, "return=minimal")
         self._landing = started
@@ -395,16 +455,16 @@ class Crowd:
           end_strip = start_strip + 12 (reached the stage; close the range)
         """
         live = self._director_idea_ids()
-        never_landed = await asyncio.to_thread(
+        never_landed = await pools.control(
             self.supa.rest, "GET",
             "ideas?status=eq.playing&start_strip=is.null&select=id") or []
         for r in never_landed:
             if r["id"] in live:
                 continue
-            await asyncio.to_thread(
+            await pools.control(
                 self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
                 {"status": "pending"}, "return=minimal")
-        orphaned = await asyncio.to_thread(
+        orphaned = await pools.control(
             self.supa.rest, "GET",
             "ideas?status=eq.playing&start_strip=not.is.null&end_strip=is.null&select=id,start_strip") or []
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -412,7 +472,7 @@ class Crowd:
             if r["id"] in live:
                 continue
             start = int(r["start_strip"])
-            await asyncio.to_thread(
+            await pools.control(
                 self.supa.rest, "PATCH", f"ideas?id=eq.{r['id']}",
                 {"status": "played", "played_at": now, "end_strip": start + self._ORPHAN_SPAN},
                 "return=minimal")
@@ -423,14 +483,28 @@ class Crowd:
             await self.recover_interrupted()
         except Exception:
             logger.exception("crowd recover failed")
+        ideas = asyncio.get_running_loop().create_task(self._idea_loop())
+        try:
+            while True:
+                try:
+                    if time.monotonic() - last_meter >= 60 or self.fuel_cents is None:
+                        last_meter = time.monotonic()
+                        await self.meter()
+                    await self.refresh_pending()
+                    await self.track_landing()
+                except Exception:
+                    logger.exception("crowd tick failed")
+                await asyncio.sleep(3)
+        finally:
+            ideas.cancel()
+
+    IDEA_POLL_S = 1.0
+
+    async def _idea_loop(self) -> None:
+        """New ideas are picked up within ~1 s (was every 3 s, behind the meter/pending/landing calls)."""
         while True:
             try:
-                if time.monotonic() - last_meter >= 60 or self.fuel_cents is None:
-                    last_meter = time.monotonic()
-                    await self.meter()
-                await self.refresh_pending()
                 await self.pull_ideas()
-                await self.track_landing()
             except Exception:
-                logger.exception("crowd tick failed")
-            await asyncio.sleep(3)
+                logger.exception("idea pull failed")
+            await asyncio.sleep(self.IDEA_POLL_S)

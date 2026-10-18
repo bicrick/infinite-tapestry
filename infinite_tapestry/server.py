@@ -9,6 +9,8 @@ import os
 import struct
 import threading
 import time
+
+from . import pools
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -498,6 +500,7 @@ def create_app(
         # Clock/timeline stays viewer-driven via ensure_clock on WS connect.
         ensure_crowd()
         loop = hub["loop"] = asyncio.get_running_loop()
+        pools.install_diagnostics(loop)   # kill -USR1: thread stacks, -USR2: asyncio tasks (server.log)
         buffer.subscribe(lambda st: loop.call_soon_threadsafe(on_hub_strip, st))
         if generator is not None and getattr(generator, "store", None) is not None:
             await asyncio.to_thread(strip_meta)
@@ -525,6 +528,11 @@ def create_app(
             "timeline": timeline.state(),
             "viewers": len(clients),
             "interpreter": bool(interpreter.enabled),
+            "pools": pools.backlog(),
+            "clock": bool(clock_task.get("t") and not clock_task["t"].done()),
+            "auto": ({"busy": autopilot.busy, "error": autopilot.last_error, "hour_tokens": autopilot._hour_tokens()}
+                     if autopilot else None),
+            "overdue": generator.director.overdue() if generator is not None and hasattr(generator.director, "overdue") else 0,
         }
 
     @app.get("/lod/{level}/{chunk}.jpg")
@@ -539,7 +547,7 @@ def create_app(
         idx = generator.strip_index
         if (chunk + 1) * n > idx:  # chunk still filling: not cacheable yet
             return Response(status_code=404)
-        data = await asyncio.to_thread(lod.get, level, chunk, True)
+        data = await pools.heavy(lod.get, level, chunk, True)
         if not data:
             return Response(status_code=404)
         return Response(data, media_type="image/jpeg",
@@ -554,7 +562,7 @@ def create_app(
         w, h = max(64, min(1600, w)), max(64, min(1000, h))
         if store is None or a < 0 or b < a or b >= generator.strip_index:
             return Response(status_code=404)
-        data = await asyncio.to_thread(crop_section, store, config.strip_width, config.height, a, b, w, h)
+        data = await pools.heavy(crop_section, store, config.strip_width, config.height, a, b, w, h)
         if not data:
             return Response(status_code=404)
         return Response(data, media_type="image/jpeg",
@@ -588,7 +596,7 @@ def create_app(
         store = getattr(generator, "store", None)
         out: dict[int, float] = {}
         if store is not None:
-            meta = await asyncio.to_thread(store.load_meta)
+            meta = await pools.heavy(store.load_meta)
             for i in want:
                 t = (meta.get(i) or {}).get("created_at")
                 if t:
@@ -596,10 +604,10 @@ def create_app(
             miss = [i for i in want if i not in out]
             if miss and getattr(store, "mirror", None):
                 try:
-                    out.update(await asyncio.to_thread(store.mirror.strip_times, miss))
+                    out.update(await pools.heavy(store.mirror.strip_times, miss, timeout=30))
                 except Exception:
                     pass
-        scenes = await asyncio.to_thread(scene_runs, store) if store is not None else []
+        scenes = await pools.heavy(scene_runs, store) if store is not None else []
         return {"max": idx, "points": sorted([i, t] for i, t in out.items()), "now": time.time(), "scenes": scenes}
 
     @app.get("/export.png")
@@ -614,7 +622,7 @@ def create_app(
             hi = total - 1 if end < 0 else min(end, total - 1)
             if (hi - first + 1) > max_strips:
                 first = hi - max_strips + 1
-            strips = await asyncio.to_thread(store.strips_between, first, hi)
+            strips = await pools.heavy(store.strips_between, first, hi)
         else:
             strips = buffer.snapshot()
             if last > 0:
@@ -648,7 +656,7 @@ def create_app(
             canvas.save(out, format="PNG", optimize=False)
             return out.getvalue()
 
-        data = await asyncio.to_thread(build)
+        data = await pools.heavy(build)
         name = f"infinite-tapestry-{strips[0].index}-{strips[-1].index}.png"
         return Response(content=data, media_type="image/png",
                         headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
@@ -797,7 +805,7 @@ def create_app(
                     st = d.state()
                     users = [i["prompt"] for i in st["items"] if i.get("origin") != "auto"]
                     prev = users[-1] if (when == "end" and users) else (st["target"] or st["current"])
-                    plan = await asyncio.to_thread(interpreter.plan, text, prev, None)
+                    plan = await pools.control(interpreter.plan, text, prev, None, timeout=60)
                 scenes = [
                     make_scene(s["prompt"], s.get("negative", ""), s.get("title", ""),
                                s.get("transition"), s.get("hold"), source=text, origin="user", style=s.get("style"), beats=s.get("beats"),
@@ -898,7 +906,7 @@ def create_app(
                         if store is not None and len(have) < end - start + 1:
                             # Older than the in-memory window: read from disk.
                             missing = [i for i in range(start, end + 1) if i not in have]
-                            disk = await asyncio.to_thread(store.strips_between, missing[0], missing[-1])
+                            disk = await pools.heavy(store.strips_between, missing[0], missing[-1])
                             found = sorted(found + [d for d in disk if d.index not in have], key=lambda x: x.index)
                         for strip in found:
                             await ws.send_bytes(encode_strip_message(strip))

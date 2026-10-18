@@ -196,7 +196,7 @@ class PromptInterpreter:
         last_err = ""
         for model in dict.fromkeys([self.model, FALLBACK_MODEL]):
             try:
-                text = self._call(model, user, max_tokens=4000)
+                text = self._call(model, user, max_tokens=1500, _think=False)   # title + flags only: no reasoning
                 data = _json_obj(text)
                 flags = data.get("image_flags") or []
                 flags = [str(f).lower()[:20] for f in flags][:5] if isinstance(flags, list) else []

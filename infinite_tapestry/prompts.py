@@ -388,6 +388,32 @@ class LiveDirector:
                     s[k] = max(1 if k == "transition" else 0, int(fields[k]))
             return True
 
+    def retitle(self, scene_id: int, title: str) -> bool:
+        """Late title (Haiku) for a scene that may already be queued, blending in, or on stage."""
+        t = str(title or "").strip()[:80]
+        if not t:
+            return False
+        with self._lock:
+            hit = False
+            for s in [*self._queue, self._target, self._current]:
+                if s and s.get("id") == scene_id:
+                    s["title"] = t
+                    hit = True
+            for h in self.history[-3:]:
+                if h.get("id") == scene_id:
+                    h["title"] = t
+            return hit
+
+    def overdue(self) -> int:
+        """Strips the scene on stage has run past its planned width while nothing was queued (0 if on time)."""
+        with self._lock:
+            if self._queue or self._target is not None:
+                return 0
+            held = self._last_index - self._active_since
+            if held >= 10**8 or held < 0:
+                return 0
+            return max(0, held - self._hold_len(self._current))
+
     def play(self, scene_id: int, at: int = 0) -> bool:
         with self._lock:
             i = self._find(int(scene_id))
