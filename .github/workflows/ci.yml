@@ -273,6 +273,10 @@ jobs:
           for d in $(printf '%s\n' "$HOST" infinite-tapestry.vercel.app infinite-tapestry-preview.vercel.app infinitetapestry.app | sort -u); do
             npx -y vercel@latest alias set "$URL" "$d" --token "$VERCEL_TOKEN"
           done
+          # Make it the project's production deployment too: Vercel crons (Time Machine /api/tm) and any project domain
+          # not in the list above (www) follow that pointer, which --skip-domain + alias alone never moves.
+          npx -y vercel@latest promote "$URL" --yes --token "$VERCEL_TOKEN" \
+            || { echo "::error::vercel promote failed; crons would keep running an old deployment"; exit 1; }
           for n in 1 2 3 4 5 6; do sleep 4; curl -sf "$SITE/build.json?x=$GITHUB_RUN_ID-$n" | tee /dev/stderr | grep -q "${GITHUB_SHA:0:7}" && break; [ $n = 6 ] && exit 1; done
           # deploy history for the admin panel
           curl -sf -X POST "$SUPABASE_URL/rest/v1/deploy_log" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
