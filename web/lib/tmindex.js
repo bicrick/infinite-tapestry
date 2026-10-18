@@ -1,5 +1,5 @@
 // Time Machine v3 history index: precomputed, append-only summaries of the strips table so the history
-// call never scans every row again. Shared by the writer (scripts/tm/build_index.js, GitHub Actions cron)
+// call never scans every row again. Shared by the writer (web/lib/tmbuild.js, Vercel cron /api/tm)
 // and the reader (/api/about?kind=history, /api/tm).
 //
 // Layout (Supabase Storage bucket "tapestry", mirrored to R2 when R2_* creds are present):

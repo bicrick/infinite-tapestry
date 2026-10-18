@@ -1,5 +1,5 @@
 -- Every 5 minutes, ask the Vercel controller to reconcile the GPU pod with the fuel tank.
--- The controller URL and shared secret live in Supabase Vault (set by scripts/deploy_web.sh):
+-- The controller URL and shared secret live in Supabase Vault (set once by hand, see docs/OPERATIONS.md):
 --   controller_url    e.g. https://<deployment>/api/controller?x-vercel-protection-bypass=<bypass>
 --   controller_secret matches CONTROLLER_SECRET on Vercel
 create extension if not exists pg_cron;

@@ -173,13 +173,6 @@ def test_gpu_js_pod_env_carries_r2_and_never_disables_it():
     assert "TAPESTRY_SUPABASE_PUBLIC" not in full   # no Supabase Storage copies any more
 
 
-def test_provision_puts_r2_in_the_runpod_env():
-    sys.path.insert(0, str(ROOT / "scripts/pod"))
-    import provision
-    out = provision.pod_env({**KEYS, "SUPABASE_URL": "u"}, "ssh-ed25519 X")
-    assert '"R2_SECRET_ACCESS_KEY"' in out and '"PUBLIC_KEY"' in out and "TAPESTRY_R2\"" not in out
-
-
 def test_selfboot_falls_back_to_the_durable_copy():
     src = (ROOT / "scripts/pod/selfboot.sh").read_text()
     assert "deploy/secrets/r2.env" in src and "TAPESTRY_R2" not in src

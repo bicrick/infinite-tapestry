@@ -68,7 +68,7 @@ async function allStrips() {
   return out;
 }
 
-// Fast path: precomputed hour index (scripts/tm/build_index.js) + a live tail of strips newer than its
+// Fast path: precomputed hour index (web/lib/tmbuild.js, Vercel cron) + a live tail of strips newer than its
 // checkpoint, so the result is as fresh as the full scan without reading every row.
 const monthCache = new Map(); // past months are immutable
 async function idxJSON(name) {
