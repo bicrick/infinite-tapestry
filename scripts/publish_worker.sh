@@ -22,6 +22,21 @@ if [[ " $* " != *" --no-latest "* ]]; then
   printf '%s\n' "$SHA" | curl -sf "${R[@]}" "${A[@]}" -H "x-upsert: true" -H "content-type: text/plain" --data-binary @- "$B/latest.txt" > /dev/null
   printf '%s\n' "$TREE" | curl -sf "${R[@]}" "${A[@]}" -H "x-upsert: true" -H "content-type: text/plain" --data-binary @- "$B/latest.tree" > /dev/null
 fi
+# Keep the newest KEEP_RELEASES tarballs (rollback targets); older ones are deleted.
+python3 - "$SHA" <<'PY' || echo "release prune failed (non-fatal)"
+import json, os, sys, urllib.request
+u, k = os.environ["SUPABASE_URL"].rstrip("/"), os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+H = {"apikey": k, "Authorization": f"Bearer {k}", "Content-Type": "application/json"}
+def call(path, method, body):
+    return json.loads(urllib.request.urlopen(urllib.request.Request(f"{u}/storage/v1/object/{path}", method=method,
+                      headers=H, data=json.dumps(body).encode()), timeout=60).read() or b"[]")
+rel = [e for e in call("list/deploy", "POST", {"prefix": "worker/", "limit": 1000}) if e["name"].endswith(".tgz")]
+rel.sort(key=lambda e: e.get("created_at") or "", reverse=True)
+old = [f"worker/{e['name']}" for e in rel[int(os.environ.get("KEEP_RELEASES", "8")):] if not e["name"].startswith(sys.argv[1])]
+if old:
+    call("deploy", "DELETE", {"prefixes": old})
+print(f"releases kept {min(len(rel), len(rel) - len(old))}, pruned {len(old)}")
+PY
 curl -sf -X POST "$SUPABASE_URL/rest/v1/deploy_log" "${A[@]}" -H "Content-Type: application/json" -H "Prefer: return=minimal" \
   -d "{\"kind\":\"worker\",\"sha\":\"$SHA\",\"run_id\":\"${GITHUB_RUN_ID:-}\"}" > /dev/null || echo "deploy_log write failed (non-fatal)"
 echo "published worker $SHA (tree ${TREE:0:12})"

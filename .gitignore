@@ -13,3 +13,8 @@ build/
 huggingface/
 .cache/
 web/node_modules/
+.env
+.data/
+dist/
+ops-logs/
+node_modules/
