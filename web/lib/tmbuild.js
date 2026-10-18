@@ -5,7 +5,15 @@ const { ERAS, V, fold, compact, hourKey, landmarks } = require("./tmindex");
 const SB = () => process.env.SUPABASE_URL.replace(/\/$/, "");
 const H = () => ({ apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, authorization: "Bearer " + process.env.SUPABASE_SERVICE_ROLE_KEY });
 
-async function getJSON(key) { const r = await fetch(`${SB()}/storage/v1/object/tapestry/${key}`, { headers: H() }); return r.ok ? r.json() : null; }
+// null only when the object really is absent (Storage answers 400/404 "not_found"); any other failure throws, so a
+// transient Storage 5xx/429 aborts the job instead of looking like "no state" and resetting the whole index.
+async function getJSON(key) {
+  const r = await fetch(`${SB()}/storage/v1/object/tapestry/${key}`, { headers: H() });
+  if (r.ok) return r.json();
+  const body = await r.text().catch(() => "");
+  if (r.status === 404 || (r.status === 400 && /not.?found/i.test(body))) return null;
+  throw new Error(`get ${key}: ${r.status} ${body.slice(0, 120)}`);
+}
 // Binary tiles go to R2 only (Supabase Storage is relational/JSON-only now); the small JSON index stays here.
 const { r2Put } = require("./r2");
 async function putObj(key, body, type) {

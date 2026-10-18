@@ -102,13 +102,20 @@ async function runTiles({ budgetMs = 45000, rebuild = false } = {}) {
         man.full.t = t + batch.length;
         if (built % 48 < batch.length) { const { lock, ...m } = man; await putJSON(MAN, { ...m, lock: man.lock }); }
       }
-    } else if (C.N > man.units) {
-      const start = Math.max(0, man.units - 64);
-      for (let l = 1; l <= LMAX && Date.now() - t0 < budgetMs; l++) {
-        const a = Math.floor(start / UPT[l]), b = tiles(l, C.N);
-        for (let t = a; t < b; t++) await save(l, t, l === 1 ? await buildL1(C, t) : await buildUp(C, l, t));
+    } else if (C.N > man.units || man.tail) {
+      // Tail catch-up, resumable: progress (level, tile) is saved in man.tail so a gap bigger than one invocation's
+      // budget still finishes (before, every run restarted at units-64 and never got past L1 of a large gap).
+      if (!man.tail) { const start = Math.max(0, man.units - 64); man.tail = { l: 1, t: Math.floor(start / UPT[1]), start, target: C.N }; }
+      const T = man.tail; C.N = T.target;
+      outer: for (let l = T.l; l <= LMAX; l++) {
+        const b = tiles(l, T.target);
+        for (let t = l === T.l ? T.t : Math.floor(T.start / UPT[l]); t < b; t++) {
+          if (Date.now() - t0 >= budgetMs) { T.l = l; T.t = t; break outer; }
+          await save(l, t, l === 1 ? await buildL1(C, t) : await buildUp(C, l, t));
+          if (built % 24 === 0) { T.l = l; T.t = t + 1; await putJSON(MAN, man); }   // survive a hard timeout
+        }
+        if (l === LMAX) { man.units = T.target; delete man.tail; }
       }
-      if (Date.now() - t0 < budgetMs) man.units = C.N;
     }
   } finally {
     const N = man.full.done ? man.units : man.full.target;

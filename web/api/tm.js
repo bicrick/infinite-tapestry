@@ -29,9 +29,10 @@ module.exports = async (req, res) => {
     if (job) {
       // Cron only (Vercel sends this UA); jobs are idempotent, so a spoofed call can't do harm beyond CPU time.
       if (!/vercel-cron/i.test(req.headers["user-agent"] || "")) return res.status(403).json({ error: "cron only" });
-      const out = {};
+      const out = {}, t0 = Date.now();
       if (job === "index" || job === "all") out.index = await runIndex();
-      if (job === "tiles" || job === "all") out.tiles = await runTiles({ budgetMs: job === "all" ? 38000 : 45000 });
+      // tiles get what is left of the 60 s function limit (index catch-up can take a while), never less than 5 s
+      if (job === "tiles" || job === "all") out.tiles = await runTiles({ budgetMs: Math.max(5000, 45000 - (Date.now() - t0)) });
       console.log("tm job", JSON.stringify(out));
       return res.status(200).json(out);
     }
