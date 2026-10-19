@@ -333,7 +333,7 @@ class SupabaseMirror:
         with self._rows_lock:
             self._rows.append(row)
 
-    ROW_FLUSH_S = float(os.environ.get("TAPESTRY_ROW_FLUSH_S", "10"))
+    ROW_FLUSH_S = float(os.environ.get("TAPESTRY_ROW_FLUSH_S", "30"))   # viewers get strips over the WS; rows are history
 
     def flush_rows(self) -> int:
         with self._rows_lock:
@@ -529,10 +529,10 @@ class HistoryStore:
 
     # ---- state ----
     def save_state(self, state: dict[str, Any], canvas: Image.Image | None = None, force: bool = False) -> bool:
-        """Always written locally (consistent with the strips on disk); mirrored
-        to Storage only when `force` or every 30 s to save bandwidth."""
+        """Always written locally (consistent with the strips on disk); mirrored (state row + canvas.png on R2) only
+        when `force` or every 2 min: restarts resume from the published strips, so the state row is only a hint."""
         now = time.monotonic()
-        mirror_now = force or now - self._last_state >= 30.0
+        mirror_now = force or now - self._last_state >= 120.0
         if mirror_now:
             self._last_state = now
         data = json.dumps(state).encode()

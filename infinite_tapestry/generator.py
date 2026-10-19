@@ -436,6 +436,13 @@ class StripGenerator:
                         idx = top + 1
                 except Exception:
                     logger.warning("latest strip lookup failed; using saved index")
+                try:   # strip rows are batched (ROW_FLUSH_S): strips already on the local disk count as published too
+                    local = max(store.load_meta(), default=None)
+                    if local is not None and local + 1 > idx:
+                        logger.info("Local strips reach %d; resuming at %d", local, local + 1)
+                        idx = local + 1
+                except Exception:
+                    logger.warning("local strip index lookup failed")
                 warm = min(self.buffer.history_limit, 64)  # older strips load lazily on pan
                 keep = list(range(max(0, idx - warm), idx))
                 meta = store.load_meta()
@@ -473,7 +480,7 @@ class StripGenerator:
             return
         try:
             store.save_strip(strip)
-            store.save_state(self.snapshot_state(), self.canvas, force=strip.index % 10 == 0)
+            store.save_state(self.snapshot_state(), self.canvas, force=strip.index % 60 == 0)
         except Exception:
             logger.exception("Persisting strip %s failed", strip.index)
 
@@ -487,7 +494,7 @@ class StripGenerator:
             from concurrent.futures import ThreadPoolExecutor
             self._persist_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="persist")
             self._persist_backlog = 0
-        state, canvas, force = self.snapshot_state(), self.canvas, strip.index % 10 == 0
+        state, canvas, force = self.snapshot_state(), self.canvas, strip.index % 60 == 0
         def job() -> None:
             try:
                 store.save_strip(strip)

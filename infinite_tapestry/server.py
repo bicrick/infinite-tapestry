@@ -524,6 +524,8 @@ def create_app(
         if st is not None:
             try:
                 st.save_state(generator.snapshot_state(), generator.canvas, force=True)
+                if getattr(st, "mirror", None) is not None and hasattr(st.mirror, "flush_rows"):
+                    st.mirror.flush_rows()   # batched strip rows (ROW_FLUSH_S) go out before the process exits
                 logger.info("Shutdown: director state saved")
             except Exception:
                 logger.exception("Shutdown state save failed")
