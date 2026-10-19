@@ -371,7 +371,8 @@ async function boot() {
   // fires on every idea change, so at scale this must not run per event.
   let ideasAt = 0, ideasTimer = 0;
   function refreshIdeas() {
-    const wait = Math.max(0, 3000 - (Date.now() - ideasAt));
+    // ≥5 s apart plus up to 3 s of jitter, so one idea change does not hit Supabase from every open tab at once.
+    const wait = Math.max(0, 5000 - (Date.now() - ideasAt)) + Math.random() * 3000;
     if (ideasTimer) return;
     ideasTimer = setTimeout(() => { ideasTimer = 0; ideasAt = Date.now(); loadIdeas(); }, wait);
   }
@@ -504,7 +505,8 @@ async function boot() {
   function renderIdeas() { if (listRows.length) renderList(qsort === "up" ? $("queue-more") : $("idea-list")); }
   refreshIdeas();
   sb.channel("ideas").on("postgres_changes", { event: "*", schema: "public", table: "ideas" }, (p) => { refreshIdeas(); window.dispatchEvent(new CustomEvent("tapestry:idea", { detail: p })); }).subscribe();
-  setInterval(refreshIdeas, 60000);
+  // Realtime above already refreshes on every change; this is only a slow safety net, and never in a hidden tab.
+  setInterval(() => { if (!document.hidden) refreshIdeas(); }, 300000);
 
   // ---------- chat ----------
   // Home-page live chat: just people talking. Realtime rides the existing Supabase channel (no polling).
