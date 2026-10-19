@@ -21,6 +21,7 @@ from typing import Any, Callable
 
 from . import pools
 from .prompts import make_scene
+from .sbguard import urlopen_read
 
 
 
@@ -56,9 +57,8 @@ class Supa:
             headers={"Authorization": f"Bearer {self.key}", "apikey": self.key,
                      "Content-Type": "application/json", "Prefer": prefer},
         )
-        with urllib.request.urlopen(req, timeout=15) as r:
-            t = r.read()
-            return json.loads(t) if t else None
+        t = urlopen_read(req, timeout=15)
+        return json.loads(t) if t else None
 
     def user_from_token(self, token: str) -> dict | None:
         req = urllib.request.Request(f"{self.url}/auth/v1/user",

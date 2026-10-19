@@ -19,6 +19,8 @@ import threading
 import time
 import urllib.request
 
+from .sbguard import urlopen_read
+
 log = logging.getLogger(__name__)
 STALL_S = float(os.environ.get("TAPESTRY_STALL_S", "20"))
 HEARTBEAT_S = 30.0
@@ -47,9 +49,8 @@ class OpsLog:
                                      data=None if body is None else json.dumps(body).encode(),
                                      headers={"Authorization": f"Bearer {self.key}", "apikey": self.key,
                                               "Content-Type": "application/json", "Prefer": prefer})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            t = r.read()
-            return json.loads(t) if t else None
+        t = urlopen_read(req, timeout=10)
+        return json.loads(t) if t else None
 
     def event(self, type: str, started_at: float | None = None, duration_ms: int | None = None, **detail) -> None:
         if not self.enabled:

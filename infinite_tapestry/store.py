@@ -24,6 +24,7 @@ from typing import Any
 from PIL import Image
 
 from .buffer import Strip
+from .sbguard import urlopen_read
 
 logger = logging.getLogger(__name__)
 
@@ -309,9 +310,8 @@ class SupabaseMirror:
             headers={"Authorization": f"Bearer {self.key}", "apikey": self.key,
                      "Content-Type": "application/json", **({"Prefer": prefer} if prefer else {})},
         )
-        with urllib.request.urlopen(req, timeout=20) as r:
-            t = r.read()
-            return json.loads(t) if t else None
+        t = urlopen_read(req, timeout=20)
+        return json.loads(t) if t else None
 
     def db_async(self, fn, slow: bool = True) -> None:
         """Run a DB write on an uploader thread: the ordered slow lane (state) or the fast lane (strip rows)."""

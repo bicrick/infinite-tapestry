@@ -16,3 +16,12 @@ def fixed_widths(monkeypatch):
     """Legacy timing tests: fixed v1.0 holds instead of random scene widths."""
     from infinite_tapestry.prompts import LiveDirector
     monkeypatch.setattr(LiveDirector, "random_widths", False)
+
+
+@_pytest.fixture(autouse=True)
+def _reset_supabase_breaker():
+    """The Supabase breaker is process-wide; a test that simulates an outage must not trip it for the next test."""
+    from infinite_tapestry import sbguard
+    sbguard.BREAKER.ok()
+    yield
+    sbguard.BREAKER.ok()
