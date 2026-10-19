@@ -93,9 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.data_dir:
         from .store import HistoryStore, SupabaseMirror
 
-        if args.mock:
-            os.environ.setdefault("TAPESTRY_STORAGE_PREFIX", "mock")
-        generator.attach_store(HistoryStore(args.data_dir, SupabaseMirror.from_env()))
+        generator.attach_store(HistoryStore(args.data_dir, SupabaseMirror.from_env("mock" if args.mock else "live-sdxl")))
     generator.start()
     from .ops import OpsLog
 

@@ -415,18 +415,14 @@ def create_app(
         if hub["public_base"] is None or time.time() - hub.get("public_at", 0) > 120:
             mirror = getattr(getattr(generator, "store", None), "mirror", None)
             hub["public_base"] = mirror.public_base() if mirror and hasattr(mirror, "public_base") else ""
-            fb = mirror.fallback_base() if mirror and hasattr(mirror, "fallback_base") else None
-            hub["fallback_base"] = fb or ""
             hub["public_at"] = time.time()
         return hub["public_base"] or None
 
     def cdn_bases() -> dict:
         b = public_base()
-        out = {"strip_base": b, "lod_base": b[:-len("strips/")] + "lod/"}
-        fb = hub.get("fallback_base")
-        if fb:
-            out.update(strip_base_fb=fb, lod_base_fb=fb[:-len("strips/")] + "lod/")
-        return out
+        if not b:
+            return {}
+        return {"strip_base": b, "lod_base": b[:-len("strips/")] + "lod/"}
 
     def strip_meta() -> dict[int, dict]:
         """Strip metadata index, loaded once and extended as strips arrive (no per-request file scans)."""

@@ -12,7 +12,7 @@ const IMAGE = "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04";
 const SSH_PUB = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp57zMh4aousl6AeuPp8rZOinwFnkIVKy+wc+NqGLri box-tapestry";
 const POD_ENV_KEYS = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "TAPESTRY_ANTHROPIC_API_KEY", "RUNPOD_API_KEY",
   "R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_PUBLIC_URL", "R2_BUCKET", "TAPESTRY_SDXL_MODEL"];
-const POD_FIXED = { TAPESTRY_BACKEND: "sdxl", TAPESTRY_STORAGE_PREFIX: "live-sdxl", TAPESTRY_GPU_CENTS_PER_HOUR: "89",
+const POD_FIXED = { TAPESTRY_BACKEND: "sdxl", TAPESTRY_GPU_CENTS_PER_HOUR: "89",
   TAPESTRY_SITE_URL: "https://infinitetapestry.app" };
 
 // Container start command for replacement pods: pull the newest CI worker release from the private Supabase `deploy`

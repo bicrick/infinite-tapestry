@@ -20,24 +20,39 @@ def _mirror(monkeypatch, r2):
     return SupabaseMirror("https://sb.example", "k", prefix="live")
 
 
-def test_viewers_always_on_r2_when_configured(monkeypatch):
+def test_viewers_always_on_r2(monkeypatch):
     m = _mirror(monkeypatch, FakeR2(True))
     assert m.public_base() == "https://pub-x.r2.dev/live/strips/"
-    assert m.fallback_base().startswith("https://sb.example/")   # read-only fallback for the old range
+    assert not hasattr(m, "fallback_base")   # no Supabase fallback
     m.r2.cors = False
-    assert m.public_base().startswith("https://pub-x.r2.dev/")   # new strips exist only on R2
+    assert m.public_base().startswith("https://pub-x.r2.dev/")   # strips exist only on R2
 
 
-def test_no_r2_is_degraded_supabase_read_only(monkeypatch):
+def test_no_r2_means_no_strip_base(monkeypatch):
     m = _mirror(monkeypatch, None)
-    assert m.public_base().startswith("https://sb.example/") and m.fallback_base() is None
+    assert m.public_base() == "" and m.get("public:strips/00000001.webp") is None
+
+
+def test_reads_are_r2_only(monkeypatch):
+    r2 = FakeR2(True)
+    r2.get = lambda key: b"img" if key == "live/strips/00000001.webp" else None
+    m = _mirror(monkeypatch, r2)
+    assert m.get("public:strips/00000001.webp") == b"img"
+    assert m.get("public:strips/00000002.webp") is None
+
+
+def test_session_prefix(monkeypatch):
+    monkeypatch.setattr("infinite_tapestry.store.R2Public.from_env", classmethod(lambda cls: None))
+    monkeypatch.setenv("SUPABASE_URL", "https://sb.example"); monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "k")
+    monkeypatch.setenv("TAPESTRY_STORAGE_PREFIX", "ignored")
+    assert SupabaseMirror.from_env().prefix == "live-sdxl"
+    assert SupabaseMirror.from_env("mock").prefix == "mock"
 
 
 def test_all_binary_assets_go_to_r2_and_never_supabase(monkeypatch):
     import time
     r2 = FakeR2(True)
     m = _mirror(monkeypatch, r2)
-    monkeypatch.setattr(m, "_req", lambda *a, **k: (_ for _ in ()).throw(AssertionError("Supabase Storage write")))
     m.put("public:strips/00000001.webp", b"s", "image/webp")
     m.put("public:lod/1/000001.jpg", b"t", "image/jpeg")
     m.put("canvas.png", b"c", "image/png")
@@ -53,7 +68,6 @@ def test_all_binary_assets_go_to_r2_and_never_supabase(monkeypatch):
 def test_r2_down_drops_binary_writes_but_keeps_rows(monkeypatch):
     import time
     m = _mirror(monkeypatch, None)
-    monkeypatch.setattr(m, "_req", lambda *a, **k: (_ for _ in ()).throw(AssertionError("Supabase Storage write")))
     rows = []
     m.put("public:strips/00000002.webp", b"s", "image/webp", after=lambda: rows.append(2))
     for _ in range(100):

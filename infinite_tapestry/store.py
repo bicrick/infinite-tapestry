@@ -173,11 +173,15 @@ class R2Public:
         return ok
 
 
-class SupabaseMirror:
-    """Fire-and-forget uploads to a Supabase Storage bucket (service role)."""
+SESSION = "live-sdxl"   # storage prefix of the SDXL pod: strips rows (session) and R2 keys
 
-    def __init__(self, url: str, key: str, bucket: str = "tapestry", prefix: str = "live") -> None:
-        self.url, self.key, self.bucket, self.prefix = url.rstrip("/"), key, bucket, prefix
+
+class SupabaseMirror:
+    """Durable copy of the tapestry: rows (strips, state) in Supabase Postgres, every binary on R2 (fire-and-forget
+    uploads on worker threads). Supabase Storage is never read or written for strips, tiles, canvas or crops."""
+
+    def __init__(self, url: str, key: str, prefix: str = SESSION) -> None:
+        self.url, self.key, self.prefix = url.rstrip("/"), key, prefix
         # Fast lane: strip/tile uploads + strip rows on UPLOAD_WORKERS threads, newest strips first (priority, seq).
         # Slow lane: one ordered thread for canvas.png + the state row (state must never point past its canvas).
         self._q: "queue.PriorityQueue[tuple]" = queue.PriorityQueue(maxsize=4000)
@@ -261,49 +265,25 @@ class SupabaseMirror:
                 "dropped_no_r2": self.dropped, "supabase_storage_writes": 0}
 
     @classmethod
-    def from_env(cls) -> "SupabaseMirror | None":
+    def from_env(cls, prefix: str = SESSION) -> "SupabaseMirror | None":
+        """Supabase holds rows (strips, state); every binary goes to R2 under `prefix` (live-sdxl; mock for --mock)."""
         url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-        if not (url and key) or os.environ.get("TAPESTRY_STORAGE_MIRROR", "1") == "0":
+        if not (url and key):
             return None
-        return cls(url, key, os.environ.get("TAPESTRY_STORAGE_BUCKET", "tapestry"),
-                   os.environ.get("TAPESTRY_STORAGE_PREFIX", "live"))
-
-    # Public, CDN-cached copy of every strip so viewers fetch images from the
-    # Supabase CDN instead of the pod (the WS only carries small JSON refs).
-    public_bucket = os.environ.get("TAPESTRY_PUBLIC_BUCKET", "strips")
-
-    def supabase_public_base(self) -> str:
-        return f"{self.url}/storage/v1/object/public/{self.public_bucket}/{self.prefix}/strips/"
+        return cls(url, key, prefix=prefix)
 
     def public_base(self) -> str:
-        """Where viewers load strips: always R2 when it is configured (new strips exist nowhere else). Supabase only
-        when the pod has no R2 at all (degraded; old strips still load from there)."""
-        if self.r2 is not None:
-            if not self.r2.cors_ok():
-                logger.warning("R2 public bucket answered without CORS; viewers fall back to Supabase for old strips")
-            return f"{self.r2.public_url}/{self.prefix}/strips/"
-        return self.supabase_public_base()
-
-    def fallback_base(self) -> str | None:
-        """Read-only fallback for strips written before R2-only (the old R2 gap is being backfilled)."""
-        return self.supabase_public_base() if self.r2 is not None else None
+        """Where viewers load strips: the public R2 bucket (the only copy). Empty when R2 is not configured."""
+        if self.r2 is None:
+            return ""
+        if not self.r2.cors_ok():
+            logger.warning("R2 public bucket answered without CORS; browsers cannot read strips")
+        return f"{self.r2.public_url}/{self.prefix}/strips/"
 
     def r2_key(self, path: str) -> str:
         """Every binary asset lives on R2 under the session prefix: public:strips/x -> live-sdxl/strips/x,
         canvas.png -> live-sdxl/canvas.png, crops/x -> live-sdxl/crops/x."""
         return f"{self.prefix}/{path[len('public:'):] if path.startswith('public:') else path}"
-
-    def _req(self, method: str, path: str, data: bytes | None = None, ctype: str = "application/octet-stream") -> bytes:
-        bucket = self.bucket
-        headers = {"Authorization": f"Bearer {self.key}", "apikey": self.key, "Content-Type": ctype, "x-upsert": "true"}
-        if path.startswith("public:"):
-            path, bucket = path[len("public:"):], self.public_bucket
-            headers["cache-control"] = "max-age=31536000"  # strip keys are immutable
-        req = urllib.request.Request(
-            f"{self.url}/storage/v1/object/{bucket}/{self.prefix}/{path}", data=data, method=method, headers=headers,
-        )
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return r.read()
 
     def _next(self) -> int:
         with self._seq_lock:
@@ -410,15 +390,8 @@ class SupabaseMirror:
         return out
 
     def get(self, path: str) -> bytes | None:
-        """R2 first; Supabase Storage is read-only fallback for old objects written before R2-only (never written now)."""
-        if self.r2:
-            data = self.r2.get(self.r2_key(path))
-            if data:
-                return data
-        try:
-            return self._req("GET", path)
-        except Exception:
-            return None
+        """Read a binary back from R2 (the only binary store)."""
+        return self.r2.get(self.r2_key(path)) if self.r2 else None
 
     def _run(self, q: "queue.Queue", prioritized: bool) -> None:
         while True:
