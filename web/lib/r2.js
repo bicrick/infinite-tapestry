@@ -46,12 +46,4 @@ async function r2Put(key, body, contentType, { cacheControl, fetchImpl = fetch }
   return buf.length;
 }
 
-// Supabase Storage read (old objects only). Never used for writes.
-async function sbGet(path) {
-  const base = e("SUPABASE_URL").replace(/\/$/, ""), k = e("SUPABASE_SERVICE_ROLE_KEY");
-  if (!base) return null;
-  const r = await fetch(`${base}/storage/v1/object/${path}`, { headers: { apikey: k, authorization: "Bearer " + k } }).catch(() => null);
-  return r && r.ok ? Buffer.from(await r.arrayBuffer()) : null;
-}
-
-module.exports = { r2Url, r2Get, r2Put, signPut, sbGet, writeReady };
+module.exports = { r2Url, r2Get, r2Put, signPut, writeReady };

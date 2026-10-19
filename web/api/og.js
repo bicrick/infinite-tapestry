@@ -1,5 +1,5 @@
 const OWNER = (h) => String(h || "").toLowerCase() === "bicrick";   // never credited in previews
-const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
+const { rest, POD, loadPod, storagePrefixes } = require("../lib/common");
 const { r2Get } = require("../lib/r2");
 
 // Raw crops (no `card`): a crop of the tapestry where an idea landed (profile thumbnails etc).
@@ -10,15 +10,10 @@ const { r2Get } = require("../lib/r2");
 //   card=user&handle=h   that person's latest woven idea
 // Any failure falls back to the pre-rendered static variants in /brand/og/.
 const STATIC = ["og-1-lanterns", "og-2-band", "og-3-close", "og-4-live", "og-5-fields"];
-const sbHeaders = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
 
 async function getCrop(a, b, w, h, ms = 9000) {
   const key = `crops/${a}-${b}-${w}x${h}.jpg`;
-  for (const pre of storagePrefixes()) { const b = await r2Get(`${pre}/${key}`); if (b) return b; }   // R2 first
-  for (const pre of storagePrefixes()) {
-    const r = await fetch(`${env("SUPABASE_URL").replace(/\/$/, "")}/storage/v1/object/tapestry/${pre}/${key}`, { headers: sbHeaders() }).catch(() => null);
-    if (r && r.ok) return Buffer.from(await r.arrayBuffer());
-  }
+  for (const pre of storagePrefixes()) { const b = await r2Get(`${pre}/${key}`); if (b) return b; }
   if (!(await loadPod())) return null;
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), ms);
   const r = await fetch(`https://${POD()}-8000.proxy.runpod.net/crop/${a}/${b}.jpg?w=${w}&h=${h}`, { signal: ctl.signal }).catch(() => null);

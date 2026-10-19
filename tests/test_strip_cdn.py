@@ -1,4 +1,4 @@
-"""Live strip URLs stay on the public Supabase bucket unless R2 is actually in use."""
+"""Live strip URLs always point at the public R2 bucket (R2 is the only binary store)."""
 import json
 import os
 import shutil
@@ -26,56 +26,17 @@ def bases(extra):
     return node(script, env)
 
 
-def test_public_url_alone_stays_on_supabase():
-    got = bases({"R2_PUBLIC_URL": R2})
-    assert got["strip_base"] == f"{SB}/storage/v1/object/public/strips/live-sdxl/strips/"
-    assert got["lod_base"] == f"{SB}/storage/v1/object/public/strips/live-sdxl/lod/"
+def test_strips_always_load_from_r2():
+    assert bases({}) == {"strip_base": f"{R2}/live-sdxl/strips/", "lod_base": f"{R2}/live-sdxl/lod/"}
+    assert bases({"R2_PUBLIC_URL": "https://cdn.example/"})["strip_base"] == "https://cdn.example/live-sdxl/strips/"
+    # Old switches are gone: no Supabase bucket, no fallback bases, no prefix override.
+    for extra in ({"TAPESTRY_STRIP_CDN": "supabase"}, {"TAPESTRY_R2": "0"}, {"TAPESTRY_STORAGE_PREFIX": "live"}):
+        assert bases(extra) == {"strip_base": f"{R2}/live-sdxl/strips/", "lod_base": f"{R2}/live-sdxl/lod/"}
 
 
-def test_session_prefix_defaults_and_overrides():
-    assert bases({})["strip_base"].endswith("/strips/live-sdxl/strips/")
-    got = bases({"TAPESTRY_STORAGE_PREFIX": "live"})
-    assert got["strip_base"] == f"{SB}/storage/v1/object/public/strips/live/strips/"
-    assert got["lod_base"] == f"{SB}/storage/v1/object/public/strips/live/lod/"
-
-
-def test_explicit_r2_opt_in():
-    got = bases({"TAPESTRY_STRIP_CDN": "r2", "R2_PUBLIC_URL": R2 + "/"})
-    fb = f"{SB}/storage/v1/object/public/strips/live-sdxl"
-    assert got == {"strip_base": f"{R2}/live-sdxl/strips/", "lod_base": f"{R2}/live-sdxl/lod/",
-                   "strip_base_fb": f"{fb}/strips/", "lod_base_fb": f"{fb}/lod/"}   # Supabase copy as fallback
-    # The known public host is only a fallback after an explicit opt-in, not the default.
-    got = bases({"TAPESTRY_STRIP_CDN": "r2"})
-    assert got["strip_base"] == f"{R2}/live-sdxl/strips/"
-
-
-def test_write_capable_r2_and_the_off_switch():
-    keys = {"R2_ENDPOINT": "https://acct.r2.cloudflarestorage.com", "R2_ACCESS_KEY_ID": "k",
-            "R2_SECRET_ACCESS_KEY": "s", "R2_PUBLIC_URL": "https://pub-x.r2.dev"}
-    assert bases(keys)["strip_base"] == "https://pub-x.r2.dev/live-sdxl/strips/"
-    assert bases({**keys, "TAPESTRY_R2": "0"})["strip_base"].startswith(f"{SB}/storage/")
-    assert bases({**keys, "TAPESTRY_STRIP_CDN": "supabase"})["strip_base"].startswith(f"{SB}/storage/")
-    # A public URL without the write keys is not write-capable.
-    assert "r2.dev" not in bases({"R2_PUBLIC_URL": R2, "R2_ACCESS_KEY_ID": "k"})["strip_base"]
-
-
-def test_rewrite_requires_explicit_r2():
-    script = """
-const {rewriteSupabaseBases} = require('./web/lib/stripcdn.js');
-const config = {strip_base: '%s/storage/v1/object/public/strips/live-sdxl/strips/',
-  lod_base: '%s/storage/v1/object/public/strips/live-sdxl/lod/', strip_base_fb: 'x', lod_base_fb: 'y'};
-const kept = rewriteSupabaseBases(config, {cdnBase: '%s'});
-const moved = rewriteSupabaseBases(config, {cdnBase: '%s', stripCdn: 'r2'});
-console.log(JSON.stringify({kept, moved}));
-""" % (SB, SB, R2, R2)
-    got = node(script, {"PATH": os.environ["PATH"]})
-    assert got["kept"]["strip_base"].startswith(SB + "/storage/")
-    assert "strip_base_fb" not in got["kept"] and "lod_base_fb" not in got["kept"]
-    assert got["moved"]["strip_base"] == f"{R2}/live-sdxl/strips/"
-    assert got["moved"]["lod_base"] == f"{R2}/live-sdxl/lod/"
+def test_client_has_no_supabase_strip_fallback():
     src = (ROOT / "static/client.js").read_text()
-    assert 'page.stripCdn === "r2" && cdn' in src
-    assert 'if (cdn) for (const k of ["strip_base", "lod_base"])' not in src
+    assert "strip_base_fb" not in src and "stripCdn" not in src and "cdnBase" not in src
 
 
 def test_live_handler_delegates_bases():
@@ -96,14 +57,9 @@ def _build(out, extra):
     return (out / "config.js").read_text()
 
 
-def test_build_omits_r2_cdn_unless_opted_in(tmp_path):
-    plain = _build(tmp_path / "plain", {"R2_PUBLIC_URL": R2})
-    assert 'cdnBase: ""' in plain
-    assert "stripCdn" not in plain
-    assert "r2.dev" not in plain
-    opted = _build(tmp_path / "r2", {"TAPESTRY_STRIP_CDN": "r2", "R2_PUBLIC_URL": R2 + "/"})
-    assert f'cdnBase: "{R2}"' in opted
-    assert 'stripCdn: "r2"' in opted
+def test_build_has_no_strip_cdn_switch(tmp_path):
+    cfg = _build(tmp_path / "plain", {"R2_PUBLIC_URL": R2, "TAPESTRY_STRIP_CDN": "r2"})
+    assert "cdnBase" not in cfg and "stripCdn" not in cfg
 
 
 def test_live_reports_pod_heartbeat():
@@ -119,4 +75,3 @@ def test_client_stream_hardening():
     assert "SW() * 6) livePos = projected" not in src   # no 6-strip snap
     assert "livePos = null;\n" not in src.split("ws.onopen")[1].split("ws.onmessage")[0]   # kept on reconnect
     assert "lastMsgAt" in src and "10000" in src    # dead-socket watchdog
-    assert "strip_base_fb" in src.split("function ensureDecoded")[1].split("function evictFar")[0]

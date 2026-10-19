@@ -14,17 +14,6 @@ cp -r "$ROOT"/static/* "$OUT"/
 cp -r "$ROOT"/web/api "$ROOT"/web/lib "$ROOT"/web/package.json "$ROOT"/web/vercel.json "$OUT"/
 [ -f "$ROOT"/web/middleware.js ] && cp "$ROOT"/web/middleware.js "$OUT"/
 # Default matches the live 4090 burn rate; override with TAPESTRY_CENTS_PER_HOUR.
-# cdnBase rewrites Supabase strip URLs onto R2 in the viewer. Leave it empty unless this
-# build explicitly enables the R2 strip CDN (TAPESTRY_STRIP_CDN=r2). R2_PUBLIC_URL alone
-# is not that switch: viewers 404 on indices that were never uploaded there.
-if [ "${TAPESTRY_STRIP_CDN:-}" = "r2" ]; then
-  CDN_BASE="${R2_PUBLIC_URL:-https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev}"
-  CDN_BASE="${CDN_BASE%/}"
-  STRIP_LINES="  cdnBase: \"${CDN_BASE}\",
-  stripCdn: \"r2\","
-else
-  STRIP_LINES='  cdnBase: "",'
-fi
 cat > "$OUT/config.js" <<CFG
 window.TAPESTRY_CONFIG = {
   wsUrl: "${WS_URL:-}",
@@ -32,7 +21,6 @@ window.TAPESTRY_CONFIG = {
   supabaseAnonKey: "${SUPABASE_ANON_KEY:-}",
   turnstileSiteKey: "${TURNSTILE_SITE_KEY:-}",
   google: ${TAPESTRY_GOOGLE_LOGIN:-false},
-${STRIP_LINES}
   centsPerHour: ${TAPESTRY_CENTS_PER_HOUR:-89}
 };
 CFG

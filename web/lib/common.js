@@ -187,9 +187,9 @@ async function readRaw(req) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-/** Storage prefixes to try for mirrored tapestry assets (env, SDXL, legacy SD1.5). */
+/** R2 prefixes to try for pod-written assets (canvas, crops, LOD tiles): the SDXL session, then the older one. */
 function storagePrefixes() {
-  return [...new Set([env("TAPESTRY_STORAGE_PREFIX", "live-sdxl"), "live-sdxl", "live"])];
+  return ["live-sdxl", "live"];
 }
 
 module.exports = { loadPod, adoptPod, podStart, podStop, adminFromToken, ADMIN_EMAILS, SITE_URL, stripeLive, stripeWebhookSecret, runpod, runpodBalance, MIN_BALANCE, env, rest, userFromToken, clientIp, ipHash, audit, stripe, verifyStripe, reconcile, fuelBalance, readRaw, podStatus, POD, storagePrefixes };

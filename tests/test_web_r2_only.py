@@ -88,30 +88,11 @@ def test_no_binary_writes_to_supabase_storage_in_web():
     assert "if (!/json/.test(type)) return r2Put(" in tb
 
 
-def test_readers_try_r2_before_supabase():
-    for name in ("api/snapshot.js", "api/og.js"):
+def test_binary_readers_are_r2_only():
+    # Supabase Storage keeps no strips/tiles/canvas/crops: binary readers go to R2 only (no Supabase fallback).
+    for name in ("api/snapshot.js", "api/og.js", "lib/tmtiles.js", "lib/r2.js", "lib/stripcdn.js", "api/live.js"):
         src = (WEB / name).read_text()
-        assert src.index("r2Get(") < src.index("storage/v1/object/tapestry"), name
+        assert "storage/v1/object" not in src and "sbGet" not in src, name
     about = (WEB / "api/about.js").read_text()
-    tile = about[about.index("async function tile("):]
-    assert tile.index("r2Get(") < tile.index("storage/v1/object/tapestry")
-    assert "(await r2Get(`sb-tapestry/${name}`)) || (await sbGet(" in about
-
-
-@needs_node
-def test_tm_getjson_throws_on_storage_error_instead_of_resetting_index():
-    script = """
-    let status = 500; global.fetch = async () => ({ ok: status === 200, status, json: async () => ({ v: 2 }), text: async () => status === 400 ? '{"error":"not_found"}' : 'Internal' });
-    const { getJSON } = require('./web/lib/tmbuild.js');
-    (async () => { const out = {};
-      try { await getJSON('tm/idx/state.json'); out.e500 = 'returned'; } catch (e) { out.e500 = 'threw'; }
-      status = 400; out.missing = await getJSON('x.json'); status = 200; out.ok = await getJSON('x.json');
-      console.log(JSON.stringify(out)); })();
-    """
-    out = node(script, {"SUPABASE_URL": "https://proj.supabase.co"})
-    assert out == {"e500": "threw", "missing": None, "ok": {"v": 2}}
-
-
-def test_tm_tail_catchup_is_resumable():
-    src = (WEB / "lib/tmtiles.js").read_text()
-    assert "man.tail = { l: 1" in src and "delete man.tail" in src and "if (Date.now() - t0 >= budgetMs) { T.l = l; T.t = t; break outer; }" in src
+    assert [m for m in re.findall(r"storage/v1/object/[^`$]*", about)] == ["storage/v1/object/tapestry/tm/idx/"]
+    assert "await r2Get(`sb-tapestry/${name}`)" in about

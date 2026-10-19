@@ -266,11 +266,6 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       fetch(e.url, { mode: "cors" }).then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
         .then((b) => { e.blob = b; e.decoding = false; ensureDecoded(e); })
         .catch(() => {
-          // R2 miss: the pod also writes the Supabase public bucket, so try that copy (fresh strips after two misses).
-          if (!e.triedFb && config.strip_base_fb && config.strip_base && e.url.startsWith(config.strip_base) && (!e.fresh || (e.tries || 0) >= 2)) {
-            e.triedFb = true; e.url = config.strip_base_fb + e.url.slice(config.strip_base.length);
-            e.decoding = false; e.retryAt = 0; ensureDecoded(e); return;
-          }
           // Fresh live strips are always .webp and may simply not have landed yet: retry (no .jpg probes).
           if (e.fresh) {
             e.decoding = false; e.tries = (e.tries || 0) + 1;
@@ -1472,12 +1467,6 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     if (msg.type === "config") {
       wsConfigSeen = true;
       config = Object.assign(config, msg);
-      {   // Move a Supabase base onto R2 only when this build opted in (stripCdn=r2 and cdnBase).
-        // Same rule as rewriteSupabaseBases in web/lib/stripcdn.js. A baked public URL is not enough.
-        const page = window.TAPESTRY_CONFIG || {}, cdn = page.cdnBase, re = /^https:\/\/[^/]+supabase\.co\/storage\/v1\/object\/public\/[^/]+\//;
-        if (page.stripCdn === "r2" && cdn) for (const k of ["strip_base", "lod_base"]) if (re.test(config[k] || "")) config[k] = config[k].replace(re, String(cdn).replace(/\/$/, "") + "/");
-        if (page.stripCdn === "r2" && cdn) { delete config.strip_base_fb; delete config.lod_base_fb; }   // rewritten bases have no matching fallback
-      }
       interpreterOn = !!msg.interpreter;
       delete config.type;
       window.dispatchEvent(new CustomEvent("tapestry:config", { detail: msg }));

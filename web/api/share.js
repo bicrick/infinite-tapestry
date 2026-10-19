@@ -15,7 +15,7 @@ const clip = (s, n) => {
   const sp = cut.lastIndexOf(" ");
   return (sp > n * 0.5 ? cut.slice(0, sp) : cut).trimEnd() + "…";
 };
-const SESSION = () => env("TAPESTRY_STORAGE_PREFIX", "live-sdxl");
+const SESSION = () => "live-sdxl";
 const CDN = () => env("R2_PUBLIC_URL", "https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev").replace(/\/$/, "");
 const stripUrl = (i) => `${CDN()}/${SESSION()}/strips/${String(i).padStart(8, "0")}.webp`;
 const isGuest = (h) => /^[a-z]+-\d{4}$/.test(String(h || ""));

@@ -2,11 +2,11 @@
 // global line (era g0 + idx). L1 = 16 units/tile at 1024x256; L2..L7 = x4 units per tile, 64 px tall.
 // L1 is composed exactly like the live viewer: each strip image starts `overlap` before its slot and later strips
 // paint over earlier ones (SDXL: the pod's own level-1 tiles on R2 already are that composite, so they are
-// re-cut; OG era and the live tip are composed from the strips). Stored on R2 tm/lod2/ (older tiles: Supabase, read-only), served by
+// re-cut; OG era and the live tip are composed from the strips). Stored on R2 tm/lod2/, served by
 // /api/tm?tile=L/T through the CDN. Resumable (cursor in the manifest) and idempotent (rebuilding a tile
 // rewrites the same bytes). Work is time-boxed per invocation.
 const sharp = require("sharp");
-const { getJSON, putObj, putJSON, SB, H } = require("./tmbuild");
+const { getJSON, putObj, putJSON } = require("./tmbuild");
 const R2 = () => (process.env.R2_PUBLIC_URL || "https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev").replace(/\/$/, "");
 const UPT = { 1: 16 }; for (let l = 2; l <= 7; l++) UPT[l] = UPT[l - 1] * 4;
 const TW = 1024, UW = 64, LMAX = 7, MAN = "tm/lod2/manifest.json", WEBP_FROM = 6598;
@@ -22,9 +22,8 @@ async function bytes(url, headers) {
   }
   return null;
 }
-const sbObj = (k) => bytes(`${SB()}/storage/v1/object/tapestry/${k}`, H());
-// Tiles live on R2 (tm/lod2/...); tiles built before the R2 move are still read from Supabase until copied.
-const tileObj = async (k) => (await bytes(`${R2()}/${k}`)) || (await sbObj(k));
+// Tiles live on R2 (tm/lod2/...), like every other binary.
+const tileObj = (k) => bytes(`${R2()}/${k}`);
 
 function ctx(state) {
   const og = state.eras.find((e) => e.id === "og"), sd = state.eras.find((e) => e.id === "sdxl");
@@ -32,7 +31,7 @@ function ctx(state) {
   const podTiles = new Map(), children = new Map();
   const podTile = (c) => { if (!podTiles.has(c)) podTiles.set(c, bytes(`${R2()}/${sd.session}/lod/1/${String(c).padStart(6, "0")}.jpg`)); return podTiles.get(c); };
   const strip = (g) => g < sd.g0
-    ? sbObj(`${og.session}/strips/${i8(g)}.jpg`)
+    ? bytes(`${R2()}/sb-tapestry/${og.session}/strips/${i8(g)}.jpg`)   // OG-era copy (R2 live/ is another history)
     : bytes(`${R2()}/${sd.session}/strips/${i8(g - sd.g0)}.${g - sd.g0 >= WEBP_FROM ? "webp" : "jpg"}`);
   return { og, sd, N, podTile, strip, children };
 }

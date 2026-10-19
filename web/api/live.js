@@ -1,7 +1,6 @@
 // GET /api/live            -> pod-independent bootstrap: strip config + the most recent strip refs (Supabase `strips`).
 // GET /api/live?start=a&end=b -> refs for a range (history fallback while the pod's WebSocket is down).
-// Strip images come from the public Supabase `strips` bucket so a quiet GPU pod still leaves
-// the page able to load. R2 is optional (TAPESTRY_STRIP_CDN=r2, or write-capable R2 configured).
+// Strip images come from the public R2 bucket (web/lib/stripcdn.js), so a quiet GPU pod still leaves the page able to load.
 const { rest } = require("../lib/common");
 const { stripBases, session } = require("../lib/stripcdn");
 
@@ -33,8 +32,7 @@ module.exports = async (req, res) => {
     res.status(200).json({
       config: { height: last ? last.height : 1024, strip_width: w, overlap: ov, scroll_speed: 60, scroll_speed_min: 16,
         buffer_target: 3, buffer_min: 2, strip_ext: "webp", strip_mime: "image/webp",
-        strip_base: bases.strip_base, lod_base: bases.lod_base,
-        ...(bases.strip_base_fb ? { strip_base_fb: bases.strip_base_fb, lod_base_fb: bases.lod_base_fb } : {}) },
+        strip_base: bases.strip_base, lod_base: bases.lod_base },
       max: last ? last.idx : -1,
       last_at: last ? Date.parse(last.created_at) / 1000 : null,
       // The pod's own 30 s heartbeat (ops_heartbeat): viewers judge "pod down" from this, not from the newest

@@ -1,6 +1,6 @@
 const { env, rest, POD, loadPod, storagePrefixes } = require("../lib/common");
 const tmi = require("../lib/tmindex");
-const { r2Get, sbGet } = require("../lib/r2");
+const { r2Get } = require("../lib/r2");
 
 // Public, read-only, aggregated data for /about and /time-machine (no PII: handles only where the
 // person chose to be credited — idea authors and fuel buyers, never ids/emails/ip).
@@ -12,7 +12,7 @@ const { r2Get, sbGet } = require("../lib/r2");
 const OWNER = new Set(["bicrick"]);
 const SB = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svc = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY") });
-const SESSION = () => env("TAPESTRY_STORAGE_PREFIX", "live-sdxl");
+const SESSION = () => "live-sdxl";
 
 // Honest fuel summary: prepaid fuel purchased vs. what painting has cost (GPU + Auto director), no "tank".
 // Rate = GPU price from config (TAPESTRY_GPU_CENTS_PER_HOUR, default 89c = the RTX 4090 pod) + measured director cost.
@@ -156,20 +156,12 @@ async function history(tz) {
 async function tile(res, l, c) {
   if (![1, 2, 3].includes(l) || !(c >= 0)) return res.status(400).end();
   const key = `lod/${l}/${String(c).padStart(6, "0")}.jpg`;
-  for (const pre of storagePrefixes()) {   // R2 first (the pod writes LOD tiles only there)
+  for (const pre of storagePrefixes()) {   // R2 (the pod writes LOD tiles only there)
     const b = await r2Get(`${pre}/${key}`);
     if (b) {
       res.setHeader("content-type", "image/jpeg");
       res.setHeader("cache-control", "public, max-age=86400, s-maxage=31536000, immutable");
       return res.status(200).send(b);
-    }
-  }
-  for (const pre of storagePrefixes()) {
-    const r = await fetch(`${SB()}/storage/v1/object/tapestry/${pre}/${key}`, { headers: svc() }).catch(() => null);
-    if (r && r.ok) {
-      res.setHeader("content-type", "image/jpeg");
-      res.setHeader("cache-control", "public, max-age=86400, s-maxage=31536000, immutable");
-      return res.status(200).send(Buffer.from(await r.arrayBuffer()));
     }
   }
   if (await loadPod()) {
@@ -189,11 +181,11 @@ module.exports = async (req, res) => {
   try {
     const kind = q.get("kind");
     if (kind === "tile") return await tile(res, +q.get("l"), +q.get("c"));
-    if (kind === "ogstrip") { // Time Machine v3: OG-era (SD 1.5) strip, private storage -> CDN, immutable
+    if (kind === "ogstrip") { // Time Machine v3: OG-era (SD 1.5) strip, R2 -> CDN, immutable
       const i = +q.get("i"); if (!(i >= 0 && i < 100000 && Number.isInteger(i))) return res.status(400).end();
       const name = `live/strips/${String(i).padStart(8, "0")}.jpg`;
       // R2 "live/strips/" is a different (SDXL) history with the same key names, so the OG copy lives under sb-tapestry/
-      const b = (await r2Get(`sb-tapestry/${name}`)) || (await sbGet(`tapestry/${name}`));
+      const b = await r2Get(`sb-tapestry/${name}`);
       if (!b) { res.setHeader("cache-control", "public, s-maxage=300"); return res.status(404).end(); }
       res.setHeader("content-type", "image/jpeg"); res.setHeader("access-control-allow-origin", "*");
       res.setHeader("cache-control", "public, max-age=86400, s-maxage=31536000, immutable");
