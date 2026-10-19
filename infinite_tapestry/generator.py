@@ -513,15 +513,19 @@ class StripGenerator:
             except Exception:
                 pass
 
-    def _record_time(self, dt: float) -> None:
+    def _record_time(self, dt: float, pipe_s: float | None = None) -> None:
         a = self._ema_alpha
         self.gen_seconds_ema = dt if self.gen_seconds_ema is None else (1 - a) * self.gen_seconds_ema + a * dt
+        if pipe_s is not None:   # time inside the diffusers pipeline (the rest is prompt/canvas/encode overhead)
+            p = getattr(self, "pipe_seconds_ema", None)
+            self.pipe_seconds_ema = pipe_s if p is None else (1 - a) * p + a * pipe_s
 
     def stats(self) -> dict:
         ema = self.gen_seconds_ema
         ema = max(ema, 1e-3) if ema is not None else None
         return {
             "strip_seconds": round(ema, 3) if ema else None,
+            "pipe_seconds": round(self.pipe_seconds_ema, 3) if getattr(self, "pipe_seconds_ema", None) else None,
             "strips_per_sec": round(1.0 / ema, 3) if ema else None,
             "px_per_sec": round(self.config.strip_width / ema, 2) if ema else None,
             "strip_index": self._strip_index,
@@ -537,8 +541,10 @@ class StripGenerator:
                     continue
                 try:
                     t0 = time.monotonic()
+                    if hasattr(self.inpainter, "pipe_seconds"):
+                        self.inpainter.pipe_seconds = 0.0
                     strip = self.generate_one()
-                    self._record_time(time.monotonic() - t0)
+                    self._record_time(time.monotonic() - t0, getattr(self.inpainter, "pipe_seconds", None))
                 except Exception:
                     logger.exception("Strip generation failed; retrying shortly")
                     if self._stop.wait(1.0):

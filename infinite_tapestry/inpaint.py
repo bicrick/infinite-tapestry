@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from PIL import Image
@@ -182,6 +183,7 @@ def create_inpainter(config: "Config") -> Inpainter:
 
 class SDXLInpainter(Inpainter):
     """SDXL inpainting (fp16, DPM++ 2M Karras, SDPA) with style LoRAs ramped per strip."""
+    pipe_seconds = 0.0
 
     def __init__(self, config: "Config") -> None:
         import torch
@@ -330,6 +332,7 @@ class SDXLInpainter(Inpainter):
         if 0.0 < cut < 1.0 and self.guidance > 1.0:
             ip_kw["callback_on_step_end"] = cfg_cut_callback(cut)
             ip_kw["callback_on_step_end_tensor_inputs"] = list(CFG_BATCHED)
+        t0 = time.monotonic()
         out = self._pipe(
             prompt_embeds=pe, negative_prompt_embeds=ne, pooled_prompt_embeds=pp, negative_pooled_prompt_embeds=npp,
             image=image.convert("RGB"), mask_image=mask.convert("L"),
@@ -337,6 +340,7 @@ class SDXLInpainter(Inpainter):
             width=image.width, height=image.height, generator=gen, strength=0.999 if strength is None else float(strength),
             **ip_kw,
         )
+        self.pipe_seconds += time.monotonic() - t0   # sampler + VAE, for /health (generator resets it per strip)
         return out.images[0]
 
 
