@@ -2,7 +2,7 @@
 
 On 2026-10-19 the NANO Supabase VM stalled for ~25 min; the pod kept firing every poll (each one waiting out a
 10-20 s timeout), which piles connections onto a box that is already drowning. After a few consecutive
-timeouts / 5xx the breaker opens and calls fail fast (no network) for a cooldown that doubles up to 5 min; then a
+timeouts / 5xx the breaker opens and calls fail fast (no network) for a cooldown that doubles up to 45 s; then a
 single probe goes through and one success closes it. 4xx answers mean the DB is reachable and never trip it.
 Callers already treat any exception as "Supabase unavailable", so behaviour while healthy is unchanged.
 """
@@ -25,7 +25,7 @@ class SupabaseUnavailable(urllib.error.URLError):
 class Breaker:
     TRIP_AFTER = 3
     BASE_S = 15.0
-    MAX_S = 300.0
+    MAX_S = 45.0   # short cap: once the DB is back, the 30 s heartbeat must resume well inside the 90 s stale limit
 
     def __init__(self, clock=time.monotonic) -> None:
         self._clock, self._lock = clock, threading.Lock()

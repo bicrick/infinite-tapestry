@@ -8,8 +8,12 @@ const SITE_URL = () => env("SITE_URL", "https://infinite-tapestry.vercel.app").r
 const SB_URL = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svcHeaders = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY"), "content-type": "application/json" });
 
+// Every Supabase call is bounded: when the DB stalls (2026-10-19 NANO outage) a function fails in seconds
+// instead of hanging to the platform limit and stacking more connections on the stalled box.
+const SB_TIMEOUT_MS = 8000;
+const sbSignal = () => AbortSignal.timeout(SB_TIMEOUT_MS);
 async function rest(method, path, body, extra = {}) {
-  const r = await fetch(`${SB_URL()}/rest/v1/${path}`, { method, headers: { ...svcHeaders(), ...extra }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(`${SB_URL()}/rest/v1/${path}`, { method, headers: { ...svcHeaders(), ...extra }, body: body === undefined ? undefined : JSON.stringify(body), signal: sbSignal() });
   const txt = await r.text();
   if (!r.ok) throw new Error(`supabase ${method} ${path.split("?")[0]} ${r.status}: ${txt.slice(0, 200)}`);
   return txt ? JSON.parse(txt) : null;
@@ -17,7 +21,7 @@ async function rest(method, path, body, extra = {}) {
 
 async function userFromToken(token) {
   if (!token) return null;
-  const r = await fetch(`${SB_URL()}/auth/v1/user`, { headers: { apikey: env("SUPABASE_ANON_KEY") || env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + token } });
+  const r = await fetch(`${SB_URL()}/auth/v1/user`, { headers: { apikey: env("SUPABASE_ANON_KEY") || env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + token }, signal: sbSignal() });
   if (!r.ok) return null;
   const u = await r.json();
   const rows = await rest("GET", `profiles?id=eq.${u.id}&select=id,handle,is_admin`);
@@ -29,7 +33,7 @@ async function userFromToken(token) {
 const ADMIN_EMAILS = () => env("ADMIN_EMAILS", "patrickbrownai@gmail.com").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 async function adminFromToken(token) {
   if (!token || token.length > 4096) return null;
-  const r = await fetch(`${SB_URL()}/auth/v1/user`, { headers: { apikey: env("SUPABASE_ANON_KEY") || env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + token } }).catch(() => null);
+  const r = await fetch(`${SB_URL()}/auth/v1/user`, { headers: { apikey: env("SUPABASE_ANON_KEY") || env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + token }, signal: sbSignal() }).catch(() => null);
   if (!r || !r.ok) return null;
   const u = await r.json().catch(() => null);
   const email = String((u && u.email) || "").toLowerCase();
