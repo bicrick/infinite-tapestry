@@ -89,3 +89,19 @@ Nothing on any machine is needed. With only the GitHub repo and its secrets:
    worker code did not change).
 5. Turn the GPU on (admin page switch or `scripts/gpu.sh on`). The controller creates a pod if needed; the pod boots
    the newest release and starts painting in 5–10 minutes.
+
+## External service settings (set once, by hand)
+
+These live in the providers' dashboards, not in env vars. Check them when moving to a new domain or project:
+
+- **Vercel** → project → Domains: `infinitetapestry.app` (+ `www` redirect). `SITE_URL` (repo variable and Vercel env)
+  must match; the build rewrites absolute URLs from it.
+- **Supabase** → Auth → URL configuration: Site URL = `SITE_URL`, redirect allow list `SITE_URL/**`. Google provider
+  client id/secret (Google Cloud OAuth client; authorized redirect URI `https://<project>.supabase.co/auth/v1/callback`).
+- **Cloudflare R2** → bucket CORS: AllowedOrigins includes `SITE_URL`.
+- **Cloudflare Turnstile** → widget hostnames include the site host (the widget fails on unlisted hosts).
+- **Stripe** (live and test) → webhook endpoint `SITE_URL/api/stripe-webhook`, event `checkout.session.completed`;
+  its signing secret is `STRIPE_(LIVE_)WEBHOOK_SECRET`. `STRIPE_MODE=live|test` picks the key pair.
+- **Supabase Vault**: `controller_url` (= `SITE_URL/api/controller`) and the controller secret (= `CONTROLLER_SECRET`)
+  used by the pg_cron job in `supabase/migrations/003_controller_cron.sql`.
+- **GitHub** → Settings → Notifications → Actions: email on failed workflows (Watchdog and CI failures alert this way).
