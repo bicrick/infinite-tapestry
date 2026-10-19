@@ -122,6 +122,8 @@ def director_brief(recent: list[dict], journey: dict | None, steer: str, flavor:
     return "\n".join(lines)
 
 
+CFG_POLL_S = 30.0   # admin auto_config + story playlist poll (2 requests); admin edits apply within 30 s
+
 class Autopilot:
     def __init__(
         self,
@@ -456,7 +458,7 @@ class Autopilot:
     async def run(self, period: float = 2.0) -> None:
         last_cfg = 0.0
         while True:
-            if self.config_fetch and time.monotonic() - last_cfg > 15:
+            if self.config_fetch and time.monotonic() - last_cfg > CFG_POLL_S:
                 last_cfg = time.monotonic()
                 try:
                     self.apply_config(await pools.control(self.config_fetch, timeout=CFG_TIMEOUT_S))

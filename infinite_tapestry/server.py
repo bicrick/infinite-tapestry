@@ -38,6 +38,7 @@ PING_INTERVAL_S = 5.0   # idle keepalive; clients treat ~10 s of silence as a de
 
 
 RECENT_ON_CONNECT = 24
+DECISION_FLUSH_S = 120.0   # batched Auto decision log (Supabase request/log budget)
 
 
 def apply_render_settings(r: dict, generator) -> dict:
@@ -299,13 +300,32 @@ def create_app(
         def _story_done(pid: int) -> None:
             supa.rest("PATCH", f"story_playlist?id=eq.{int(pid)}&status=in.(queued,playing)",
                       {"status": "done", "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, prefer="return=minimal")
+        # Auto decisions (admin panel history) go out in one batched insert every DECISION_FLUSH_S, not one request each.
+        decisions: list[dict] = []
+        dec_lock = threading.Lock()
+
         def _decision(dec: dict) -> None:
-            def go() -> None:
-                try:
-                    supa.rest("POST", "auto_decisions", {k: dec.get(k) for k in ("move", "journey", "step", "total", "reason", "titles")})
-                except Exception:
-                    logger.warning("auto decision log failed")
-            threading.Thread(target=go, daemon=True).start()
+            row = {"move": str(dec.get("move") or "")[:24], "journey": str(dec.get("journey") or "")[:80],
+                   "step": dec.get("step") if isinstance(dec.get("step"), int) else None,
+                   "total": dec.get("total") if isinstance(dec.get("total"), int) else None,
+                   "reason": str(dec.get("reason") or "")[:300], "titles": list(dec.get("titles") or [])}
+            row["at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            with dec_lock:
+                if len(decisions) < 200:
+                    decisions.append(row)
+
+        def _decision_flusher() -> None:
+            while True:
+                time.sleep(DECISION_FLUSH_S)
+                with dec_lock:
+                    rows = decisions[:]
+                    decisions.clear()
+                if rows:
+                    try:
+                        supa.rest("POST", "auto_decisions", rows, prefer="return=minimal")
+                    except Exception:
+                        logger.warning("auto decision log failed (%d rows dropped)", len(rows))
+        threading.Thread(target=_decision_flusher, name="decision-log", daemon=True).start()
         autopilot.decision_log = _decision
         autopilot.story_progress = lambda pid, k: threading.Thread(target=_story_progress, args=(pid, k), daemon=True).start()
         autopilot.story_done = _story_done
