@@ -55,4 +55,4 @@ def test_scripts_and_ui():
     assert (ROOT / "scripts/pod/selfboot.sh").exists()
     ui = json.loads((ROOT / "web/api/_admin_ui.json").read_text())
     assert 'id="gpu-switch"' in ui["html"] and "gpu-seg" not in ui["html"]
-    assert "exit 1" not in (ROOT / "scripts/resolve_ws_url.sh").read_text().split("done", 1)[1]
+    assert "exit 1" not in (ROOT / "scripts/resolve_ws_url.sh").read_text().split("proxy.runpod.net/health", 1)[1]
