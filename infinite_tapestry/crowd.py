@@ -98,8 +98,8 @@ class Crowd:
     _limits_at = 0.0
 
     def _knobs(self) -> dict:
-        """Priority-queue knobs from idea_limits (editable without code), cached for a minute."""
-        if time.monotonic() - self._limits_at > 60:
+        """Priority-queue knobs from idea_limits (editable without code), cached for 5 minutes."""
+        if time.monotonic() - self._limits_at > 300:
             try:
                 rows = self.supa.rest("GET", "idea_limits?id=eq.1&select=prio_viewers,prio_pending,prio_ratio,busy_pending")
                 self._limits = (rows or [{}])[0] or {}
@@ -469,7 +469,7 @@ class Crowd:
         try:
             while True:
                 try:
-                    if time.monotonic() - last_meter >= 60 or self.fuel_cents is None:
+                    if time.monotonic() - last_meter >= self.METER_S or self.fuel_cents is None:
                         last_meter = time.monotonic()
                         await self.meter()
                     await self.refresh_pending()
@@ -484,9 +484,11 @@ class Crowd:
 
     # Supabase request budget (free plan log ingestion): the site announces each submit over the WebSocket
     # ("idea_added" -> wake_ideas), so ideas still start within ~1 s without polling every second. The timed pull
-    # is only a fallback. Was 1 s poll x 3 requests + a 3 s tick (~13k requests/hour); now ~1.5k/hour.
-    IDEA_POLL_S = 15.0
-    TICK_S = 10.0
+    # is only a fallback. Was 1 s poll x 3 requests + a 3 s tick (~13k requests/hour); then ~1.5k/hour (15 s / 10 s);
+    # now ~250/hour: the waiting line refreshes every 30 s and on every announced submit, fuel every 5 min.
+    IDEA_POLL_S = 45.0
+    TICK_S = 30.0
+    METER_S = 300.0   # fuel is display-only (the GPU runs 24/7); the ledger burn is time-based, so batching loses nothing
     _wake: "asyncio.Event | None" = None
 
     def wake_ideas(self) -> None:
@@ -503,6 +505,8 @@ class Crowd:
             self._wake.clear()
             try:
                 await self.pull_ideas()
+                if self.pending:   # a waiting line is shown: refresh it now that ideas may have been claimed
+                    await self.refresh_pending()
             except Exception:
                 logger.exception("idea pull failed")
             await asyncio.sleep(1.0)   # coalesce bursts of wakes
