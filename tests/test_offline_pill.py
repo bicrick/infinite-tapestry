@@ -1,0 +1,31 @@
+"""Replay (GPU offline): the composer is swapped for a non-interactive status pill, driven by the replay state."""
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+HTML = (ROOT / "static/index.html").read_text()
+JS = (ROOT / "static/client.js").read_text()
+CSS = (ROOT / "static/style.css").read_text()
+
+
+def test_pill_markup_is_a_status_not_a_control():
+    m = re.search(r'<div id="offline-pill"[^>]*>.*?</div>', HTML)
+    assert m, "offline pill missing"
+    pill = m.group(0)
+    assert 'role="status"' in pill and 'aria-live="polite"' in pill
+    assert not re.search(r"<(input|textarea|button|a)\b", pill) and "tabindex" not in pill
+    assert HTML.index('id="cmd"') < HTML.index('id="offline-pill"')
+
+
+def test_offline_follows_the_replay_state_and_blocks_submits():
+    assert "setOffline(!connected && (replay || podDown));" in JS
+    body = JS[JS.index("function setOffline(on)"):JS.index("function setAway(on)")]
+    assert '$("cmd").inert = on' in body and ".drawer-foot input, .drawer-foot button" in body
+    submit = JS[JS.index('$("cmd").addEventListener("submit"'):]
+    assert submit.index("if (offline) return;") < submit.index("S.submitIdea(") < submit.index('send({ type: "intent"')
+
+
+def test_css_swaps_composer_for_pill():
+    assert re.search(r"body\.offline \.dock \.cmd \{[^}]*visibility: hidden", CSS)
+    assert re.search(r"body\.offline \.dock \.offline-pill \{[^}]*opacity: 1", CSS)
+    assert re.search(r"\.dock \.offline-pill \{[^}]*pointer-events: none", CSS)
