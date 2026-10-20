@@ -1620,7 +1620,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
 
   // ---------- resilience: pod-independent bootstrap + replay fallback ----------
   // /api/live (Vercel + Supabase) serves the strip config and recent refs; strip images come from config.strip_base.
-  // If live goes quiet (no new strip for a minute, or the pod is unreachable), quietly replay recent history.
+  // If live goes quiet (no new strip for a minute, or the pod is unreachable), quietly replay from a random spot in history.
   let podDown = false, liveChecked = false, podPollAt = performance.now();   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
   let replayAt = 0, wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;
   const apiReq = new Set();
@@ -1655,13 +1655,12 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       // Pod down at load: choose replay BEFORE the first strips land, so the camera starts at the replay position
       // and the load-in plays on the strips being replayed (no live-edge frame, then a backward jump).
       if (podDown && !connected && maxIndex < 0 && it.length >= 40 && panMode === "live" && !pendingSeek && !/[?&]at=/.test(location.search)) {
-        const top = it[it.length - 1].i, first = it[0].i;
-        const back = Math.min(top - first - 4, 90 + Math.floor(Math.random() * 120)), start = top - back;
+        const start = window.TapestryReplayStart(it[it.length - 1].i);   // random spot across the whole history
         replay = true; live = false;
         onStripRef(it[it.length - 1], false);   // sets maxIndex so the pan range covers the start position
         panPos = Math.max(0, start * SW() - viewWorld() / 2); panVel = 0; panMode = "glide";
         lastFreshAt = performance.now() - 61000;
-        it.filter((r) => Math.abs(r.i - start) < 24).forEach((r) => onStripRef(r, false));   // on-screen strips decode first
+        apiMissing(start - 12, start + 12);   // on-screen refs first (the bootstrap only carries the newest 240)
       }
       if (it.length) onStripRef(it[it.length - 1], false);   // newest first: the live view initialises at the real edge
       it.forEach((r) => onStripRef(r, false));
@@ -1681,11 +1680,11 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   function startReplay() {
     if (replayBusy || maxIndex < 40) return;
     if (!replay && !replayAt) { replayAt = performance.now(); window.TapestryOps && TapestryOps.report("replay", 0, { pod: podDown ? "down" : "running" }); }
-    const back = Math.min(maxIndex - 4, 90 + Math.floor(Math.random() * 120));   // ~5-10 min of recent history
+    const start = window.TapestryReplayStart(maxIndex);   // random spot across the whole history (also on each loop)
     fadeSwap(() => {
       replay = true;
       enterHistory(); setAway(false);
-      panPos = Math.max(0, (maxIndex - back) * SW() - viewWorld() / 2); panVel = 0; panMode = "glide";
+      panPos = Math.max(0, start * SW() - viewWorld() / 2); panVel = 0; panMode = "glide";
     });
   }
   function endReplay() {
@@ -1707,7 +1706,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       }).catch(() => {});
     }
     // Pod known down: replay soon. Pod believed running (app restart/deploy is ~35-50 s, a proxy blip less): hold at
-    // the live edge for 90 s instead of fading 5-10 min back into history, so a short drop never pulls viewers off live.
+    // the live edge for 90 s instead of fading back into history, so a short drop never pulls viewers off live.
     const grace = podDown ? 15000 : 90000;
     const quiet = performance.now() - lastFreshAt > Math.max(60000, grace) || (downSince && performance.now() - downSince > grace);
     if (!quiet) return;
