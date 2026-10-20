@@ -1361,18 +1361,3 @@ body.chat-open .chat-list li.sys { font-size: 12.5px; }
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Cpath d='M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z'/%3E%3Ccircle cx='8' cy='8' r='2'/%3E%3C/svg%3E") center / contain no-repeat;
             mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Cpath d='M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z'/%3E%3Ccircle cx='8' cy='8' r='2'/%3E%3C/svg%3E") center / contain no-repeat; }
 }
-
-/* GPU offline (replay): the composer crossfades into a compact, non-interactive status pill in the same spot */
-.dock .offline-pill { position: absolute; left: 50%; bottom: 6px; height: 40px; display: inline-flex; align-items: center; gap: 10px; padding: 0 18px;
-  border-radius: 20px; white-space: nowrap; font-size: 13px; letter-spacing: .01em; color: var(--muted); cursor: default; user-select: none; -webkit-user-select: none;
-  background: color-mix(in srgb, var(--glass) 60%, transparent); border: 1px solid var(--line);
-  backdrop-filter: blur(24px) saturate(1.2); -webkit-backdrop-filter: blur(24px) saturate(1.2);
-  transform: translate(-50%, 6px); opacity: 0; pointer-events: none; transition: opacity .35s var(--ease), transform .35s var(--ease); }
-.dock .offline-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #c9a25a; opacity: .75; animation: offline-dot 2.6s ease-in-out infinite; }
-@keyframes offline-dot { 50% { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .dock .offline-pill .dot { animation: none; } }
-body.offline .dock .offline-pill { opacity: 1; transform: translate(-50%, 0); }
-body.offline.away .dock .offline-pill { opacity: 0; transform: translate(-50%, 6px); }
-body.offline .dock .cmd { opacity: 0; transform: translateY(6px); pointer-events: none; visibility: hidden;
-  transition: opacity .3s var(--ease), transform .3s var(--ease), visibility 0s linear .3s; }
-@media (max-width: 420px) { .dock .offline-pill { font-size: 12px; padding: 0 14px; gap: 8px; } }

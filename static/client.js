@@ -53,19 +53,6 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   const liveBtn = $("live-btn");
   // Away from live: the "Return to live" pill takes the chat pill's place (crossfade); an open compose sheet closes, draft kept.
   { const dk = document.querySelector(".dock"); if (dk && liveBtn) dk.appendChild(liveBtn); liveBtn.classList.remove("hidden"); }
-  // GPU offline (replay): the composer gives way to a quiet status pill in the same spot; nothing can be typed or sent.
-  // The drawer's autopilot controls only talk to the pod, so they go inert too.
-  const OFFLINE_MSG = "GPU is offline · You're watching a replay";
-  let offline = false;
-  function setOffline(on) {
-    if (offline === on) return;
-    offline = on;
-    document.body.classList.toggle("offline", on);
-    $("cmd").inert = on;
-    $("offline-pill").querySelector(".msg").textContent = on ? OFFLINE_MSG : "";
-    document.querySelectorAll(".drawer-foot input, .drawer-foot button").forEach((el) => { el.disabled = on; });
-    if (on && document.body.classList.contains("composing")) { $("cmd-input").blur(); document.body.classList.remove("composing"); }
-  }
   function setAway(on) {
     if (document.body.classList.contains("away") === on) return;
     document.body.classList.toggle("away", on);
@@ -784,7 +771,6 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     statusEl.classList.toggle("off", !connected);
     statusEl.classList.toggle("warn", connected && live && aheadStrips < 1);
     statusEl.classList.toggle("replaying", !connected && (replay || podDown));
-    setOffline(!connected && (replay || podDown));
     if (!connected && (replay || podDown)) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "replay"; const mi = $("status-mini"); if (mi) mi.textContent = "replay"; return; }
     if (!connected && (!liveChecked || !everOpened)) { statusText.textContent = ""; const mi = $("status-mini"); if (mi) mi.textContent = ""; return; }   // until /api/live answers
     if (!connected) { resetWatching(statusText); resetWatching($("status-mini")); statusText.textContent = "reconnecting"; const mi = $("status-mini"); if (mi) mi.textContent = "reconnecting"; return; }
@@ -1227,7 +1213,6 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
   const pending = new Set();
   $("cmd").addEventListener("submit", (ev) => {
     ev.preventDefault();
-    if (offline) return;   // replay: no prompts (the composer is hidden and inert; this also covers Enter and scripted submits)
     const input = $("cmd-input");
     const text = input.value.trim();
     const S = window.TapestrySocial;
