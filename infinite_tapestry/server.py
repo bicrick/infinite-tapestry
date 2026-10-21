@@ -14,7 +14,7 @@ from . import pools
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
@@ -145,6 +145,11 @@ def encode_strip_message(strip: "Strip") -> bytes:
     return header + prompt_bytes + strip.jpeg
 
 
+# /export.png limits for public viewers (the admin is uncapped).
+EXPORT_MAX_STRIPS_PUBLIC = 200
+EXPORT_COOLDOWN_S = 10.0
+
+
 class RateLimiter:
     """Per-key cooldown (e.g. per client IP)."""
 
@@ -164,7 +169,7 @@ class RateLimiter:
         return 0.0
 
 
-def client_ip(ws: WebSocket) -> str:
+def client_ip(ws) -> str:
     """Real client IP from the trusted proxy hop.
 
     RunPod's proxy sets ``cf-connecting-ip`` (and sometimes ``x-real-ip``). A
@@ -660,10 +665,34 @@ def create_app(
         scenes = await pools.heavy(scene_runs, store) if store is not None else []
         return {"max": idx, "points": sorted([i, t] for i, t in out.items()), "now": time.time(), "scenes": scenes}
 
+    export_limiter = RateLimiter(EXPORT_COOLDOWN_S)
+
     @app.get("/export.png")
-    async def export_png(scale: float = 1.0, last: int = 0, start: int = 0, end: int = -1, max_strips: int = 4000):
-        """Stitch the stored history into one PNG. scale in (0,1]; last=N keeps the newest N strips."""
+    async def export_png(request: Request, scale: float = 1.0, last: int = 0, start: int = 0, end: int = -1,
+                         max_strips: int = 4000):
+        """Stitch the stored history into one PNG. scale in (0,1]; last=N keeps the newest N strips.
+
+        Public viewers get at most EXPORT_MAX_STRIPS_PUBLIC strips and one export per EXPORT_COOLDOWN_S per IP;
+        the admin (Supabase bearer token with is_admin, or no Supabase configured = local dev) is uncapped."""
         from fastapi.responses import Response
+
+        admin = supa is None
+        if not admin:
+            auth = request.headers.get("authorization") or ""
+            tok = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+            if tok and len(tok) <= 4096:
+                try:
+                    user = await asyncio.to_thread(supa.user_from_token, tok)
+                    admin = bool(user and user.get("is_admin"))
+                except Exception:
+                    admin = False
+        if not admin:
+            wait = export_limiter.check(client_ip(request))
+            if wait > 0:
+                return Response(status_code=429, content=b"export rate limited",
+                                headers={"retry-after": str(int(wait) + 1)})
+            max_strips = min(max_strips, EXPORT_MAX_STRIPS_PUBLIC)
+        max_strips = max(1, max_strips)
 
         store = getattr(generator, "store", None)
         if store is not None:
@@ -677,6 +706,7 @@ def create_app(
             strips = buffer.snapshot()
             if last > 0:
                 strips = strips[-last:]
+            strips = strips[-max_strips:]
         if not strips:
             return Response(status_code=404, content=b"no strips yet")
         scale = max(0.05, min(1.0, float(scale)))
