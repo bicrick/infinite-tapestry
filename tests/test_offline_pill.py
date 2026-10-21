@@ -14,6 +14,7 @@ def test_pill_markup_is_a_status_not_a_control():
     pill = m.group(0)
     assert 'role="status"' in pill and 'aria-live="polite"' in pill
     assert not re.search(r"<(input|textarea|button|a)\b", pill) and "tabindex" not in pill
+    assert 'class="dot"' not in pill and "offline-dot" not in CSS   # text only, nothing animated
     assert HTML.index('id="cmd"') < HTML.index('id="offline-pill"')
 
 
