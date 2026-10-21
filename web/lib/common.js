@@ -30,7 +30,7 @@ async function userFromToken(token) {
 
 /** The admin is an email allowlist (ADMIN_EMAILS, comma-separated), checked against Supabase's verified
  *  auth email for the bearer token. profiles.is_admin is deliberately ignored here. */
-const ADMIN_EMAILS = () => env("ADMIN_EMAILS", "patrickbrownai@gmail.com").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+const ADMIN_EMAILS = () => env("ADMIN_EMAILS", "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
 async function adminFromToken(token) {
   if (!token || token.length > 4096) return null;
   const r = await fetch(`${SB_URL()}/auth/v1/user`, { headers: { apikey: env("SUPABASE_ANON_KEY") || env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + token }, signal: sbSignal() }).catch(() => null);

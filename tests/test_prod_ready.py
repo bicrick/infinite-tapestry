@@ -91,6 +91,6 @@ def test_admin_shell_ships_no_admin_ui():
 
 def test_admin_email_allowlist():
     c = rd("web/lib/common.js")
-    assert 'env("ADMIN_EMAILS", "patrickbrownai@gmail.com")' in c and "email_confirmed_at" in c
+    assert 'env("ADMIN_EMAILS", "")' in c and "email_confirmed_at" in c
     m = rd("web/middleware.js")
     assert "/lib/:path*" in m and "/api/_:path*" in m
