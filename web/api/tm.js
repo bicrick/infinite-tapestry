@@ -1,4 +1,4 @@
-// Time Machine v3 jobs + tiles. Everything runs on Vercel with the env it already has (no new secrets).
+// Time Machine v3 jobs + tiles. Runs on Vercel; jobs need CRON_SECRET (Vercel Cron sends it as a Bearer token).
 //   /api/tm?job=index|tiles|all   Vercel cron (every 5 min): fold new strips into the index, then extend the tile
 //                                pyramid. Resumable + idempotent + time-boxed; safe to re-run or overlap (lock).
 //   /api/tm?tile=L/T[&u=N]       pyramid tile (R2, old tiles Supabase -> CDN; immutable, the tip tile carries ?u=units)
@@ -6,6 +6,14 @@
 const { runIndex, getJSON } = require("../lib/tmbuild");
 const { runTiles, key, tileObj } = require("../lib/tmtiles");
 const SB = () => process.env.SUPABASE_URL.replace(/\/$/, "");
+const crypto = require("crypto");
+// Vercel Cron sends "Authorization: Bearer $CRON_SECRET" when CRON_SECRET is set. Fails closed when it is unset.
+const cronOk = (req) => {
+  const want = process.env.CRON_SECRET || "", got = String(req.headers.authorization || "");
+  if (want.length < 16) return false;
+  const a = Buffer.from(got), b = Buffer.from("Bearer " + want);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
 const svc = () => ({ apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, authorization: "Bearer " + process.env.SUPABASE_SERVICE_ROLE_KEY });
 
 module.exports = async (req, res) => {
@@ -27,8 +35,7 @@ module.exports = async (req, res) => {
     }
     const job = q.get("job");
     if (job) {
-      // Cron only (Vercel sends this UA); jobs are idempotent, so a spoofed call can't do harm beyond CPU time.
-      if (!/vercel-cron/i.test(req.headers["user-agent"] || "")) return res.status(403).json({ error: "cron only" });
+      if (!cronOk(req)) return res.status(401).json({ error: "unauthorized" });
       const out = {}, t0 = Date.now();
       if (job === "index" || job === "all") out.index = await runIndex();
       // tiles get what is left of the 60 s function limit (index catch-up can take a while), never less than 5 s
