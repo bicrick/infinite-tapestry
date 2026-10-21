@@ -78,6 +78,27 @@ Scene widths, the join crossfade width and the bridge repaint strength are set i
 Values are saved to `auto_config.render` (which also takes the sampler keys `steps` and `cfg`), and the pod re-reads
 them every 15 s, so no restart is needed.
 
+## License and models
+
+The code in this repo is MIT licensed (see [LICENSE](LICENSE)).
+
+No model weights are stored here. The GPU worker downloads public weights from Hugging Face at runtime, and the
+RealVisXL V5.0 inpainting UNet is merged on the pod (`infinite_tapestry/sdxl_merge.py`) and cached there, never
+committed or redistributed. Those weights keep their own licenses, including the use-based restrictions in the
+OpenRAIL licenses, which apply to anyone who runs this code:
+
+| Model | Used for | License |
+| --- | --- | --- |
+| [stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) | merge base | CreativeML Open RAIL++-M |
+| [diffusers/stable-diffusion-xl-1.0-inpainting-0.1](https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1) | merge inpaint UNet | CreativeML Open RAIL++-M |
+| [SG161222/RealVisXL_V5.0](https://huggingface.co/SG161222/RealVisXL_V5.0) | merge tuned weights, text encoders, VAE | CreativeML Open RAIL++-M |
+| [OzzyGT/RealVisXL_V4.0_inpainting](https://huggingface.co/OzzyGT/RealVisXL_V4.0_inpainting) | previous default model | CreativeML Open RAIL++-M |
+| [madebyollin/sdxl-vae-fp16-fix](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix) | fp16-safe VAE | MIT |
+| [Lykon/dreamshaper-8-inpainting](https://huggingface.co/Lykon/dreamshaper-8-inpainting) | SD 1.5 backend (optional) | CreativeML OpenRAIL-M |
+| [nerijs/pixel-art-xl](https://huggingface.co/nerijs/pixel-art-xl) | style LoRA | CreativeML OpenRAIL-M |
+| [ostris/watercolor_style_lora_sdxl](https://huggingface.co/ostris/watercolor_style_lora_sdxl) | style LoRA | Apache-2.0 |
+| [TheLastBen/Papercut_SDXL](https://huggingface.co/TheLastBen/Papercut_SDXL) | style LoRA | CreativeML OpenRAIL-M |
+
 ---
 
 Deeper dive: **[docs/METHOD.md](docs/METHOD.md)** covers fusion, the model, Auto and stories, storage and streaming, and
