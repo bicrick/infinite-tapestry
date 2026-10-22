@@ -21,4 +21,4 @@ def test_client_uses_random_start_for_boot_and_loop():
     assert "window.TapestryReplayStart = replayStart;" in boot
     assert boot.index("window.TapestryReplayStart = replayStart;") < boot.index("startViewer();")
     main = (ROOT / "frontend/src/entries/main.ts").read_text()
-    assert main.index('legacy/refl.js"') < main.index('viewer/boot"') < main.index('legacy/intro.js"') < main.index('chrome/offline-boot"')
+    assert main.index('viewer/reflection"') < main.index('viewer/boot"') < main.index('legacy/intro.js"') < main.index('chrome/offline-boot"')
