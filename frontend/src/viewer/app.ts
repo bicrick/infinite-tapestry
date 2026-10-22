@@ -114,7 +114,6 @@ export function startViewer(): void {
   // Zoom (branch preview only, behind ?zoom): ctrl/pinch-wheel zooms about the cursor, - / = / 0 keys.
   const ZOOM = new URLSearchParams(location.search).has("zoom");
   const zoom = ZOOM ? new ZoomController(cam, motion) : null;
-  if (zoom) (window.TapestryView as Record<string, unknown>).zoomTo = (z: number, cssX?: number) => zoom.zoomTo(z, cssX);
   const viewLeft = () => motion.viewLeft();
   const viewWorld = () => cam.viewWorld();
   const centerIdx = () => cam.centerIdx(viewLeft());
@@ -122,6 +121,7 @@ export function startViewer(): void {
 
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
   window.TapestryView = { portrait: () => cam.portrait(), band: () => cam.band(), drawScale: () => cam.drawScale(), setSurround: (a: number) => { renderer.setSurround(a); }, left: () => viewLeft(), scale: () => cam.scale(), ready: () => strips.maxIndex >= 0, coverage: () => renderer.coverage, zoom: () => cam.zoom, canvas, center: () => centerIdx(), max: () => strips.maxIndex, live: () => motion.panMode === "live" };
+  if (zoom) (window.TapestryView as Record<string, unknown>).zoomTo = (z: number, cssX?: number) => zoom.zoomTo(z, cssX);
 
   // ---------- shared timeline clock ----------
   let viewers = 1;
