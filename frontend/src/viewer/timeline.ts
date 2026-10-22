@@ -61,7 +61,9 @@ export class Timeline {
   constructor(private readonly d: TimelineDeps) {}
 
   sceneAt(idx: number): SceneRow | null { return sceneAt(this.scenes, idx); }
-  addStripScene(i: number, sc: SceneTuple | null | undefined): void { addStripScene(this.scenes, i, sc); }
+  /** strips whose scene has been folded into `scenes` (the caption tick's "is the centre title known" check) */
+  readonly seen = new Set<number>();
+  addStripScene(i: number, sc: SceneTuple | null | undefined): void { if (sc) this.seen.add(i); addStripScene(this.scenes, i, sc); }
   timeAt(idx: number): number | null { return timeAt(this.points, idx, this.d.stripSeconds()); }
   /** When strip idx was painted (unix s), for the view date line: the pod's points, else the public history index
    *  (/api/about?kind=history, one sample per 64 strips) so it also works with the GPU off. timeAt() is unchanged. */

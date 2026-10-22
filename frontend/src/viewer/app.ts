@@ -112,8 +112,9 @@ export function startViewer(): void {
     hud: (speed, ahead) => updateHud(speed, ahead),
   });
   renderer.gestureHeld = () => gesture !== null;
-  // Zoom (branch preview only, behind ?zoom): ctrl/pinch-wheel zooms about the cursor, - / = / 0 keys.
-  const ZOOM = new URLSearchParams(location.search).has("zoom");
+  // Zoom (on for everyone; ?zoom=0 turns it off): ctrl/trackpad-pinch wheel and two-finger touch pinch zoom about the
+  // pointer, - / = / 0 keys. At zoom 1 the viewer is exactly the unzoomed one.
+  const ZOOM = new URLSearchParams(location.search).get("zoom") !== "0";
   const zoom = ZOOM ? new ZoomController(cam, motion) : null;
   const viewLeft = () => motion.viewLeft();
   const viewWorld = () => cam.viewWorld();
@@ -141,6 +142,7 @@ export function startViewer(): void {
 
   // ---------- captions (scene under the centre of the view) ----------
   let histKey: string | null = null, histTime = "", swapT = 0;
+  let swapR: ReturnType<Timeline["sceneAt"]> = null;   // scene the in-flight caption swap will show
   let liveCapKey: string | null = null;
   function wireTitleClick(el: HTMLElement | null) {
     if (!el || el.dataset.tipWired) return;
@@ -216,8 +218,10 @@ export function startViewer(): void {
     histKey = key;
     document.body.classList.add("hist-cap");
     const cap = document.querySelector(".dock .now");
+    swapR = r;
     const apply = () => {
-      const [i0, title, by, style, origin] = r;
+      swapT = 0;
+      const [i0, title, by, style, origin] = swapR as NonNullable<typeof swapR>;   // the latest scene when the fade lands
       $("now-title").textContent = title || "—";
       stageTitle(i0, title, by, origin);
       const src = $("now-src");
@@ -227,8 +231,9 @@ export function startViewer(): void {
       $("now-arrow").classList.add("hidden"); $("next-title").textContent = "";
       cap && cap.classList.remove("swap");
     };
-    clearTimeout(swapT);
-    if (first || !cap) apply(); else { cap.classList.add("swap"); swapT = window.setTimeout(apply, 170); }
+    // Rapid changes (fast pans) must not keep restarting the fade, or the title never lands: an in-flight swap just
+    // picks up the newest scene when it fires.
+    if (first || !cap) { clearTimeout(swapT); apply(); } else if (!swapT) { cap.classList.add("swap"); swapT = window.setTimeout(apply, 170); }
   }
   timeline.start();
   // The old bottom scrubber/wheel is gone (native scroll + swipe). The Back-to-live pill says how far back you are.
@@ -425,6 +430,28 @@ export function startViewer(): void {
   };
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
+  // Two-finger touch pinch = zoom about the fingers' midpoint. A one-finger scrub in progress ends (no fling).
+  if (zoom) {
+    const tp = new Map<number, { x: number; y: number }>();
+    let pinch: { d0: number; z0: number } | null = null;
+    const pair = () => { const v = [...tp.values()]; return { d: Math.hypot(v[0].x - v[1].x, v[0].y - v[1].y), mx: (v[0].x + v[1].x) / 2 }; };
+    canvas.addEventListener("pointerdown", (e) => {
+      if (e.pointerType !== "touch") return;
+      tp.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (tp.size === 2) {
+        pinch = { d0: Math.max(20, pair().d), z0: cam.zoomTarget };
+        if (gesture) { gesture.dead = true; gesture.touch = true; }
+        if (motion.panMode === "drag") { motion.panMode = "glide"; motion.panVel = 0; }
+      }
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!tp.has(e.pointerId)) return;
+      tp.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pinch && tp.size === 2) { const p = pair(); zoom.zoomTo(pinch.z0 * p.d / pinch.d0, p.mx); }
+    });
+    const lift = (e: PointerEvent) => { tp.delete(e.pointerId); if (tp.size < 2) pinch = null; };
+    canvas.addEventListener("pointerup", lift); canvas.addEventListener("pointercancel", lift);
+  }
   ["pointerup", "pointercancel", "lostpointercapture"].forEach((t) => canvas.addEventListener(t, () => document.body.classList.remove("dragging")));
 
   // Wheel / trackpad = time. Scroll DOWN travels back into history, UP comes forward (reaching the live edge re-joins
@@ -883,6 +910,29 @@ export function startViewer(): void {
       if (txt !== whenTxt) { whenTxt = txt; whenEl.textContent = txt; }
     };
     window.setInterval(updateWhen, 250);
+  }
+  // ---------- caption tick (10 Hz): keep the title on the strip at the view centre ----------
+  // Scene titles come from strip refs (pod: WS history + /timeline; pod off: /api/live?start= 64-strip chunks, CDN
+  // cached). Zoomed out or flying, the full-res strips (and so their refs) aren't requested, so the title used to
+  // stay on the last known scene. Ask for the refs under the centre (and the next chunk in the pan direction) right
+  // away, and dim the title while the centre strip's scene is unknown rather than show a neighbour's.
+  {
+    const titleEl = document.getElementById("amb-title");
+    let pending = false;
+    window.setInterval(() => {
+      if (strips.maxIndex < 0 || document.hidden) return;
+      const c = Math.max(0, Math.min(strips.maxIndex, Math.round(centerIdx())));
+      const known = timeline.points.length > 0 || timeline.seen.has(c) || strips.has(c);
+      if (!known) { if (connected) strips.requestMissing(Math.max(0, c - 8), c + 8); else apiMissing(c - 8, c + 8); }
+      // Pod off: also fetch the refs the view will reach in the next ~0.8 s (fast pans), up to 6 chunks ahead.
+      const sps = cam.velS / SW();
+      if (!connected && Math.abs(sps) > 2) {
+        const span = Math.min(6 * 64, Math.abs(sps) * 0.8), dir = Math.sign(sps);
+        for (let d = 32; d <= span; d += 64) { const i = c + dir * d; if (i >= 0 && i <= strips.maxIndex && !timeline.seen.has(i) && !strips.has(i)) apiMissing(i - 8, i + 8); }
+      }
+      const p = !known && !motion.live;
+      if (p !== pending && titleEl) { pending = p; titleEl.classList.toggle("cap-pending", p); }
+    }, 100);
   }
   const apiReq = new Set<number>();
   function apiMissing(a: number, b: number) {

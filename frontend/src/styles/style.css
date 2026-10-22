@@ -1389,3 +1389,5 @@ body.gpu-off .dock .cmd { opacity: 0; transform: translateY(6px); pointer-events
 }
 body.saver .amb-when, body:has(.drawer.open) .amb-when { opacity: 0 !important; }
 @media (max-height: 760px) { body:has(.toast.show) .amb-when, body:has(.share-toast.show) .amb-when { opacity: 0 !important; } }
+/* title while the centre strip's scene is still loading (zoomed-out / fast pans): the last title, dimmed, no motion */
+#amb-title.cap-pending { color: rgba(var(--ink),.26); transition: color .25s var(--ease); }

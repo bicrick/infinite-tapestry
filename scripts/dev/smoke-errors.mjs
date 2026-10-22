@@ -10,7 +10,9 @@ import { PNG } from "pngjs";
 
 const [BASE, ...argPaths] = process.argv.slice(2);
 if (!BASE) { console.error("usage: smoke-errors.mjs <base> [path ...]"); process.exit(2); }
-const PATHS = argPaths.length ? argPaths : ["/", "/?zoom"];
+const PATHS = argPaths.length ? argPaths : ["/", "/?zoom=0"];
+// Zoom is on by default; ?zoom=0 turns it off. (Older builds: only with ?zoom -> set ZOOM_DEFAULT=0.)
+const zoomOn = (p) => (process.env.ZOOM_DEFAULT === "0" ? /[?&]zoom(?!=0)/.test(p) : !/[?&]zoom=0/.test(p));
 const bypass = process.env.VERCEL_BYPASS_FILE ? fs.readFileSync(process.env.VERCEL_BYPASS_FILE, "utf8").trim() : "";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const VPS = {
@@ -44,13 +46,13 @@ for (const vp of Object.keys(VPS)) for (const p of PATHS) {
   const ok = await page.waitForFunction(() => { const V = window.TapestryView; return !!(V && V.ready && V.ready() && V.coverage() >= 0.95); }, null, { timeout: 30000 }).then(() => true, () => false);
   await sleep(6000);   // intro finishes; canvas fully visible
   let zoomInfo = "";
-  if (/[?&]zoom/.test(p)) {
+  if (zoomOn(p)) {
     zoomInfo = await page.evaluate(async () => { const V = window.TapestryView; if (!V || typeof V.zoomTo !== "function") return "zoomTo MISSING";
       const z0 = V.zoom(); V.zoomTo(0.5); await new Promise((r) => setTimeout(r, 1500)); return `zoom ${z0} -> ${V.zoom().toFixed(3)}`; });
     if (/MISSING/.test(zoomInfo) || /-> 1\.000$/.test(zoomInfo)) errs.push("zoom not working: " + zoomInfo);
   } else {
     const has = await page.evaluate(() => typeof window.TapestryView?.zoomTo === "function");
-    if (has) errs.push("zoomTo present without ?zoom flag");
+    if (has) errs.push("zoomTo present although zoom is off");
   }
   const png = PNG.sync.read(await page.locator("#view").screenshot());
   let lit = 0; const N = png.width * png.height;
