@@ -1,5 +1,5 @@
 // /about: same order as the old deferred script tags.
-import "../legacy/refl.js";
+import "../viewer/reflection";
 import "../legacy/stipple-hook.js";
 import "../legacy/about-hero.js";
 import "../legacy/about-demo.js";

@@ -6,16 +6,11 @@ import type { StripStore } from "./strips";
 import { LOD_N, lodCovers, lodLevelForZoom, type LodStore } from "./lod";
 import type { Motion } from "./motion";
 import type { LiveFollower } from "./live-follower";
+import type { Reflection, SurroundView } from "./reflection";
 
-interface Reflection { frame(v: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number): void; off(): void }
 declare global {
-  interface Window {
-    TapestryReflection?: { create(canvas: HTMLCanvasElement, opts: { surr: () => string; coarse: () => boolean }): Reflection | null };
-    __probe?: number[]; __ov?: number[]; __dx?: number; __nolod?: boolean; __noblur?: boolean;
-  }
+  interface Window { __probe?: number[]; __ov?: number[]; __dx?: number; __nolod?: boolean; __noblur?: boolean }
 }
-/** What the surround layers need from the last frame. */
-export interface SurroundView { left: number; ww: number; fi: number; li: number; cov: number; lod: boolean; fading: number }
 
 export const COARSE = !!(typeof window.matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
 

@@ -2,7 +2,7 @@
 // sync classics (odometer, refl, replay + client = viewer/boot, intro, offline), then deferred mobile, then the
 // social/fun modules.
 import "../chrome/odometer";
-import "../legacy/refl.js";
+import "../viewer/reflection";
 import "../viewer/boot";
 import "../legacy/intro.js";
 import "../chrome/offline-boot";
