@@ -44,12 +44,16 @@ export class Motion {
   constructor(private readonly d: MotionDeps) {}
 
   private SW(): number { return this.d.cam.SW(); }
+  /** Screen-space feel factor (Camera.feel): 1 at zoom 1, so every constant below keeps its zoom-1 value. */
+  private Z(): number { return this.d.cam.feel(); }
   minPan(): number { return 0; }
   maxPan(): number { return Math.max(0, this.d.cam.liveScroll); }
   private OVER_MAX(): number { return Math.min(this.d.cam.viewWorld() * 0.08, this.SW() * 0.5); }
   /** iOS-style: resistance grows with overscroll distance; a small rubber-band past live (staged pixels stay hidden). */
   rubber(x: number): number {
-    const lo = this.minPan(), hi = this.maxPan(), d = this.d.cam.viewWorld() * 0.5;
+    // Resistance distance is screen-space; the past-live cap (OVER_MAX) stays in world px, so zoomed out a pull never
+    // peeks further into the staged (unfinished) strips than it does at zoom 1.
+    const lo = this.minPan(), hi = this.maxPan(), d = this.d.cam.viewWorld() * 0.5 * this.Z();
     const f = (o: number) => (1 - 1 / (o / d * 0.55 + 1)) * d;
     if (x < lo) return lo - f(lo - x);
     if (x > hi) return hi + Math.min(this.OVER_MAX(), f(x - hi) * 0.35);
@@ -78,27 +82,28 @@ export class Motion {
     if (maxIndex < 0) { this.pendingSeek = [from, to ?? null]; return; }
     from = Math.max(0, Math.min(from, maxIndex)); to = Math.max(from, Math.min(to ?? from + 8, maxIndex));
     this.enterHistory();
-    const SW = this.SW(), vw = this.d.cam.viewWorld();
+    const SW = this.SW(), cam = this.d.cam, vw = cam.visibleWorld(), Z = this.Z();
     const span = (to - from + 1) * SW;
-    const target = Math.max(0, from * SW - Math.max(0, (vw - span) / 2));
-    const seek = { from: this.shownPan(), to: target, t0: performance.now(), dur: Math.min(2200, 600 + Math.sqrt(Math.abs(target - this.shownPan())) * 12) };
+    // zoom 1: frame the range centred in viewWorld (legacy); zoomed: centred on the drawn screen
+    const target = Math.max(0, cam.zoom >= 1 ? from * SW - Math.max(0, (vw - span) / 2) : from * SW + span / 2 - cam.viewCenter());
+    const seek = { from: this.shownPan(), to: target, t0: performance.now(), dur: Math.min(2200, 600 + Math.sqrt(Math.abs(target - this.shownPan()) / Z) * 12) };
     this.seek = seek;
     this.panMode = "seek"; this.panVel = 0;
-    this.d.lod.prefetch((target + vw / 2) / SW);
+    this.d.lod.prefetch((target + cam.viewCenter()) / SW);
     this.mark = { from, to, t0: performance.now() + seek.dur * 0.6 };
   }
 
   jumpTo(idx: number): void {
     this.enterHistory();
-    const target = Math.max(0, Math.min(this.maxPan(), idx * this.SW() - this.d.cam.viewWorld() / 2));
-    this.seek = { from: this.shownPan(), to: target, t0: performance.now(), dur: Math.min(1600, 500 + Math.sqrt(Math.abs(target - this.shownPan())) * 6) };
+    const target = Math.max(0, Math.min(this.maxPan(), idx * this.SW() - this.d.cam.viewCenter()));
+    this.seek = { from: this.shownPan(), to: target, t0: performance.now(), dur: Math.min(1600, 500 + Math.sqrt(Math.abs(target - this.shownPan()) / this.Z()) * 6) };
     this.panMode = "seek"; this.panVel = 0;
   }
 
   startReturn(): void {
     this.wheelGlide = false;
     this.enterHistory();
-    const dist = Math.abs(this.maxPan() - this.shownPan());
+    const dist = Math.abs(this.maxPan() - this.shownPan()) / this.Z();   // on-screen distance
     this.ret = { from: this.shownPan(), t0: performance.now(), dur: Math.min(1100, 420 + Math.sqrt(dist) * 9) };
     this.panMode = "return";
     this.panVel = 0;
@@ -125,7 +130,7 @@ export class Motion {
       if (this.panMode === "live" || this.panMode === "return") this.enterHistory();
       if (this.panMode !== "fly") { this.panVel = this.panMode === "glide" ? this.panVel : 0; this.panMode = "fly"; }
     }
-    if (!fly.dir && this.panMode === "fly") { this.turbo = Math.min(1, Math.abs(this.panVel) / (this.SW() * 8)); this.panMode = "glide"; }
+    if (!fly.dir && this.panMode === "fly") { this.turbo = Math.min(1, Math.abs(this.panVel) / (this.SW() * 8 * this.Z())); this.panMode = "glide"; }
     return true;
   }
   flyCancel(): void { this.fly.keys.clear(); this.fly.dir = 0; }
@@ -138,7 +143,7 @@ export class Motion {
   }
 
   private stepFly(dt: number): void {
-    const hi = this.maxPan(), lo = this.minPan(), d = this.fly.dir, SW = this.SW();
+    const hi = this.maxPan(), lo = this.minPan(), d = this.fly.dir, SW = this.SW() * this.Z();   // screen-space strip widths
     if (!d) { this.panMode = "glide"; return; }
     if (this.panVel * d < 0) {                   // braking against the motion
       const v = Math.abs(this.panVel), nv = Math.max(0, v * Math.exp(-FLY_BRAKE * dt) - SW * 6 * dt);
@@ -152,7 +157,7 @@ export class Motion {
     if (this.panPos <= lo && this.panVel < 0) { this.panPos = lo; this.panVel = 0; }
     if (performance.now() - this.landAt > 250) {   // prefetch ahead of the flight
       this.landAt = performance.now();
-      this.prefetchLanding((this.panPos + this.panVel * 0.6 + this.d.cam.viewWorld() / 2) / SW);
+      this.prefetchLanding((this.panPos + this.panVel * 0.6 + this.d.cam.viewCenter()) / this.SW());
     }
   }
 
@@ -161,7 +166,7 @@ export class Motion {
     const gesture = this.d.gestureActive();
     if (this.panMode === "fly") { if (gesture || this.tlScrub) { this.flyCancel(); this.panMode = "drag"; } else { this.stepFly(dt); return; } }
     if (this.panMode !== "glide" || gesture || this.tlScrub) this.holdDrift();   // held / scrubbing / seeking: no drift
-    const lo = this.minPan(), hi = this.maxPan();
+    const lo = this.minPan(), hi = this.maxPan(), Z = this.Z();
     if (this.panMode === "seek") {
       const seek = this.seek as NonNullable<Motion["seek"]>;
       const t = Math.min(1, (performance.now() - seek.t0) / seek.dur);
@@ -185,9 +190,9 @@ export class Motion {
         const k = 140, c = 2 * Math.sqrt(k);
         this.panVel += (k * out - c * this.panVel) * dt;
         this.panPos += this.panVel * dt;
-        if (Math.abs(out) < 0.5 && Math.abs(this.panVel) < 5) {
+        if (Math.abs(out) < 0.5 * Z && Math.abs(this.panVel) < 5 * Z) {
           this.panPos = this.panPos > hi ? hi : Math.max(lo, this.panPos); this.panVel = 0;
-          if (this.panPos >= hi - 0.5) this.toLive();
+          if (this.panPos >= hi - 0.5 * Z) this.toLive();
         }
       } else {
         // Friction: firm at normal speeds (~0.4-0.7s glide), loose once in turbo so it hums.
@@ -195,14 +200,15 @@ export class Motion {
         this.panVel *= Math.exp(-(this.wheelGlide ? 2.0 : 7.5 - 6.3 * this.turbo) * dt);   // wheelGlide ≈ iOS 0.998/ms deceleration
         if (this.wheelGlide && performance.now() - this.landAt > 250) {   // prefetch where the coast will land
           this.landAt = performance.now();
-          this.prefetchLanding((this.panPos + this.panVel / 2.0 + this.d.cam.viewWorld() / 2) / this.SW());
+          this.prefetchLanding((this.panPos + this.panVel / 2.0 + this.d.cam.viewCenter()) / this.SW());
         }
         this.panPos += this.panVel * dt;
-        if (Math.abs(this.panVel) < 4) { this.panVel = 0; this.wheelGlide = false; }
-        if (this.panPos >= hi - this.SW() * 0.25 || (Math.abs(this.panVel) < 60 && hi - this.panPos < this.d.cam.viewWorld() * 0.5)) { this.startReturn(); return; }   // near the front: magnetic ease into live
+        if (Math.abs(this.panVel) < 4 * Z) { this.panVel = 0; this.wheelGlide = false; }
+        if (this.panPos >= hi - this.SW() * 0.25 * Z || (Math.abs(this.panVel) < 60 * Z && hi - this.panPos < this.d.cam.viewWorld() * 0.5 * Z)) { this.startReturn(); return; }   // near the front: magnetic ease into live
         // Drift: once settled and the high-res strips are in, resume the slow forward drift with a
         // gelatinous spring ramp (0 → drift speed over ~1-1.5s, slight overshoot), never a jump.
-        if (Math.abs(this.panVel) < 4 && !gesture && !this.tlScrub) {
+        // (the drift itself stays in world px/s: it plays history back at the painting's real rate, like live)
+        if (Math.abs(this.panVel) < 4 * Z && !gesture && !this.tlScrub) {
           if (!this.driftArm && this.d.coverage() >= 0.95) this.driftArm = performance.now();
           if (this.driftArm && performance.now() - this.driftArm > 300) {
             const target = Math.max(0, this.d.follower.srvSpeed || (this.d.replay() ? this.d.scrollSpeed() || 60 : 0)), k = 9, c = 2 * 0.72 * Math.sqrt(k);

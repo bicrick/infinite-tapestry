@@ -55,6 +55,34 @@ export class Camera {
   viewWorld(): number { return this.canvas.width / this.scale(); }
   /** world px per CSS px (zoom 1 / ribbon 1: the pan/scrub unit) */
   pxToWorld(): number { return (this.canvas.width / Math.max(1, this.canvas.clientWidth)) / this.scale(); }
+  /**
+   * Screen-space feel. Every input constant (drag, fling caps, glide thresholds, key flight, seek durations) was tuned in
+   * zoom-1 world px; multiply by feel() to get the same on-screen distance/speed at the current zoom.
+   * Exactly 1 at zoom >= 1 (the default viewer never zooms), so zoom-1 behaviour is bit-for-bit unchanged.
+   * Below 1 it is 1 / (zoom * ribbon^b): b eases 0 -> 1 as zoom goes 1 -> 0.75, so once zoomed out a drag keeps the
+   * grabbed point exactly under the pointer (at zoom 1 the desktop ribbon drag is 0.6x the pointer, kept as it was).
+   */
+  feel(): number {
+    const z = this.zoom;
+    if (z >= 1) return 1;
+    const R = this.portrait() ? 1 : this.ribbon;
+    const t = Math.min(1, (1 - z) / 0.25), b = t * t * (3 - 2 * t);
+    return 1 / (z * Math.pow(R, b));
+  }
+  /** world px per CSS px of pointer/wheel movement at the current zoom (== pxToWorld() at zoom 1) */
+  pxToWorldZ(): number { return this.pxToWorld() * this.feel(); }
+  /** Drawn scale (device px per world px) for a given zoom, as frame() computes it. */
+  drawnScale(zoom = this.zoom): number { return this.scale() * zoom * (this.portrait() ? 1 : this.ribbon); }
+  /** frame(): left = viewLeft + leftOffset() (before the >= 0 clamp): centred/right-anchored framing, never past the staged live line. */
+  leftOffset(zoom = this.zoom): number {
+    const w = this.canvas.width, s = this.drawnScale(zoom), vw = this.viewWorld(), st = this.STAGE(), ra = this.ribbonAnchor;
+    const right = vw - st - w / s;
+    return Math.min((vw / 2 - st - w / s / 2) * (1 - ra) + right * ra, right);
+  }
+  /** Offset from viewLeft to the world x at the screen centre (zoom 1: the legacy viewWorld()/2). */
+  viewCenter(): number { return this.zoom >= 1 ? this.viewWorld() / 2 : this.leftOffset() + this.canvas.width / this.drawnScale() / 2; }
+  /** World px across the screen for framing seeks (zoom 1: the legacy viewWorld()). */
+  visibleWorld(): number { return this.zoom >= 1 ? this.viewWorld() : this.canvas.width / this.drawnScale(); }
   /** Off-screen staging buffer: one full strip (the next arrival) + the inpaint band it repaints over its predecessor (+32 px). */
   BAND(): number { return this.d.maxOv() + 32; }
   /** + one more full strip of margin: the newest 2 strips + the inpaint band stay off-screen. */

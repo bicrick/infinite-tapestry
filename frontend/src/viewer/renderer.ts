@@ -194,7 +194,7 @@ export class Renderer {
     }
     if (follower.livePos !== null) { cam.drawExcess = Math.max(0, left + w / s - (follower.livePos - STAGE)); window.__dx = cam.drawExcess / SW; }
     this.publishBand(yOff, H * s, h);
-    const fast = Math.abs(cam.velS) > 1600;
+    const fast = Math.abs(cam.velS) / cam.feel() > 1600;   // on-screen speed
     ctx.save();
     ctx.translate(0, yOff);
     ctx.scale(s, s);
@@ -247,7 +247,7 @@ export class Renderer {
       this.drawSurround(w, h, Math.max(0, yOff), H * s); this.surroundA = sa;
     } else if (this.surroundAStr !== "0.00") { this.surroundAStr = "0.00"; document.documentElement.style.setProperty("--amb-a", "0"); if (this.refl) this.refl.off(); }
     // Speed blur that scales with scrub velocity, as a GPU-composited CSS filter (touch only).
-    const blur = Math.min(12, Math.max(0, (Math.abs(cam.velS) - 500) / 420)) * (window.devicePixelRatio || 1);
+    const blur = Math.min(12, Math.max(0, (Math.abs(cam.velS) / cam.feel() - 500) / 420)) * (window.devicePixelRatio || 1);
     {
       const px = window.__noblur || !COARSE ? 0 : Math.round(Math.min(6, blur / (window.devicePixelRatio || 1) / 2) * 2) / 2;
       if (px !== this.blurPx) { this.blurPx = px; canvas.style.transition = px > 0.5 ? "none" : ""; canvas.style.filter = px > 0.5 ? `blur(${px}px)` : ""; }

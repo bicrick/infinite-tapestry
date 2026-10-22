@@ -13,6 +13,7 @@ import { COARSE, Renderer } from "./renderer";
 import { StripStore } from "./strips";
 import { Timeline } from "./timeline";
 import { ZoomController } from "./zoom";
+import { dragBy, releaseVelocity } from "./input";
 import { renderQueueList } from "../chrome/queue";
 
 type OdoEl = HTMLElement & { _odo?: { set(n: number): void } | null; _pre?: HTMLElement; _num?: HTMLElement; _post?: HTMLElement };
@@ -117,7 +118,8 @@ export function startViewer(): void {
   const viewLeft = () => motion.viewLeft();
   const viewWorld = () => cam.viewWorld();
   const centerIdx = () => cam.centerIdx(viewLeft());
-  const pxToWorld = () => cam.pxToWorld();
+  // Pointer / wheel / touch CSS px -> world px at the current zoom (== cam.pxToWorld() at zoom 1; see Camera.feel).
+  const pxToWorld = () => cam.pxToWorldZ();
 
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
   window.TapestryView = { portrait: () => cam.portrait(), band: () => cam.band(), drawScale: () => cam.drawScale(), setSurround: (a: number) => { renderer.setSurround(a); }, left: () => viewLeft(), scale: () => cam.scale(), ready: () => strips.maxIndex >= 0, coverage: () => renderer.coverage, zoom: () => cam.zoom, canvas, center: () => centerIdx(), max: () => strips.maxIndex, live: () => motion.panMode === "live" };
@@ -388,14 +390,9 @@ export function startViewer(): void {
       lastPX = ev.clientX;
       return;
     }
-    const dx = (ev.clientX - lastPX) * pxToWorld();
+    const dxCss = ev.clientX - lastPX;
     lastPX = ev.clientX;
-    // Apply drag in "shown" space so overscroll resists the finger.
-    const lo = motion.minPan(), hi = motion.maxPan();
-    const resist = motion.panPos < lo || motion.panPos > hi ? 0.45 : 1;
-    motion.panPos -= dx * resist;
-    motion.samples.push([now, motion.panPos]);
-    while (motion.samples.length > 2 && now - motion.samples[0][0] > 100) motion.samples.shift();
+    dragBy(motion, cam, dxCss, now);
   });
   const endDrag = (ev: PointerEvent) => {
     if (ev.pointerId !== activePointer) return;
@@ -413,18 +410,12 @@ export function startViewer(): void {
       const back = ev.clientX - g.x0, v = (b[1] - a[1]) / Math.max(1, b[0] - a[0]);
       if (ev.type === "pointerup" && back > FLICK_MIN_PX && v > FLICK_PX_MS && performance.now() - b[0] < 80) {
         commitRewind();
-        motion.panVel = Math.min(4000, v * 1000 * pxToWorld()) * -1;   // carry the flick's momentum back in time
+        motion.panVel = Math.min(4000 * cam.feel(), v * 1000 * pxToWorld()) * -1;   // carry the flick's momentum back in time
         motion.panMode = "glide";
       }
       return;   // otherwise we never left live: the nudge springs back in frame()
     }
-    const now = performance.now();
-    const samples = motion.samples;
-    const s0 = samples[0], s1 = samples[samples.length - 1];
-    const span = (s1[0] - s0[0]) / 1000;
-    let panVel = now - s1[0] > 80 || span <= 0 ? 0 : (s1[1] - s0[1]) / span;
-    panVel = Math.max(-8000, Math.min(8000, panVel));
-    motion.panVel = panVel;
+    motion.panVel = releaseVelocity(motion, cam, performance.now(), 8000);
     motion.panMode = "glide";
   };
   canvas.addEventListener("pointerup", endDrag);
@@ -458,21 +449,12 @@ export function startViewer(): void {
       wheelHeld = true; motion.wheelGlide = false; motion.tlScrub = true; motion.panMode = "drag"; motion.panVel = 0; motion.turbo = 0; motion.samples = [[performance.now(), motion.panPos]];
     },
     wheelMove(dxCss: number) {
-      const lo = motion.minPan(), hi = motion.maxPan(), resist = motion.panPos < lo || motion.panPos > hi ? 0.45 : 1;
-      motion.panPos -= dxCss * pxToWorld() * resist;
-      const now = performance.now();
-      motion.samples.push([now, motion.panPos]);
-      while (motion.samples.length > 2 && now - motion.samples[0][0] > 100) motion.samples.shift();
+      dragBy(motion, cam, dxCss, performance.now());
     },
     wheelEnd(noFling?: boolean) {
       if (!wheelHeld) return;
       wheelHeld = false; motion.tlScrub = false;
-      const samples = motion.samples;
-      const now = performance.now(), s0 = samples[0], s1 = samples[samples.length - 1];
-      const span = (s1[0] - s0[0]) / 1000;
-      let panVel = now - s1[0] > 80 || span <= 0 ? 0 : (s1[1] - s0[1]) / span;
-      const cap = 90000;
-      panVel = noFling ? 0 : Math.max(-cap, Math.min(cap, panVel));   // touch: plain release velocity (iOS-like); wheel: OS momentum already applied
+      const panVel = noFling ? 0 : releaseVelocity(motion, cam, performance.now(), 90000);   // touch: plain release velocity (iOS-like); wheel: OS momentum already applied
       motion.panVel = panVel;
       motion.wheelGlide = Math.abs(panVel) > 40;
       motion.panMode = "glide";

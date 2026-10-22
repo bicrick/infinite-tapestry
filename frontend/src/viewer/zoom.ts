@@ -40,13 +40,10 @@ export class ZoomController {
     const a = this.anchor, cam = this.cam, m = this.motion;
     if (!a) return;
     if (m.panMode !== "glide") { this.anchor = null; return; }
-    // Camera.frame: left = min(centre-or-right framing, staged live line) = viewLeft + c, so world(cssX) = viewLeft + c + cssX*k/s.
-    const w = cam.canvas.width, k = w / Math.max(1, cam.canvas.clientWidth);
-    const s = cam.scale() * cam.zoom * (cam.portrait() ? 1 : cam.ribbon);
-    const vw = cam.viewWorld(), st = cam.STAGE(), ra = cam.ribbonAnchor;
-    const right = vw - st - w / s;
-    const c = Math.min((vw / 2 - st - w / s / 2) * (1 - ra) + right * ra, right);
-    const vl = a.worldX - a.cssX * k / s - c;
+    // Camera.frame: left = viewLeft + leftOffset (min of centre-or-right framing and the staged live line), so
+    // world(cssX) = viewLeft + c + cssX*k/s.
+    const k = cam.canvas.width / Math.max(1, cam.canvas.clientWidth);
+    const vl = a.worldX - a.cssX * k / cam.drawnScale() - cam.leftOffset();
     m.panPos = Math.max(m.minPan(), Math.min(m.maxPan(), vl));
     if (cam.zoom === cam.zoomTarget && cam.zoomVel === 0) this.anchor = null;   // settled (the camera snaps exactly)
   }
