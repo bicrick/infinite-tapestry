@@ -133,6 +133,10 @@ export function startViewer(): void {
     /** ?zoom only (tests): world x / CSS px per world px of the last drawn frame */
     worldAt: (cssX: number) => cam.screenToWorld(cssX).x,
     cssPerWorld: () => (cam.last ? cam.last.s : 0) / (canvas.width / Math.max(1, canvas.clientWidth)),
+    /** tests: zoom floor, overview tiles still loading, loaded tiles per level */
+    minZoom: () => zoom.minZoom(), lodPending: () => lod.pending(), lodStats: () => lod.stats(),
+    /** world x of the painted live line (past it nothing is drawn yet), or null */
+    liveWorld: () => (follower.livePos === null ? null : follower.livePos - cam.STAGE()),
   });
 
   // ---------- shared timeline clock ----------

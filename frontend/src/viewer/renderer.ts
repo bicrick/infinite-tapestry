@@ -275,7 +275,7 @@ export class Renderer {
         want++;
         const e = strips.get(i);
         if (!e) { continue; }
-        if (!fast) strips.ensureDecoded(e);
+        if (!fast || !this.lodCovers(i * SW - e.overlap, (i + 1) * SW)) strips.ensureDecoded(e);   // fast: only where no LOD tile covers it (newest strips)
         if (!e.bitmap) continue;
         have++;
         // Crossfade a newly visible strip over its LOD underlay (~1 s); with no underlay painted it is drawn opaque at once.
