@@ -260,6 +260,7 @@ export class Renderer {
     if (follower.livePos !== null) { cam.drawExcess = Math.max(0, left + w / s - (follower.livePos - STAGE)); window.__dx = cam.drawExcess / SW; }
     this.publishBand(yOff, H * sy, h);
     const fast = Math.abs(cam.velS) / cam.feel() > 1600;   // on-screen speed
+    const intro = document.body.classList.contains("intro");
     ctx.save();
     ctx.translate(0, yOff);
     ctx.scale(s, sy);
@@ -275,7 +276,7 @@ export class Renderer {
         want++;
         const e = strips.get(i);
         if (!e) { continue; }
-        if (!fast || !this.lodCovers(i * SW - e.overlap, (i + 1) * SW)) strips.ensureDecoded(e);   // fast: only where no LOD tile covers it (newest strips)
+        if (!fast || (!intro && !this.lodCovers(i * SW - e.overlap, (i + 1) * SW))) strips.ensureDecoded(e);   // fast: only where no LOD tile covers it (newest strips); the load-in keeps prod timing
         if (!e.bitmap) continue;
         have++;
         // Crossfade a newly visible strip over its LOD underlay (~1 s); with no underlay painted it is drawn opaque at once.
