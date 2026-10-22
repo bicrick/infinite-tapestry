@@ -1,0 +1,18 @@
+name: Feature idea
+description: Suggest an improvement to the tapestry, the site or the code.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: "Want to steer the painting itself? Type your idea on the live site: https://infinitetapestry.app"
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should change, and why would it make the tapestry better?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or details

@@ -1,0 +1,33 @@
+name: Bug report
+description: Something on the site or in the code doesn't work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please don't include secrets, tokens or personal data. Security issues go through SECURITY.md instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open ...\n2. Click ...\n3. See ..."
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: Live site page or URL, or `make dev` locally.
+  - type: input
+    id: env
+    attributes:
+      label: Browser / OS
+      placeholder: e.g. Chrome 140 on macOS, Safari on iOS
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs

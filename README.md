@@ -2,6 +2,10 @@
 
 **One endless painting, painted live. Anyone watching can steer it.**
 
+[![CI](https://github.com/bicrick/infinite-tapestry/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bicrick/infinite-tapestry/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Live site](https://img.shields.io/badge/live-infinitetapestry.app-7c5cff.svg)](https://infinitetapestry.app)
+
 [Live site](https://infinitetapestry.app) · [Project write-up](https://www.bicrick.com/projects/infinite-tapestry) · [Method in depth](docs/METHOD.md)
 
 ![Infinite Tapestry](docs/img/tapestry_hero.jpg)
@@ -163,6 +167,8 @@ OpenRAIL licenses, which apply to anyone who runs this code:
 | [TheLastBen/Papercut_SDXL](https://huggingface.co/TheLastBen/Papercut_SDXL) | style LoRA | CreativeML OpenRAIL-M |
 
 ---
+
+Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) · Security: [SECURITY.md](SECURITY.md)
 
 More: [docs/METHOD.md](docs/METHOD.md) (the method at three zoom levels) · [docs/SAFETY.md](docs/SAFETY.md) (how ideas
 and images are screened) · [docs/OPERATIONS.md](docs/OPERATIONS.md) (running production).
