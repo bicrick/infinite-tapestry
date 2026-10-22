@@ -439,10 +439,11 @@ export function startViewer(): void {
     const pair = () => { const v = [...tp.values()]; return { d: Math.hypot(v[0].x - v[1].x, v[0].y - v[1].y), mx: (v[0].x + v[1].x) / 2 }; };
     canvas.addEventListener("pointerdown", (e) => {
       if (e.pointerType !== "touch") return;
+      if (e.isPrimary) { tp.clear(); pinch = null; }   // a new touch sequence: forget fingers whose up never arrived
       tp.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (tp.size === 2) {
         pinch = { d0: Math.max(20, pair().d), z0: cam.zoomTarget };
-        if (gesture) { gesture.dead = true; gesture.touch = true; }
+        if (gesture) { gesture.dead = true; gesture.touch = true; gesture.moved = 1e9; }   // a pinch is never a tap
         if (motion.panMode === "drag") { motion.panMode = "glide"; motion.panVel = 0; }
       }
     });

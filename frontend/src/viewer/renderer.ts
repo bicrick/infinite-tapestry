@@ -262,7 +262,9 @@ export class Renderer {
     // soft limit never waits on a strip that was already received. History/scrub: the next 3.
     const ahead = motion.panMode === "live" ? Math.max(lastIdx + 3, Math.min(strips.maxIndex, lastIdx + 12)) : lastIdx + 3;
     if (!fast && cam.zoom > 0.9) strips.requestMissing(firstIdx - 8, ahead);
-    for (let i = lastIdx + 1; i <= Math.min(strips.maxIndex, ahead); i++) { const e = strips.get(i); if (e) strips.ensureDecoded(e); }   // pre-decode the next strips so they never pop in
+    // pre-decode the next strips so they never pop in. Not below the strip layer's zoom (0.3): there only LOD tiles are
+    // drawn, and the caption's ref prefetch would otherwise turn a zoomed-out flight into a full-res strip download.
+    if (cam.zoom > 0.3) for (let i = lastIdx + 1; i <= Math.min(strips.maxIndex, ahead); i++) { const e = strips.get(i); if (e) strips.ensureDecoded(e); }
     strips.evictFar(firstIdx, lastIdx);
   }
 }
