@@ -54,10 +54,10 @@ for (const zoom of hasZoom ? [1, 0.15] : [1]) {
   const samples = await page.evaluate(async () => { const V = window.TapestryView, el = document.getElementById("amb-title"); const out = [];
     for (let k = 0; k < 40; k++) { await new Promise((r) => setTimeout(r, 100)); out.push([Math.round(V.center()), el.textContent.trim()]); } return out; });
   await page.keyboard.up("ArrowLeft");
-  let right = 0, n = 0;
-  for (const [c, got] of samples) { const w = await page.evaluate((c) => window.__truth(c), c); if (!w) continue; n++; if (w.trim() === got) right++; }
+  let right = 0, n = 0; const truths = new Set();
+  for (const [c, got] of samples) { const w = await page.evaluate((c) => window.__truth(c), c); if (!w) continue; n++; truths.add(w.trim()); if (w.trim() === got) right++; }
   const shown = new Set(samples.map((x) => x[1])).size, passed = new Set(samples.map((x) => x[0])).size;
-  results["fast pan zoom " + zoom] = { correctPct: Math.round((100 * right) / Math.max(1, n)), samples: n, titlesShown: shown, stripsCrossed: samples[samples.length - 1][0] - samples[0][0] };
+  results["fast pan zoom " + zoom] = { correctPct: Math.round((100 * right) / Math.max(1, n)), samples: n, titlesShown: shown, scenesCrossed: truths.size, stripsCrossed: samples[samples.length - 1][0] - samples[0][0] };
   await page.waitForTimeout(1500);
 }
 console.log(JSON.stringify(results));

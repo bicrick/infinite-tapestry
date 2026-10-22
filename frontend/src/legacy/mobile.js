@@ -116,7 +116,8 @@
     const a = $(from), b = $(to); if (!a || !b) return;
     // A fade already in flight takes the newest text when it lands (restarting it on every change starved fast pans).
     const cur = () => (fmt ? fmt(a.textContent) : a.textContent);
-    const sync = () => { const t = cur(); if (b.textContent !== t) { if (b._t) return; b.style.transition = "opacity .3s ease"; b.style.opacity = "0"; b._t = setTimeout(() => { b._t = 0; b.textContent = cur(); b.style.opacity = ""; setTimeout(() => { b.style.transition = ""; }, 400); }, b.textContent ? 300 : 0); } };
+    // Changes arriving faster than the fade (fast pans) swap at once; a settled view still fades.
+    const sync = () => { const t = cur(); if (b.textContent !== t) { if (b._t) return; if (performance.now() - (b._at || -1e9) < 700) { b._at = performance.now(); b.textContent = t; b.style.opacity = ""; return; } b._at = performance.now(); b.style.transition = "opacity .3s ease"; b.style.opacity = "0"; b._t = setTimeout(() => { b._t = 0; b.textContent = cur(); b.style.opacity = ""; setTimeout(() => { b.style.transition = ""; }, 400); }, b.textContent ? 300 : 0); } };
     new MutationObserver(sync).observe(a, { childList: true, characterData: true, subtree: true }); sync();
   };
   // status-mini is driven directly by client.js (odometer).

@@ -143,6 +143,7 @@ export function startViewer(): void {
   // ---------- captions (scene under the centre of the view) ----------
   let histKey: string | null = null, histTime = "", swapT = 0;
   let swapR: ReturnType<Timeline["sceneAt"]> = null;   // scene the in-flight caption swap will show
+  let swapAt = -1e9;   // when the caption last changed
   let liveCapKey: string | null = null;
   function wireTitleClick(el: HTMLElement | null) {
     if (!el || el.dataset.tipWired) return;
@@ -220,7 +221,7 @@ export function startViewer(): void {
     const cap = document.querySelector(".dock .now");
     swapR = r;
     const apply = () => {
-      swapT = 0;
+      swapT = 0; swapAt = performance.now();
       const [i0, title, by, style, origin] = swapR as NonNullable<typeof swapR>;   // the latest scene when the fade lands
       $("now-title").textContent = title || "—";
       stageTitle(i0, title, by, origin);
@@ -233,7 +234,8 @@ export function startViewer(): void {
     };
     // Rapid changes (fast pans) must not keep restarting the fade, or the title never lands: an in-flight swap just
     // picks up the newest scene when it fires.
-    if (first || !cap) { clearTimeout(swapT); apply(); } else if (!swapT) { cap.classList.add("swap"); swapT = window.setTimeout(apply, 170); }
+    // Scenes changing faster than the fade (a fast pan / flight) swap at once; a settled view still crossfades.
+    if (first || !cap || performance.now() - swapAt < 700) { clearTimeout(swapT); apply(); } else if (!swapT) { cap.classList.add("swap"); swapT = window.setTimeout(apply, 170); }
   }
   timeline.start();
   // The old bottom scrubber/wheel is gone (native scroll + swipe). The Back-to-live pill says how far back you are.
