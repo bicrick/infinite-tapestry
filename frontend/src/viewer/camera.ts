@@ -2,11 +2,12 @@
 // World space: x in painting pixels (strip i covers [i*SW - overlap, (i+1)*SW - overlap)), y in [0, paint height].
 // Device space: canvas pixels (CSS px * dpr). The scroll position itself (live edge / pan) comes from Motion via
 // viewLeft(); the camera adds the staging hold-back, ribbon/portrait band layout, the elastic nudge and zoom.
-import { RIBBON, baseScale, bandTopFor, isPortrait, ribbonTop } from "./layout";
+import { RIBBON, baseScale, bandTopFor, floorScale, isPortrait, ribbonTop } from "./layout";
 
 export interface FrameGeometry {
   /** device px: canvas size */ w: number; h: number;
   /** world->device scale at zoom 1 / ribbon 1, and the scale actually drawn (s0 * zoom * ribbon) */ s0: number; s: number;
+  /** vertical draw scale: == s, except far zoomed out with the vertical floor on (?floor=1) */ sy: number;
   /** world x of the left screen edge */ left: number;
   /** device px: top of the band */ yOff: number;
   /** strip range that can be on screen (inclusive, +1 margin each side) */ firstIdx: number; lastIdx: number;
@@ -27,6 +28,8 @@ export class Camera {
   zoom = 1;
   zoomVel = 0;
   zoomTarget = 1;
+  /** vertical floor (?floor=1): the band keeps a minimum height when zoomed far out (layout.floorScale) */
+  floor = false;
   // Elastic offset while live (jiggles move the view a little, never leave live), world px.
   nudge = 0;
   nudgeVel = 0;
@@ -144,10 +147,11 @@ export class Camera {
     const left = Math.max(0, Math.min((center - (w / s) / 2) * (1 - this.ribbonAnchor) + (fullRight - w / s) * this.ribbonAnchor, fullRight - w / s));
     this.drawCenter = left + w / s / 2;
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
-    const yOff = this.portrait() ? bandTopFor(h, H * s0, this.dpr()) + (H * s0 - H * s) / 2 : ribbonTop(h, H * s, this.ribbon, !!document.fullscreenElement);
+    const sy = this.floor ? floorScale(s, h, H) : s;
+    const yOff = this.portrait() ? bandTopFor(h, H * s0, this.dpr()) + (H * s0 - H * sy) / 2 : ribbonTop(h, H * sy, this.ribbon, !!document.fullscreenElement);
     const firstIdx = Math.max(0, Math.floor(left / SW) - 1);
     const lastIdx = Math.ceil((left + w / s) / SW) + 1;
-    this.last = { w, h, s0, s, left, yOff, firstIdx, lastIdx };
+    this.last = { w, h, s0, s, sy, left, yOff, firstIdx, lastIdx };
     return this.last;
   }
 
@@ -162,11 +166,11 @@ export class Camera {
   worldToScreen(x: number, y = 0): { x: number; y: number } {
     const g = this.last; if (!g) return { x: NaN, y: NaN };
     const k = this.cssK();
-    return { x: ((x - g.left) * g.s) / k, y: (g.yOff + y * g.s) / k };
+    return { x: ((x - g.left) * g.s) / k, y: (g.yOff + y * g.sy) / k };
   }
   screenToWorld(cssX: number, cssY = 0): { x: number; y: number } {
     const g = this.last; if (!g) return { x: NaN, y: NaN };
     const k = this.cssK();
-    return { x: g.left + (cssX * k) / g.s, y: (cssY * k - g.yOff) / g.s };
+    return { x: g.left + (cssX * k) / g.s, y: (cssY * k - g.yOff) / g.sy };
   }
 }

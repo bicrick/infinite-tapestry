@@ -1,8 +1,9 @@
 // Zoom (behind ?zoom on the branch only; additive, the default viewer never zooms).
 // The Camera springs toward zoomTarget; this controller sets the target and, while browsing history, keeps the world
 // point under the cursor fixed (anchor). While live the right edge stays pinned to the live line.
-// Overview tiles: LOD level follows the on-screen size (lodLevelForZoom); the coarsest level today is L3 (256 strips
-// per tile), so the zoom-out floor keeps at most MAX_TILES L3 tiles on screen.
+// Overview tiles: LOD level follows the on-screen size (lodLevelDeep). With the macro pyramid (lodx) any zoom draws a
+// handful of tiles, so the zoom-out floor is the whole timeline across the screen; without it (pod-only tiles) the
+// floor keeps at most MAX_TILES L3 tiles on screen as before.
 import type { Camera } from "./camera";
 import type { Motion } from "./motion";
 import { LOD_N } from "./lod";
@@ -11,12 +12,13 @@ export const MAX_TILES = 40;
 
 export class ZoomController {
   private anchor: { cssX: number; worldX: number } | null = null;
-  constructor(private readonly cam: Camera, private readonly motion: Motion) {}
+  /** deep: strips in the whole timeline when the macro pyramid is available, else null */
+  constructor(private readonly cam: Camera, private readonly motion: Motion, private readonly deep: () => number | null = () => null) {}
 
-  /** Smallest zoom where at most MAX_TILES coarsest overview tiles cover the screen. */
+  /** Smallest zoom: the whole timeline fits the screen (macro pyramid), else at most MAX_TILES L3 tiles on screen. */
   minZoom(): number {
-    const cam = this.cam, w = cam.canvas.width;
-    const sMin = w / (MAX_TILES * LOD_N[3] * cam.SW());
+    const cam = this.cam, w = cam.canvas.width, n = this.deep();
+    const sMin = n && n > MAX_TILES * LOD_N[3] ? w / (n * cam.SW()) : w / (MAX_TILES * LOD_N[3] * cam.SW());
     return Math.min(1, sMin / (cam.scale() * (cam.portrait() ? 1 : cam.ribbon)));
   }
 

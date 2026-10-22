@@ -31,3 +31,15 @@ export function surroundGlow(zoom: number): number {
   const t = Math.min(1, 1 - zoom), e = t * t * (3 - 2 * t);   // smoothstep: no jump leaving zoom 1
   return 1 + 0.4 * e;
 }
+
+/**
+ * Vertical floor (?floor=1): far zoomed out the band would shrink to a hairline (the timeline is ~30 000 : 1), so the
+ * vertical scale eases onto a floor while the horizontal one keeps going: sy = s above the knee (band >= 2 * minBand),
+ * then a C1 quadratic down to minBand = FLOOR_BAND * screen height. The knee is below the strip layer's zoom, so
+ * strips are never stretched; only the macro tiles are.
+ */
+export const FLOOR_BAND = 0.08;
+export function floorScale(s: number, h: number, paintHeight: number): number {
+  const a = 1.25, f = (2 * FLOOR_BAND * h) / (a * Math.max(1, paintHeight)), x = s / f;
+  return x >= a ? s : (f * (x * x + a * a)) / (2 * a);
+}

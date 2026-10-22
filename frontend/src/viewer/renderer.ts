@@ -3,7 +3,7 @@
 //   then the surround (band reflection / ambient blobs), the past-live veil and the scrub blur (CSS, compositor-only).
 import type { Camera, FrameGeometry } from "./camera";
 import type { StripStore } from "./strips";
-import { LOD_N, lodCovers, lodLevelForZoom, type LodStore } from "./lod";
+import { LOD_N, MAX_LEVEL, REFINE_MS, lodCovers, lodLevelDeep, type LodStore } from "./lod";
 import type { Motion } from "./motion";
 import type { LiveFollower } from "./live-follower";
 import type { Reflection, SurroundView } from "./reflection";
@@ -42,6 +42,7 @@ export class Renderer {
   private surroundV: SurroundView | null = null;
   /** World-x spans the LOD layer actually painted this frame: a strip only crossfades where it has an underlay. */
   private readonly lodSpans: Array<[number, number]> = [];
+  /** a LOD refinement is still fading in (keeps the layer on) */ private lodFading = false;
   private readonly refl: Reflection | null;
   private readonly pastVeil: HTMLDivElement;
   private readonly ambBlobs: HTMLElement[];
@@ -76,7 +77,7 @@ export class Renderer {
   setSurround(a: number): void { this.surroundA = a; }
 
   private sampleAmbient(): void {
-    const V = this.surroundV; if (this.refl || !V || document.hidden) return;
+    const V = this.surroundV; if (this.refl || !V || document.hidden || V.li - V.fi > 600) return;   // far out: no strips drawn
     const SW = this.d.cam.SW(), H = this.d.paintHeight();
     if (!this.ambCv) { this.ambCv = document.createElement("canvas"); this.ambCv.width = 6; this.ambCv.height = 2; this.ambCtx = this.ambCv.getContext("2d", { willReadFrequently: true }); }
     const actx = this.ambCtx as CanvasRenderingContext2D;
@@ -118,29 +119,87 @@ export class Renderer {
 
   private lodCovers(x0: number, x1: number): boolean { return lodCovers(this.lodSpans, x0, x1); }
 
-  private drawLodChunk(level: number, c: number, left: number): void {
-    const ctx = this.ctx, SW = this.d.cam.SW(), H = this.d.paintHeight();
-    const tw = LOD_N[level] * SW;
-    const img = this.d.lod.tile(level, c);
-    if (img) { ctx.drawImage(img, c * tw - left, 0, tw, H); this.lodSpans.push([c * tw, (c + 1) * tw]); return; }
-    // Gap: the L2 overview is prefetched for all history, so slice it (blurry beats blank);
-    // from L3 also try finer tiles (needed at the still-filling live edge).
-    if (level !== 2) {
-      const p = LOD_N[2], cc = Math.floor(c * LOD_N[level] / p), t2 = this.d.lod.tile(2, cc);
-      if (t2 && level === 1) { const part = t2.width / 4; ctx.drawImage(t2, (c % 4) * part, 0, part, t2.height, c * tw - left, 0, tw, H); this.lodSpans.push([c * tw, (c + 1) * tw]); return; }
-    }
-    if (level > 1) for (let k = 0; k < 4; k++) this.drawLodChunk(level - 1, c * 4 + k, left);   // finer tiles fill the gap
+  /** world span of the LOD layer this frame (for blit) */ private lodView = 0;
+  /** Draw the on-screen part of an image covering world [wx, wx + ww) (coarse tiles span millions of world px when
+   *  zoomed in: clip the source rect instead of handing the canvas a huge destination). */
+  private blit(img: HTMLImageElement, wx: number, ww: number, left: number): void {
+    const a = Math.max(wx, left - 2), b = Math.min(wx + ww, left + this.lodView + 2);
+    if (b <= a) return;
+    const k = img.naturalWidth / ww;
+    this.ctx.drawImage(img, (a - wx) * k, 0, (b - a) * k, img.naturalHeight, a - left, 0, b - a, this.d.paintHeight());
   }
 
-  private drawLod(left: number, span: number, z: number): void {
-    const level = lodLevelForZoom(z);
-    const tw = LOD_N[level] * this.d.cam.SW();
-    const c0 = Math.max(0, Math.floor(left / tw)), c1 = Math.floor((left + span) / tw);
-    for (let c = c0; c <= c1; c++) this.drawLodChunk(level, c, left);
+  /** Draw tile (level, c) if loaded; refinements fade in (REFINE_MS) where a coarser layer is already under them. */
+  private drawTile(level: number, c: number, left: number, under: boolean): boolean {
+    const ctx = this.ctx, tw = LOD_N[level] * this.d.cam.SW(), H = this.d.paintHeight();
+    const t = this.d.lod.hit(level, c);
+    if (!t) return false;
+    const fa = under ? Math.min(1, (performance.now() - t.at) / REFINE_MS) : 1;
+    if (fa < 1) { ctx.globalAlpha = fa * fa * (3 - 2 * fa); this.lodFading = true; }
+    if (level >= 4) this.blit(t.img, c * tw, tw, left);
+    else ctx.drawImage(t.img, c * tw - left, 0, tw, H);
+    ctx.globalAlpha = 1;
+    this.lodSpans.push([c * tw, (c + 1) * tw]);
+    return true;
+  }
+
+  private drawLodChunk(level: number, c: number, left: number, under: boolean): void {
+    const ctx = this.ctx, SW = this.d.cam.SW(), H = this.d.paintHeight();
+    const tw = LOD_N[level] * SW;
+    if (this.drawTile(level, c, left, under)) return;
+    // Gap: the L2 overview is prefetched for all history, so slice it (blurry beats blank);
+    // from L3 also try finer tiles (needed at the still-filling live edge).
+    if (level === 1) {
+      const t2 = this.d.lod.tile(2, Math.floor(c / 4));
+      if (t2 && !this.d.lod.xMid) { const part = t2.width / 4; ctx.drawImage(t2, (c % 4) * part, 0, part, t2.height, c * tw - left, 0, tw, H); this.lodSpans.push([c * tw, (c + 1) * tw]); return; }
+    }
+    // finer tiles fill the gap; only where the chunk is still filling (a complete chunk's own tile is coming, and the
+    // coarser layers already cover it), so a zoomed-out view never fans out into thousands of fine requests
+    if (level > 1 && (c + 1) * LOD_N[level] > this.d.strips.maxIndex) for (let k = 0; k < 4; k++) this.drawLodChunk(level - 1, c * 4 + k, left, under);
+    else if (level === 2 || level === 3) for (let k = 0; k < 4; k++) this.drawTile(level - 1, c * 4 + k, left, under);   // legacy: L1/L2 children if cached
+  }
+
+  /**
+   * LOD layer, coarsest first: the whole-timeline overview, then each coarser level down to the target, then the target
+   * level; every layer is drawn only where a finer one is not complete on screen. So a zoom-in / flight always has a
+   * coarse placeholder under the tiles and strips still loading (never a blank band), and a settled view draws one layer.
+   */
+  private drawLod(left: number, span: number, z: number, s: number): void {
+    const { lod, cam } = this.d, SW = cam.SW(), max = this.d.strips.maxIndex;
+    const level = lodLevelDeep(z, s * SW, lod.macro());
+    this.lodView = span;
+    // finest level >= target whose complete chunks on screen are all loaded (chunks still filling don't count)
+    const ready = (k: number): boolean => {
+      const tw = LOD_N[k] * SW, c0 = Math.max(0, Math.floor(left / tw)), c1 = Math.floor((left + span) / tw);
+      for (let c = c0; c <= c1; c++) { if ((c + 1) * LOD_N[k] > max) break; if (!lod.hit(k, c)) return false; }
+      return true;
+    };
+    let top = level;
+    const deepest = lod.macro() ? MAX_LEVEL : 3;
+    while (top < deepest && !ready(top)) top++;
+    let under = false;
+    if (top > level || !ready(top)) {   // something on screen is not in yet: the coarse placeholders first
+      const ov = lod.overview();
+      if (ov) { this.blit(ov.img, 0, ov.n * SW, left); this.lodSpans.push([0, ov.n * SW]); under = true; }
+    }
+    for (let k = top; k >= level; k--) {
+      const tw = LOD_N[k] * SW, c0 = Math.max(0, Math.floor(left / tw)), c1 = Math.floor((left + span) / tw);
+      if (k === level) for (let c = c0; c <= c1; c++) this.drawLodChunk(k, c, left, under);
+      else for (let c = c0; c <= c1; c++) this.drawTile(k, c, left, under);
+      under = true;
+    }
+    // keep the coarse parents of the view warm (a few KB each; pinned from PIN_LEVEL up) so the next zoom-out / pan
+    // never shows a hole: up to 2 tiles per level above the target
+    if (lod.macro()) for (let k = Math.max(top + 1, 4); k <= MAX_LEVEL; k++) {
+      const tw = LOD_N[k] * SW, c0 = Math.max(0, Math.floor(left / tw)), c1 = Math.min(c0 + 1, Math.floor((left + span) / tw));
+      for (let c = c0; c <= c1; c++) lod.hit(k, c, true);
+    }
+    lod.overview();
     // prefetch a few tiles ahead in the direction of travel (more when moving fast)
-    const velS = this.d.cam.velS;
+    const tw = LOD_N[level] * SW, c0 = Math.max(0, Math.floor(left / tw)), c1 = Math.floor((left + span) / tw);
+    const velS = cam.velS;
     const n = Math.abs(velS) > 20000 ? 4 : 2;
-    for (let k = 1; k <= n; k++) { const ahead = velS > 0 ? c1 + k : c0 - k; if (ahead >= 0) this.d.lod.tile(level, ahead); }
+    for (let k = 1; k <= n; k++) { const ahead = velS > 0 ? c1 + k : c0 - k; if (ahead >= 0) lod.tile(level, ahead); }
   }
 
   readonly frame = (ts: number): void => {
@@ -189,7 +248,7 @@ export class Renderer {
       setTimeout(() => motion.seekTo(ps[0], ps[1]), document.body.classList.contains("intro") ? 2400 : 300);
     }
     const g: FrameGeometry = cam.frame(motion.viewLeft());
-    const { s, left, yOff, firstIdx, lastIdx } = g;
+    const { s, sy, left, yOff, firstIdx, lastIdx } = g;
     const SW = cam.SW(), H = this.d.paintHeight(), STAGE = cam.STAGE();
     if (window.__probe) window.__probe.push(left);
     {   // Past the live line (only during a rubber-band overscroll): veil it, blurred and dimmed, via one small CSS overlay.
@@ -199,16 +258,16 @@ export class Renderer {
       if (px !== this.ovPx) { this.ovPx = px; this.pastVeil.style.width = px + "px"; this.pastVeil.style.opacity = px > 0 ? "1" : "0"; }
     }
     if (follower.livePos !== null) { cam.drawExcess = Math.max(0, left + w / s - (follower.livePos - STAGE)); window.__dx = cam.drawExcess / SW; }
-    this.publishBand(yOff, H * s, h);
+    this.publishBand(yOff, H * sy, h);
     const fast = Math.abs(cam.velS) / cam.feel() > 1600;   // on-screen speed
     ctx.save();
     ctx.translate(0, yOff);
-    ctx.scale(s, s);
+    ctx.scale(s, sy);
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet. Kept on while any
     // strip is still crossfading: dropping it the frame coverage hit 1 faded those strips over the bare background.
-    const lodOn = !window.__nolod && (cam.zoom < 0.97 || fast || this.coverage < 1 || this.fading > 0); let fading = 0;
-    this.lodSpans.length = 0;
-    if (lodOn) this.drawLod(left, w / s, cam.zoom);   // LOD underlay until strips are in (never blank)
+    const lodOn = !window.__nolod && (cam.zoom < 0.97 || fast || this.coverage < 1 || this.fading > 0 || this.lodFading); let fading = 0;
+    this.lodSpans.length = 0; this.lodFading = false;
+    if (lodOn) { this.drawLod(left, w / s, cam.zoom, s); if (this.lodSpans.length > 1) this.lodSpans.sort((a, b) => a[0] - b[0]); }   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
       const stripLayer = cam.zoom > 0.3;
@@ -247,10 +306,10 @@ export class Renderer {
     ctx.restore();
     this.surroundV = { left, ww: w / s, fi: Math.max(0, firstIdx), li: Math.min(lastIdx, strips.maxIndex), cov: this.coverage, lod: lodOn, fading };
     const RIB = 0.6;
-    if (cam.portrait()) this.drawSurround(w, h, Math.max(0, yOff), H * s);
+    if (cam.portrait()) this.drawSurround(w, h, Math.max(0, yOff), H * sy);
     else if (cam.ribbon < 0.999) {   // desktop ribbon: same reflection/glow as the phone band, fading out as it expands
       const sa = this.surroundA, k = (1 - cam.ribbon) / (1 - RIB); this.surroundA = sa * k * k * (3 - 2 * k);
-      this.drawSurround(w, h, Math.max(0, yOff), H * s); this.surroundA = sa;
+      this.drawSurround(w, h, Math.max(0, yOff), H * sy); this.surroundA = sa;
     } else if (this.surroundAStr !== "0.00") { this.surroundAStr = "0.00"; document.documentElement.style.setProperty("--amb-a", "0"); if (this.refl) this.refl.off(); }
     // Speed blur that scales with scrub velocity, as a GPU-composited CSS filter (touch only).
     const blur = Math.min(12, Math.max(0, (Math.abs(cam.velS) / cam.feel() - 500) / 420)) * (window.devicePixelRatio || 1);
