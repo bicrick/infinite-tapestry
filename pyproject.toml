@@ -4,9 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "infinite-tapestry"
-version = "0.1.0"
-description = "Endlessly scrolling AI-generated panorama (SD1.5 inpaint MVP)"
+version = "1.2.0"
+description = "An endless painting, generated live with SDXL inpainting and steered by viewers and a Claude-powered auto-director"
 readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Patrick Brown" }]
+keywords = ["generative-art", "stable-diffusion", "sdxl", "inpainting", "outpainting", "infinite-canvas", "fastapi", "websockets"]
 requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115.0",
@@ -28,6 +31,11 @@ gpu = [
   "peft>=0.12.0",
 ]
 dev = ["pytest>=8.0.0", "httpx>=0.27.0"]
+
+[project.urls]
+Homepage = "https://infinitetapestry.app"
+"Write-up" = "https://www.bicrick.com/projects/infinite-tapestry"
+Source = "https://github.com/bicrick/infinite-tapestry"
 
 [project.scripts]
 infinite-tapestry = "infinite_tapestry.main:main"
