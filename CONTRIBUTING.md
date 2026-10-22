@@ -5,10 +5,17 @@ Thanks for your interest in Infinite Tapestry. Issues and pull requests are welc
 ## Getting started
 
 ```bash
-make setup   # .venv + package + test deps (Python 3.10+)
-make test    # pytest + JS syntax check (needs Node); no secrets, no network
-make dev     # CPU mock worker + viewer at http://127.0.0.1:8000
+make setup   # .venv + package + test deps (Python 3.10+) + npm ci (Node 20+)
+make test    # pytest + npm run check (tsc + Vitest) + JS syntax check; no secrets, no network
+make dev     # npm run build, then CPU mock worker + viewer at http://127.0.0.1:8000
+make dev-ui  # Vite dev server with hot reload, against the worker from make dev
 ```
+
+The frontend lives in `frontend/` (Vite + strict TypeScript). The live viewer is `frontend/src/viewer/`: `camera.ts`
+(what's on screen, zoom), `live-follower.ts` (shared clock), `motion.ts` (scroll physics), `renderer.ts` (the one
+rAF loop), `strips.ts` / `lod.ts` / `timeline.ts` (data), `app.ts` (wiring and page chrome). Unit tests sit next to
+the code (`*.test.ts`, Vitest). UI changes need pixel parity unless they are meant to change the look:
+`scripts/dev/parity.mjs` diffs two builds (desktop + phone, dark + light).
 
 The mock backend paints placeholder strips on the CPU, so you can work on the viewer, the server and the director
 without a GPU. `make dev-gpu` runs the real SDXL worker on a 24 GB GPU (`pip install -e ".[gpu]"` first).

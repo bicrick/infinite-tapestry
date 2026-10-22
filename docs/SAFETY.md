@@ -31,7 +31,7 @@ flowchart TD
 
 ## Step by step
 
-### 1. Client (`static/social.js`)
+### 1. Client (`frontend/src/legacy/social.js`)
 The browser does **no** moderation. It sends the text, shows the server's verdict, and maps error codes to friendly messages. For example, `content_not_allowed` shows "That one's outside what the tapestry paints." Image ideas upload to the `idea-refs` storage bucket under the user's own folder first.
 
 ### 2. Guests: `/api/idea` → `web/lib/moderate.js`
