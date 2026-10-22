@@ -8,8 +8,8 @@ const SITE_URL = () => env("SITE_URL", "https://infinite-tapestry.vercel.app").r
 const SB_URL = () => env("SUPABASE_URL").replace(/\/$/, "");
 const svcHeaders = () => ({ apikey: env("SUPABASE_SERVICE_ROLE_KEY"), authorization: "Bearer " + env("SUPABASE_SERVICE_ROLE_KEY"), "content-type": "application/json" });
 
-// Every Supabase call is bounded: when the DB stalls (2026-10-19 NANO outage) a function fails in seconds
-// instead of hanging to the platform limit and stacking more connections on the stalled box.
+// Every Supabase call is bounded: if the database stalls, a function fails in seconds instead of hanging to the
+// platform limit and stacking more connections on a busy instance.
 const SB_TIMEOUT_MS = 8000;
 const sbSignal = () => AbortSignal.timeout(SB_TIMEOUT_MS);
 async function rest(method, path, body, extra = {}) {

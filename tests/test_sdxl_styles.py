@@ -89,7 +89,7 @@ def test_loras_only_on_explicit_user_request():
 
 
 def test_prefill_has_no_row_structure():
-    """Regression for the overnight banding bug: beyond the short seam ramp, the masked fill must not copy
+    """Beyond the short seam ramp, the masked fill must not copy
     per-row colours (stripes) across the strip."""
     from infinite_tapestry.inpaint import prefill_masked
     a = np.zeros((64, 300, 3), np.uint8)

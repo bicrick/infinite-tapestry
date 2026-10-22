@@ -4,8 +4,7 @@
 # follows /api/live's pod.ws at runtime, so config.js wsUrl is only a first-paint hint. Never hardcode a pod id.
 # Needs SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY. Usage: eval "$(scripts/resolve_ws_url.sh)" or >> $GITHUB_ENV
 set -euo pipefail
-# Supabase can be slow or down (2026-10-19 outage hung this step ~2 min and failed the deploy). Bounded tries,
-# then fall back to the pod id the live site already uses (config.js wsUrl) so a DB blip never blocks a deploy.
+# Supabase may be slow or unreachable, so this makes a few bounded tries and then falls back to the pod id the live site already uses (config.js wsUrl) so a DB blip never blocks a deploy.
 POD=""
 for n in 1 2 3; do
   POD=$(curl -sf --connect-timeout 5 -m 15 "$SUPABASE_URL/rest/v1/pod_state?id=eq.1&select=pod_id" \

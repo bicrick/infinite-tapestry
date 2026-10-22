@@ -1,7 +1,7 @@
 // Replay start position (GPU off / stream quiet): a uniformly random strip across the whole history, chosen per
 // page load in the browser, so every visitor and every refresh lands somewhere different.
 // RUNWAY keeps ~30 min of playback ahead (256 px strips at 60 px/s ≈ 4.3 s each) before the live edge loops it.
-// LOST spans hold strips lost in the Oct 18 2026 upload outage (scattered blanks + a 28-strip hole at 105651-105678);
+// LOST spans cover a stretch of history with missing strips (scattered blanks and a 28-strip gap at 105651-105678);
 // a start inside one, or within RUNWAY before it, would open on blank columns, so those starts are skipped.
 (function (root) {
   const RUNWAY = 420;

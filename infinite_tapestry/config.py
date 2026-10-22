@@ -63,7 +63,7 @@ class Config:
     anchor_seam_px: int = 192  # crossfade width at a fresh-anchor seam (admin live setting, <= overlap)
     anchor_bridge_strength: float = 0.85  # bridge pass denoise (1.0 = repaint the zone from noise)
     prefill_ramp_px: int = 96  # ramp mode: px of edge-colour gradient into the noise fill (seam blend)
-    prefill_mode: str = "meannoise"  # masked-area init for SDXL inpaint; "rowmean" = old striped fill (caused banding)
+    prefill_mode: str = "meannoise"  # masked-area init for SDXL inpaint; "rowmean" = per-row seam colour fill (tests only)
     harmonize_seams: bool = True  # remove colour steps at the mask edge
     taesd_model: str = ""
     dtype: str = "float16"
@@ -174,10 +174,9 @@ def config_from_args(args: Any) -> Config:
 
 
 # 1024-class geometry for SDXL: same proportions as SD1.5 (window 1:1, strip 1/4, overlap 3/4 strip).
-# Sampler (2026-10-18 A/B on the 4090, DPM++ 2M Karras): 18 steps/CFG 6 = 2.15 s/strip (97 px/s); 26/6.5 = 2.96 s (71 px/s);
-# 30/6.5 = 3.22 s (65 px/s). Live A/B 2026-10-18 evening with CFG truncation (gpu px/s, viewer px/s): 26/6.5/cut 1.0 =
-# 2.56 s (100, 78); 26/6.5/0.5 = 2.28 s (112, 89); 22/6.5/0.6 = 2.0 s (128, 99); 20/6.5/0.5 = 2.0 s (128, 106);
-# no visible quality loss. 20 steps / CFG 6.5 / cfg_cut 0.5 is the default; admin auto_config.render overrides live.
+# Sampler: DPM++ 2M Karras, 20 steps, CFG 6.5 with guidance on the first half of the steps (cfg_cut 0.5): about 2.0 s
+# per strip on an RTX 4090 (~128 px/s of GPU throughput) with no visible quality loss against full-CFG runs at 26-30
+# steps. The admin's auto_config.render overrides steps/CFG/cfg_cut live.
 SDXL_PRESET: dict[str, Any] = {
     "height": 1024, "window_width": 1024, "strip_width": 256, "overlap": 192, "repaint_band": 128,
     "steps": 20, "guidance_scale": 6.5, "cfg_cut": 0.5, "seam_retries": 1, "fresh_anchor": True, "scroll_speed": 60.0,

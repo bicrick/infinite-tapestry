@@ -385,14 +385,13 @@ def ip_embeds_match_batch(module, args, kwargs):
 def prefill_masked(image: Image.Image, mask: Image.Image, seed: int = 0, mode: str = "ramp", ramp_px: int = 96) -> Image.Image:
     """SDXL-inpaint keeps some of what's under the mask (strength 0.999), so the fill seeds the composition.
 
-    ROOT CAUSE of the 'stuck in horizontal bands' look (overnight 2026-10-14): the old fill repeated each row's
-    seam colour across the whole masked area -- literal horizontal stripes -- so every strip (and a takeover
-    repainting ~670 px) started from stripes and painted banners, strata and rows of people into them.
+    Any row structure in the fill (e.g. each row's seam colour repeated across the hole) is painted as horizontal
+    stripes, banners or rows of objects, so the default fill has none.
     'ramp' (experimental, not shipped) = 'meannoise' plus a short per-row gradient from the real edge (prefill_ramp_px) for the seam.
     'gray' fills with mid-gray plus isotropic noise: no row structure and no palette inheritance.
-    'meannoise' (default, v1.0) uses the context's mean colour + N(0,40) noise: no stripes; fresh anchors at scene
+    'meannoise' (default) uses the context's mean colour + N(0,40) noise: no stripes; fresh anchors at scene
     changes stop the palette locking in.
-    'rowmean' keeps the old behaviour (test only)."""
+    'rowmean' repeats each row's seam colour (kept for tests only)."""
     import numpy as np
 
     a = np.asarray(image.convert("RGB")).astype(np.float32)
