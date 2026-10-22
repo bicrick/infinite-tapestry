@@ -2,7 +2,7 @@
 //   background fill -> LOD underlay (overview tiles) -> strips (crossfading in over the underlay) -> seek mark,
 //   then the surround (band reflection / ambient blobs), the past-live veil and the scrub blur (CSS, compositor-only).
 import type { Camera, FrameGeometry } from "./camera";
-import type { StripStore } from "./strips";
+import { TAIL, type StripStore } from "./strips";
 import { LOD_N, MAX_LEVEL, REFINE_MS, lodCovers, lodLevelDeep, type LodStore } from "./lod";
 import type { Motion } from "./motion";
 import type { LiveFollower } from "./live-follower";
@@ -272,13 +272,17 @@ export class Renderer {
     {
       let want = 0, have = 0;
       const stripLayer = cam.zoom > 0.3;
-      for (let i = Math.max(firstIdx, 0); stripLayer && i <= Math.min(lastIdx, strips.maxIndex); i++) {
-        want++;
+      // Zoomed out the strips are off, except the newest few (TAIL) where no LOD tile exists yet: they are kept decoded
+      // (StripStore.evictFar) and drawn wherever no tile covers them, so the live edge is never a blank slot.
+      const i0 = stripLayer ? Math.max(firstIdx, 0) : Math.max(firstIdx, 0, strips.maxIndex - TAIL + 1);
+      for (let i = i0; i <= Math.min(lastIdx, strips.maxIndex); i++) {
+        if (!stripLayer && this.lodCovers(i * SW, (i + 1) * SW)) continue;
+        if (stripLayer) want++;   // coverage keeps its meaning (strip layer only)
         const e = strips.get(i);
         if (!e) { continue; }
         if (!fast || (!intro && !this.lodCovers(i * SW - e.overlap, (i + 1) * SW))) strips.ensureDecoded(e);   // fast: only where no LOD tile covers it (newest strips); the load-in keeps prod timing
         if (!e.bitmap) continue;
-        have++;
+        if (stripLayer) have++;
         // Crossfade a newly visible strip over its LOD underlay (~1 s); with no underlay painted it is drawn opaque at once.
         if (e.seenAt == null) e.seenAt = (i * SW - e.overlap < left + w / s) && this.lodCovers(i * SW - e.overlap, (i + 1) * SW) ? performance.now() : -1e9;
         let fa = Math.min(1, (performance.now() - e.seenAt) / 1000);
