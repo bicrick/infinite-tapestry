@@ -17,7 +17,8 @@ def test_lod_covers_is_unit_tested():
 
 
 def test_underlay_stays_on_while_fading_and_fade_is_gated_on_it():
-    assert "this.coverage < 1 || this.fading > 0)" in JS
+    # (lodFading: a LOD refinement still fading in over a coarser layer also keeps the layer on)
+    assert "this.coverage < 1 || this.fading > 0 || this.lodFading)" in JS
     assert "this.fading = fading;" in JS
     loop = JS[JS.index("if (!e.bitmap) continue;"):JS.index("this.coverage = want ? have / want : 0;")]
     assert loop.count("this.lodCovers(i * SW - e.overlap, (i + 1) * SW)") == 2
@@ -25,8 +26,14 @@ def test_underlay_stays_on_while_fading_and_fade_is_gated_on_it():
 
 
 def test_every_lod_draw_records_its_span():
+    tile = JS[JS.index("private drawTile("):JS.index("private drawLodChunk(")]
+    # a tile is drawn one way or the other (blit for coarse levels), and its span is recorded once
+    assert tile.count("this.blit(") == tile.count("ctx.drawImage(") == tile.count("this.lodSpans.push(") == 1
     chunk = JS[JS.index("private drawLodChunk("):JS.index("private drawLod(")]
-    assert chunk.count("ctx.drawImage(") == chunk.count("this.lodSpans.push(") == 2
+    assert chunk.count("ctx.drawImage(") == chunk.count("this.lodSpans.push(") == 1   # the L2-slice fallback
+    lod = JS[JS.index("private drawLod("):JS.index("readonly frame")]
+    assert lod.count("this.blit(") == lod.count("this.lodSpans.push(") == 1   # the whole-timeline overview
+    assert "ctx.drawImage(" not in lod
 
 
 def test_jumps_prefetch_the_underlay():
