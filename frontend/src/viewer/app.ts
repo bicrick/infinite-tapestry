@@ -403,7 +403,8 @@ export function startViewer(): void {
       // elastic nudge, with resistance; forward is the live edge so it resists harder
       const d = -back, lim = NUDGE_MAX * cssToWorld();
       const raw = d * cssToWorld() * (d > 0 ? 0.25 : 0.45);
-      cam.nudge = Math.min(0, lim * Math.tanh(raw / lim)); cam.nudgeVel = 0;   // never past live
+      const E = d > 0 ? cam.endSlack() : 0;   // deep zoom-out: a pull toward the future may bring the live end to the centre
+      cam.nudge = E > 0 ? Math.min(E, d * cssToWorld() * 0.6) : Math.min(0, lim * Math.tanh(raw / lim)); cam.nudgeVel = 0;   // else never past live
       lastPX = ev.clientX;
       return;
     }
