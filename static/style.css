@@ -144,7 +144,6 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border: 0; bord
 .item.auto .t, .item.auto .p { font-style: italic; }
 .item.auto { opacity: .78; }
 .item.auto .t::before { content: "✦ "; color: rgba(214,196,255,.85); font-style: normal; }
-.item.user .t::after { content: "you"; margin-left: 8px; font-size: 9px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; background: rgba(var(--ink),.14); vertical-align: 1px; }
 .tag { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; padding: 2px 6px; border-radius: 6px; background: rgba(var(--ink),.1); margin-left: 6px; }
 .tag.auto { background: rgba(170,140,255,.18); color: rgba(225,212,255,.9); }
 .spark { color: rgba(214,196,255,.9); font-weight: 400; }
@@ -865,7 +864,7 @@ body.idle .amb-title, body.ambient .amb-title { opacity: 1 !important; translate
 #queue-list .item:hover { background: none; }
 #queue-list .item .n { cursor: default; font-size: 11px; color: rgba(var(--ink),.28); padding-top: 1px; }
 #queue-list .item .t { font-size: 13px; font-weight: 400; font-style: normal; letter-spacing: -.003em; color: rgba(var(--ink),.88); }
-#queue-list .item.auto .t::before, #queue-list .item.user .t::after { content: none; }
+#queue-list .item.auto .t::before { content: none; }
 #queue-list .item .meta { font-size: 11px; margin-top: 2px; color: rgba(var(--ink),.36); }
 #queue-list .item .acts, #queue-list .item .p { display: none; }
 
