@@ -34,9 +34,22 @@ describe("Motion", () => {
     const { m, cam } = rig();
     cam.liveScroll = 100000;
     expect(m.rubber(5000)).toBe(5000);
-    expect(m.rubber(-1000)).toBeGreaterThan(-1000); expect(m.rubber(-1000)).toBeLessThan(0);
+    const lo = m.minPan(); expect(lo).toBeGreaterThanOrEqual(0);   // zoom 1: the start edge (no dead travel before the rubber)
+    expect(m.rubber(lo - 1000)).toBeGreaterThan(lo - 1000); expect(m.rubber(lo - 1000)).toBeLessThan(lo);
+    expect(cam.frame(lo).left).toBe(0); expect(cam.frame(lo - 1000).left).toBe(0);   // zoom 1 never draws before strip 0
+    expect(cam.frame(lo + 10).left).toBeCloseTo(10, 6);   // and moves 1:1 from the very start
     const over = m.rubber(100000 + 1e6) - 100000;
     expect(over).toBeLessThanOrEqual(Math.min(cam.viewWorld() * 0.08, SW * 0.5) + 1e-9);
+  });
+  it("zoomed out, strip 0 can be panned to the screen centre and the live end pulled toward it", () => {
+    const { m, cam } = rig();
+    cam.liveScroll = 20_000_000; cam.zoom = cam.zoomTarget = 0.001;
+    const lo = m.minPan(), g = cam.frame(lo), ww = cam.canvas.width / g.s;
+    expect(g.left).toBeCloseTo(-ww / 2, 3);                 // centre of the screen = world 0
+    expect(cam.frame(lo + 1000).left).toBeCloseTo(g.left + 1000, 3);   // and no dead travel from there
+    const E = cam.endSlack(); expect(E).toBeGreaterThan(ww * 0.4);
+    expect(m.rubber(m.maxPan() + 4 * ww) - m.maxPan()).toBeCloseTo(E, 3);
+    cam.zoom = cam.zoomTarget = 1; expect(cam.endSlack()).toBe(0); expect(cam.startSlack()).toBe(0);
   });
   it("seek eases to the target strip and marks it", () => {
     const { m, cam, lod } = rig();

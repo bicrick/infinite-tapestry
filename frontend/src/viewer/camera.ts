@@ -74,7 +74,7 @@ export class Camera {
   pxToWorldZ(): number { return this.pxToWorld() * this.feel(); }
   /** Drawn scale (device px per world px) for a given zoom, as frame() computes it. */
   drawnScale(zoom = this.zoom): number { return this.scale() * zoom * (this.portrait() ? 1 : this.ribbon); }
-  /** frame(): left = viewLeft + leftOffset() (before the >= 0 clamp): centred/right-anchored framing, never past the staged live line. */
+  /** frame(): left = viewLeft + leftOffset() (before the >= -startSlack() clamp): centred/right-anchored framing, never past the staged live line. */
   leftOffset(zoom = this.zoom): number {
     const w = this.canvas.width, s = this.drawnScale(zoom), vw = this.viewWorld(), st = this.STAGE(), ra = this.ribbonAnchor;
     const right = vw - st - w / s;
@@ -84,6 +84,22 @@ export class Camera {
   viewCenter(): number { return this.zoom >= 1 ? this.viewWorld() / 2 : this.leftOffset() + this.canvas.width / this.drawnScale() / 2; }
   /** World px across the screen for framing seeks (zoom 1: the legacy viewWorld()). */
   visibleWorld(): number { return this.zoom >= 1 ? this.viewWorld() : this.canvas.width / this.drawnScale(); }
+  /** 0 at zoom >= 1, easing to 1 as zoom goes 1 -> 0.75 (same ramp as feel()): how much of the zoomed-out pan slack applies. */
+  slackT(zoom = this.zoom): number { if (zoom >= 1) return 0; const t = Math.min(1, (1 - zoom) / 0.25); return t * t * (3 - 2 * t); }
+  /** Zoomed out, the drawn left edge may go below world 0 by up to half the screen, so strip 0 can be panned to the
+   *  screen centre. 0 at zoom >= 1: the zoom-1 framing is unchanged. */
+  startSlack(zoom = this.zoom): number { const t = this.slackT(zoom); return t ? t * this.canvas.width / this.drawnScale(zoom) / 2 : 0; }
+  /** Lowest pan (Motion.minPan): the view whose drawn left edge is exactly -startSlack(), so there is no dead travel
+   *  at the start (before, the >= 0 clamp in frame() swallowed up to a whole screen of pan; at max zoom-out all of it). */
+  minViewLeft(zoom = this.zoom): number { const v = -this.startSlack(zoom) - this.leftOffset(zoom); return Number.isFinite(v) ? v : 0; }
+  /** Past-live pull allowed far out (world px): once the staged strips are sub-pixel the live end may be pulled to the
+   *  screen centre (released, it springs back into live as before). 0 at zoom >= 1 and wherever staging is visible. */
+  endSlack(zoom = this.zoom): number {
+    const t = this.slackT(zoom); if (!t) return 0;
+    const s = this.drawnScale(zoom), stagePx = this.STAGE() * s / this.cssK();
+    const e = t * Math.max(0, Math.min(1, (3 - stagePx) / 2));
+    return e ? e * this.canvas.width / s / 2 : 0;
+  }
   /** Off-screen staging buffer: one full strip (the next arrival) + the inpaint band it repaints over its predecessor (+32 px). */
   BAND(): number { return this.d.maxOv() + 32; }
   /** + one more full strip of margin: the newest 2 strips + the inpaint band stay off-screen. */
@@ -142,7 +158,7 @@ export class Camera {
     const vw = this.viewWorld(), stage = this.STAGE();
     const center = viewLeft + vw / 2 - stage;
     const fullRight = viewLeft + vw - stage;
-    const left = Math.max(0, Math.min((center - (w / s) / 2) * (1 - this.ribbonAnchor) + (fullRight - w / s) * this.ribbonAnchor, fullRight - w / s));
+    const left = Math.max(-this.startSlack() || 0, Math.min((center - (w / s) / 2) * (1 - this.ribbonAnchor) + (fullRight - w / s) * this.ribbonAnchor, fullRight - w / s));
     this.drawCenter = left + w / s / 2;
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
     const sy = minBandScale(s, H, this.dpr());
@@ -156,7 +172,7 @@ export class Camera {
   /** Centre of what's actually drawn as a strip index (-0.5 so callers' Math.round() picks the strip under the centre). */
   centerIdx(viewLeft: number): number {
     const c = this.drawCenter != null ? this.drawCenter : viewLeft + this.viewWorld() / 2;
-    return (c + this.d.maxOv()) / this.SW() - 0.5;
+    return Math.max(-0.5, (c + this.d.maxOv()) / this.SW() - 0.5);   // zoomed-out start slack: never before strip 0
   }
 
   // ---- transforms (last drawn frame), CSS px <-> world ----

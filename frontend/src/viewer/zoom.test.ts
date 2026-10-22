@@ -40,7 +40,8 @@ describe("ZoomController (?zoom)", () => {
     z.zoomTo(1e-9);
     const s = cam.scale() * cam.zoomTarget * cam.ribbon;
     expect(cam.canvas.width / s / 256).toBeCloseTo(100001, 3);
-    m.panPos = 0; cam.zoom = cam.zoomTarget; const g = cam.frame(m.viewLeft());
-    expect(g.left).toBe(0);
+    cam.zoom = cam.zoomTarget; m.panPos = m.minPan(); const g = cam.frame(m.viewLeft());
+    expect(g.left).toBeCloseTo(-cam.canvas.width / g.s / 2, 3);   // strip 0 centred (start slack), so the start isn't a wall
+    expect(m.maxPan() - m.minPan()).toBeGreaterThan(cam.canvas.width / g.s / 3);   // and there is room to pan
   });
 });

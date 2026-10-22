@@ -1,6 +1,6 @@
 // Motion: the scroll state machine. Live follows the shared clock; everything else (drag, glide, wheel coast, arrow-key
 // flight, seek, return-to-live) moves panPos, the raw (unclamped) left edge while browsing history. Bounds are
-// [0, liveScroll]; beyond them the view rubber-bands, and releasing past the live edge springs back into live.
+// [minPan, liveScroll] (minPan: strip 0 at the left edge, or at the centre zoomed out); beyond them the view rubber-bands, and releasing past the live edge springs back into live.
 import type { Camera } from "./camera";
 import type { StripStore } from "./strips";
 import type { LodStore } from "./lod";
@@ -46,7 +46,10 @@ export class Motion {
   private SW(): number { return this.d.cam.SW(); }
   /** Screen-space feel factor (Camera.feel): 1 at zoom 1, so every constant below keeps its zoom-1 value. */
   private Z(): number { return this.d.cam.feel(); }
-  minPan(): number { return 0; }
+  /** Lowest pan: the drawn left edge at world 0 (zoom 1), or strip 0 at the screen centre once zoomed out (Camera.minViewLeft). */
+  minPan(): number { const c = this.d.cam; return Math.min(this.maxPan(), c.minViewLeft ? c.minViewLeft() : 0); }
+  /** zoomed-out pan slack ramp (Camera.slackT; 0 at zoom 1) */
+  private slackT(): number { const c = this.d.cam; return c.slackT ? c.slackT() : 0; }
   maxPan(): number { return Math.max(0, this.d.cam.liveScroll); }
   private OVER_MAX(): number { return Math.min(this.d.cam.viewWorld() * 0.08, this.SW() * 0.5); }
   /** iOS-style: resistance grows with overscroll distance; a small rubber-band past live (staged pixels stay hidden). */
@@ -56,7 +59,12 @@ export class Motion {
     const lo = this.minPan(), hi = this.maxPan(), d = this.d.cam.viewWorld() * 0.5 * this.Z();
     const f = (o: number) => (1 - 1 / (o / d * 0.55 + 1)) * d;
     if (x < lo) return lo - f(lo - x);
-    if (x > hi) return hi + Math.min(this.OVER_MAX(), f(x - hi) * 0.35);
+    if (x > hi) {
+      // far out (staged strips sub-pixel, Camera.endSlack) a firmer pull can bring the live end to the screen centre
+      const E = this.d.cam.endSlack ? this.d.cam.endSlack() : 0, e = E > 0 ? Math.min(1, E / d) : 0;
+      const o = Math.min(this.OVER_MAX(), f(x - hi) * 0.35);
+      return hi + (e ? o * (1 - e) + Math.min(E, (x - hi) * 0.6) * e : o);
+    }
     return x;
   }
   shownPan(): number { return this.rubber(this.panPos); }
@@ -204,7 +212,8 @@ export class Motion {
         }
         this.panPos += this.panVel * dt;
         if (Math.abs(this.panVel) < 4 * Z) { this.panVel = 0; this.wheelGlide = false; }
-        if (this.panPos >= hi - this.SW() * 0.25 * Z || (Math.abs(this.panVel) < 60 * Z && hi - this.panPos < this.d.cam.viewWorld() * 0.5 * Z)) { this.startReturn(); return; }   // near the front: magnetic ease into live
+        // zoomed out the magnet shrinks to a tenth of the screen (else at max zoom-out every release snapped back to live)
+        if (this.panPos >= hi - this.SW() * 0.25 * Z || (Math.abs(this.panVel) < 60 * Z && hi - this.panPos < this.d.cam.viewWorld() * 0.5 * Z * (1 - 0.8 * this.slackT()))) { this.startReturn(); return; }   // near the front: magnetic ease into live
         // Drift: once settled and the high-res strips are in, resume the slow forward drift with a
         // gelatinous spring ramp (0 → drift speed over ~1-1.5s, slight overshoot), never a jump.
         // (the drift itself stays in world px/s: it plays history back at the painting's real rate, like live)
