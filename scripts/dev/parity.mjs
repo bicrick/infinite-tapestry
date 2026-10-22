@@ -39,6 +39,8 @@ const SCENARIOS = [
   ["replay-full", "/?nointro=1", "full", live, 5000],
   ["at-60000", "/?nointro=1&at=60000", "chrome", live, 6000],
   ["at-60000-full", "/?nointro=1&at=60000", "full", live, 6000],
+  // ?zoom is additive (branch only): with no zoom gesture the chrome must be identical, and it must not throw.
+  ["zoom-flag", "/?nointro=1&zoom", "chrome", live, 5000],
   ["drawer-queue", "/?nointro=1", "chrome", async (p) => { await live(p); await sleep(1500); await p.evaluate(() => document.getElementById("queue-btn").click()); }, 2500],
   ["drawer-liked", "/?nointro=1", "chrome", async (p) => { await live(p); await sleep(1500); await p.evaluate(() => document.getElementById("queue-btn").click()); await sleep(800);
     await p.evaluate(() => { const b = [...document.querySelectorAll("#qsort button")].find((x) => /liked/i.test(x.textContent)); b && b.click(); }); }, 2500],
@@ -67,7 +69,8 @@ async function shot(base, vpName, scheme, sc) {
   await ctx.addInitScript(SEED); await ctx.addInitScript(PIN_REPLAY);
   const page = await ctx.newPage();
   const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e.message || e).slice(0, 200)));
+  page.on("pageerror", (e) => errors.push("pageerror: " + String(e.message || e).slice(0, 200)));
+  page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|proxy\.runpod\.net|CORS policy/.test(m.text())) errors.push("console.error: " + m.text().slice(0, 200)); });
   await page.goto(base + url, { waitUntil: "domcontentloaded" });
   if (kind === "chrome") await page.addStyleTag({ content: HIDE_PAINT }).catch(() => {});
   await act(page);
@@ -97,3 +100,6 @@ for (const vp of Object.keys(VIEWPORTS)) for (const scheme of ["dark", "light"])
 }
 fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify(rows, null, 1));
 await browser.close();
+// Hard gate on errors: any page error / console error in B that A does not also have fails the run.
+const bad = rows.filter((r) => r.errB.some((e) => !r.errA.includes(e)));
+if (bad.length) { console.log("NEW ERRORS IN B: " + bad.map((r) => r.id).join(", ")); process.exit(1); }

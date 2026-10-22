@@ -3,6 +3,7 @@
 // Usage: node scripts/dev/smoke-errors.mjs <base> [path ...]   (default paths: / /?zoom)
 // Env: CHROME (default /usr/bin/google-chrome); VERCEL_BYPASS_FILE: file holding the deployment-protection
 // automation bypass secret (sent once as a query param to set the bypass cookie; never printed).
+// IGNORE: regex of console errors that are known environment noise (e.g. pod off); compare against prod before using it.
 import fs from "node:fs";
 import { chromium } from "playwright-core";
 import { PNG } from "pngjs";
@@ -30,6 +31,7 @@ for (const vp of Object.keys(VPS)) for (const p of PATHS) {
     if (/\[vite\]|vite-client|@vite\/client/i.test(t)) errs.push("vite dev client: " + t.slice(0, 200));
     else if (m.type() === "error") errs.push("console.error: " + t.slice(0, 300));
   });
+  page.on("response", (r) => { if (r.status() >= 400) warn.push(`http ${r.status()} ${r.url().split("?")[0]}`); });
   page.on("requestfailed", (r) => warn.push(`requestfailed ${r.failure()?.errorText} ${r.url().split("?")[0]}`));
   if (bypass) {   // sets the bypass cookie for this context only
     const u = new URL(BASE); u.searchParams.set("x-vercel-protection-bypass", bypass); u.searchParams.set("x-vercel-set-bypass-cookie", "true");
@@ -56,11 +58,21 @@ for (const vp of Object.keys(VPS)) for (const p of PATHS) {
   const litPct = (100 * lit) / N;
   if (!ok) errs.push("canvas never reached coverage >= 0.95");
   if (litPct < 20) errs.push(`canvas looks black: ${litPct.toFixed(1)}% lit pixels`);
+  // Strip 404s are expected: the loader probes strip_ext then falls back to .jpg, and replay skips damaged ranges.
+  // Ignore the (URL-less) console 404 lines only when every 404 response was a strip/LOD object.
+  const r404 = warn.filter((w) => w.startsWith("http 404 "));
+  if (r404.length && r404.every((w) => /\/(strips|lod)\/[^/]+$/.test(w))) {
+    const before = errs.length; const keep = errs.filter((e) => !/status of 404 \(Not Found\)$/.test(e)); errs.length = 0; errs.push(...keep);
+    if (before !== keep.length) warn.push(`ignored ${before - keep.length} console 404s (all strip/lod probes)`);
+  }
+  const ign = process.env.IGNORE ? new RegExp(process.env.IGNORE) : null;
+  const ignored = ign ? errs.filter((e) => ign.test(e)).length : 0;
+  if (ign) { const keep = errs.filter((e) => !ign.test(e)); errs.length = 0; errs.push(...keep); }
   const res = errs.length ? "FAIL" : "PASS";
   if (errs.length) failed++;
-  console.log(`${res} ${vp.padEnd(7)} ${p.padEnd(12)} coverage=${ok} lit=${litPct.toFixed(1)}% ${zoomInfo}`);
+  console.log(`${res} ${vp.padEnd(7)} ${p.padEnd(12)} coverage=${ok} lit=${litPct.toFixed(1)}% ${zoomInfo}${ignored ? ` (ignored ${ignored} known-noise errors)` : ""}`);
   for (const e of errs) console.log("   " + e);
-  for (const w of warn.slice(0, 5)) console.log("   (warn) " + w);
+  for (const w of [...new Set(warn)].slice(0, 12)) console.log("   (warn) " + w);
   await ctx.close();
 }
 await browser.close();
