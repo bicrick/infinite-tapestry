@@ -1,6 +1,6 @@
 # How Infinite Tapestry paints forever
 
-This document explains the method at three zoom levels. **High** is the shape of the system. **Mid** covers how pixels are fused and scenes are chosen. **Low** gives the exact numbers, file layouts and indices. Everything here matches the code in this repo (v1.1). File paths are given so you can check. How ideas and uploaded images are screened is in **[SAFETY.md](SAFETY.md)**.
+This document explains the method at three zoom levels. **High** is the shape of the system. **Mid** covers how pixels are fused and scenes are chosen. **Low** gives the exact numbers, file layouts and indices. Everything here matches the code in this repo. File paths are given so you can check. How ideas and uploaded images are screened is in **[SAFETY.md](SAFETY.md)**.
 
 ![Unedited live output](img/ribbon_egypt.jpg)
 
@@ -31,8 +31,8 @@ flowchart TB
 
 There are three loops:
 
-- **Paint loop (GPU, ~3.5 s per strip):** take the director's current prompt, outpaint the next strip, fuse it into the rolling canvas, store it, and announce it.
-- **Direct loop (Auto):** every 15 s the pod re-reads `auto_config` (theme, pause, render settings). When the queue of upcoming scenes runs low, Auto plans more.
+- **Paint loop (GPU, about 2 s per strip on an RTX 4090):** take the director's current prompt, outpaint the next strip, fuse it into the rolling canvas, store it, and announce it.
+- **Direct loop (Auto):** every 30 s the pod re-reads `auto_config` (theme, pause, render settings). When the queue of upcoming scenes runs low, Auto plans more.
 - **Watch loop (browser):** receive strip refs, fetch the images from the CDN, and scroll smoothly. Slow down if the buffer runs thin.
 
 ---
@@ -56,15 +56,11 @@ The mask covers the new slot **plus a 128 px repaint band** reaching back into t
 
 Each emitted strip file is **448×1024**: 192 px of overlap plus 256 px of new pixels. The browser feathers the overlap over the previous strip in the same way, so viewers never see a hard edge. (If you stitch strips yourself, blend the overlap too. Butting the right 256 px together produces fake vertical steps.)
 
-### 2.2 Why "mean + noise" (the v1.0 banding fix)
+### 2.2 The prefill: mean colour + noise
 
-Diffusion inpainting doesn't start from pure noise. It noises a **prefill** of the masked area. The old prefill copied each row's edge colour across the hole, which literally drew horizontal stripes. The model obligingly turned them into banners, strata, shelves and rows of people. Worse, a user-idea takeover repaints ~670 px from that striped start, so whole scenes came out "stuck in bands".
+Diffusion inpainting doesn't start from pure noise. At strength 0.999 it noises a **prefill** of the masked area, so the prefill seeds the composition. Any structure in it (for example edge pixels stretched across the hole) gets drawn as stripes, banners or rows of objects.
 
-Since v1.0 (`prefill_mode = "meannoise"`, `inpaint.py`), the hole is filled with the **context's mean colour plus isotropic Gaussian noise (σ = 40)**. It has no row structure, so there is nothing to band. A fully masked window (a fresh anchor, below) gets mid-gray 128 + noise (σ = 50), not a flat card.
-
-| Before | After |
-|---|---|
-| ![](img/banding_before.jpg) | ![](img/banding_after.jpg) |
+So the hole is filled with the **context's mean colour plus isotropic Gaussian noise (σ = 40)** (`prefill_mode = "meannoise"`, `inpaint.prefill_masked`). It has no row structure, so there is nothing to band. A fully masked window (a fresh anchor, below) gets mid-gray 128 + noise (σ = 50), not a flat card.
 
 ### 2.3 Scene changes: the fresh anchor
 
@@ -87,11 +83,11 @@ The crossfade gets the colours roughly right. The **bridge repaint** at strength
 
 ![A fresh-anchor join: golden amulet into the Sphinx at night](img/scene_join.jpg)
 
-Both numbers are **live settings**. The admin **Configuration** tab has sliders for the join width (32–192 px) and the bridge strength (0.30–1.00). It saves them to `auto_config.render`, and the pod applies them within ~15 s (`server.apply_render_settings`).
+Both numbers are **live settings**. The admin **Configuration** tab has sliders for the join width (32–192 px) and the bridge strength (0.30–1.00). It saves them to `auto_config.render`, and the pod applies them within 30 s (`server.apply_render_settings`).
 
 ### 2.4 Scene length: random widths
 
-A scene lasts *width* strips: a blend-in transition plus a hold. Since v1.1 the width is **drawn at random per scene** (`LiveDirector._width`), so the ribbon has an organic rhythm and not a metronome:
+A scene lasts *width* strips: a blend-in transition plus a hold. The width is **drawn at random per scene** (`LiveDirector._width`), so the ribbon has an organic rhythm and not a metronome:
 
 - Auto scenes: 3–9 strips (default)
 - Viewer ideas: 5–7 strips. A tighter range with a fair minimum, so everyone gets a decent showing.
@@ -102,9 +98,9 @@ Both ranges are admin sliders, clamped to 3–30. The admin preview draws a sche
 
 | | |
 |---|---|
-| Checkpoint | `OzzyGT/RealVisXL_V4.0_inpainting` (SDXL, 9-channel inpaint UNet), fp16 |
-| Fallback | `diffusers/stable-diffusion-xl-1.0-inpainting-0.1` |
-| Sampler | DPM++ 2M Karras, **18 steps**, **CFG 6** (+1.5 for viewer ideas, +3 during an idea's first takeover strips), strength 0.999 |
+| Checkpoint | RealVisXL V5.0 merged into SDXL inpainting 0.1 (`merge:realvisxl-v5-inpaint`, 9-channel UNet, built and cached on the pod by `sdxl_merge.py`), fp16 |
+| Fallback | `OzzyGT/RealVisXL_V4.0_inpainting` |
+| Sampler | DPM++ 2M Karras, **20 steps**, **CFG 6.5** applied to the first half of the steps (`cfg_cut` 0.5), +1.5 CFG for viewer ideas, +3 during an idea's first takeover strips, strength 0.999 |
 | Geometry | window 1024×1024 · strip 256 · overlap 192 · repaint band 128 |
 | Extras | IP-Adapter for image ideas (`refs.py`), style LoRAs ramped across transitions (`styles.py`) |
 | Output | WebP q65, 448×1024 per strip |
@@ -124,9 +120,9 @@ flowchart TD
   F --> J[journey: premise + ONE style + scene list<br/>kept across calls]
 ```
 
-**Free mode.** `director_brief` gives the planner the recent scene history, the time of day and a **spark** (`variety.py`). A spark is a random era, place, subject and look ("the 1970s · the Mongolian steppe · machines and engines · risograph print"). If recent titles keep circling one motif, `motif_run` names it and the brief asks for new territory. This is all positive prompting: the planner is shown where to go and never given a list of banned words. Banned words tend to plant the very thing they forbid. The earlier lantern / salt-flat / misty-water bias traced back to example titles in the brief ("Lantern Tide", "The Amber Hour") and an example style. Those examples are gone.
+**Free mode.** `director_brief` gives the planner the recent scene history, the time of day and a **spark** (`variety.py`). A spark is a random era, place, subject and look ("the 1970s · the Mongolian steppe · machines and engines · risograph print"). If recent titles keep circling one motif, `motif_run` names it and the brief asks for new territory. This is all positive prompting: the planner is shown where to go and never given a list of banned words, which tend to plant the very thing they forbid. The brief carries no example titles or styles for the same reason.
 
-**Journeys.** A free pick can be a short multi-scene journey. Each planning call now carries the journey's **premise, one look, and the scenes so far**, so scene 4 knows what scenes 1–3 were. The "use a different look" rule only applies *between* journeys, never inside one.
+**Journeys.** A free pick can be a short multi-scene journey. Each planning call carries the journey's **premise, one look, and the scenes so far**, so scene 4 knows what scenes 1–3 were. The "use a different look" rule only applies *between* journeys, never inside one.
 
 **Stories.** Stories are written in admin or drafted with **Talk to Auto**. A story has a title, a premise (`theme`), **one `style`**, and a list of scene prompts. When a story plays, `_story_tick` queues its scenes directly with no LLM call. Each prompt is led by the story's style (`story_prompt`), so every chapter shares one look. Stories queue through `story_playlist`, and admin can play, queue, reorder or delete them (deleting asks for confirmation first).
 
@@ -193,6 +189,9 @@ flowchart LR
 | `user_min`, `user_max` | 5, 7 | 3–30 strips |
 | `seam_px` | 192 | 32 – overlap |
 | `bridge_strength` | 0.85 | 0.30–1.00 |
+| `steps` | 20 | 10–40 (SDXL) |
+| `cfg` | 6.5 | 3.0–9.0 (SDXL) |
+| `cfg_cut` | 0.5 | 0.3–1.0 (SDXL) |
 
 ### 3.5 Key constants
 
@@ -200,9 +199,9 @@ flowchart LR
 |---|---|---|
 | `height`, `window_width` | 1024 | `config.SDXL_PRESET` |
 | `strip_width` / `overlap` / `repaint_band` | 256 / 192 / 128 | `config.SDXL_PRESET` |
-| `steps`, `guidance_scale` | 18, 6.0 | `config.SDXL_PRESET` |
+| `steps`, `guidance_scale`, `cfg_cut` | 20, 6.5, 0.5 | `config.SDXL_PRESET` |
 | `prefill_mode` | `meannoise` (σ 40; fully masked: 128 + σ 50) | `config.py`, `inpaint.prefill_masked` |
 | `anchor_bridge_px` | 128 | `config.py` |
 | `takeover_strips` / `takeover_seam_px` | 2 / 96 | `config.py` |
-| Auto config poll | 15 s | `autopilot.py` |
+| Auto config poll | 30 s | `autopilot.CFG_POLL_S` |
 | Strip format | WebP q65 | `config.py` |

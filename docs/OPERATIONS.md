@@ -64,8 +64,8 @@ scripts/gpu.sh status|on|off   # GPU switch (TAPESTRY_GPU_SECRET)
 ```
 
 Without a laptop: Actions → **CI** → Run workflow (redeploy), Actions → **Ops** → Run workflow:
-`pod-health`, `storage-dry-run`, `storage-migrate` (`scripts/ops/storage_migrate.py`: moves any binaries left in
-Supabase Storage to R2, verifies, deletes; resumable, safe to rerun).
+`pod-health`, `storage-dry-run`, `storage-migrate` (`scripts/ops/storage_migrate.py`: keeps every binary on R2 by
+copying any found in Supabase Storage, verifying, then deleting the original; resumable, safe to rerun).
 
 Debugging the pod: `scripts/ops/pod_ssh.py 'tail -50 /root/server.log'` (needs `RUNPOD_API_KEY` and the SSH key).
 Pod files: `/root/it` → `/root/releases/<sha>`, logs `/root/server.log` and `/root/supervise.log`,

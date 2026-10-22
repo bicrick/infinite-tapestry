@@ -1,82 +1,144 @@
 # Infinite Tapestry
 
-**An endless painting, streamed live. You choose where it goes.**
+**One endless painting, painted live. Anyone watching can steer it.**
+
+[Live site](https://infinitetapestry.app) · [Project write-up](https://www.bicrick.com/projects/infinite-tapestry) · [Method in depth](docs/METHOD.md)
+
+![Infinite Tapestry](docs/img/tapestry_hero.jpg)
+
+## What it is
+
+Infinite Tapestry is an endless, infinitely extending painting. A GPU paints it one strip at a time, live, while people
+watch it scroll by. It never rewinds and never repeats: strip *n* is the *n*-th thing ever painted, so every moment has
+a permanent address.
+
+Anyone can prompt the tapestry, and their idea is woven in. Each prompt is painted word for word as its own scene and
+joined to the scroll for everyone watching. When nobody is steering, **Auto**, a director built on Claude Haiku, picks
+the next scene: it switches themes, styles and stories on its own, so the scroll keeps moving.
 
 ![An unedited stretch of the live tapestry: Giza, the Nile, a temple, a painted tomb, a golden mask, the Sphinx at night](docs/img/ribbon_egypt.jpg)
 
-*Unedited live output from Oct 14, 2026, around 1:55 AM CT: about 50 strips with every seam exactly as viewers saw it.*
+*An unedited stretch of live output, every seam exactly as viewers saw it.*
 
-A GPU worker paints the canvas one 256 px strip at a time. It never stops, never rewinds, and never repeats. Each new strip is outpainted from the pixels to its left, so the picture is one continuous scroll. When the subject changes, a fresh scene is painted and blended in. Anyone watching can type an idea, and a few seconds later the tapestry turns toward it. When nobody steers, **Auto** (the built-in director) picks the next scene or tells a multi-scene story.
+## How it works
 
-**Live at [infinitetapestry.app](https://infinitetapestry.app)** · [How it works, in depth → docs/METHOD.md](docs/METHOD.md) · [Operations → docs/OPERATIONS.md](docs/OPERATIONS.md)
+### Painting a strip
 
-![The landing page](docs/img/landing.jpg)
+Inpainting happens off screen. Each new strip is painted and joined before it scrolls into view, so the tapestry on
+screen is already one piece.
 
-## How it works in 30 seconds
+The model sees a **1024×1024 window**: the last 768 px already on the canvas, plus a masked 256 px slot to fill. The
+mask also reaches 128 px back into the context, so the model redraws the edge it continues from and the joint is drawn
+in one pass. The masked area starts as the context's mean colour plus noise, which gives the model nothing to streak.
+After generation, colour drift is corrected against the kept context and low-frequency colour steps at the mask edge
+are smoothed away (`canvas.py`). Each emitted strip is **448×1024**: 192 px of overlap plus 256 px of new pixels.
+The overlap is crossfaded on the server, and the browser feathers it again, so viewers never see a hard edge.
+
+![Strip geometry: a 1024×1024 window of 768 px context and a 256 px new slot; each emitted file is 448×1024](docs/img/tapestry_geometry.png)
+
+The model is **RealVisXL V5.0** (a fine-tuned SDXL) merged into the SDXL inpainting UNet on the GPU box
+(`sdxl_merge.py`), run in fp16 with DPM++ 2M Karras. The defaults are 20 steps at CFG 6.5, with guidance applied for
+the first half of the steps, which comes to about 2 s per strip on an RTX 4090. Steps, CFG and the guidance cut are
+live settings.
+
+### Joining scenes
+
+A prompt arrives as its own picture. A new scene is painted fresh, with none of the old pixels, and then laid next to
+the tail of the tapestry. A crossfade (`seam_px`, up to 192 px) settles the colours, and a masked **bridge repaint**
+(`bridge_strength`, 0.85 by default) redraws the join, reaching 128 px into the new scene, so objects connect instead
+of ghosting. Everything outside the mask is kept exactly. The model is convinced it already drew both halves and fills
+the gap between.
+
+![Scene join: a crossfade over seam_px, then a masked repaint at bridge_strength](docs/img/tapestry_join.png)
+
+Scene lengths are drawn at random per scene: 3–9 strips for Auto, 5–7 for viewer ideas. Join width, repaint strength,
+scene widths, steps and CFG are all set from the admin **Configuration** tab (`auto_config.render`), and the pod
+applies them within 30 s without a restart.
+
+### Directing: viewers first, then Auto
+
+- **Viewer prompts take priority.** Ideas queue fairly and are painted in turn, ahead of anything Auto was about to
+  invent. The text is kept verbatim; Haiku only adds a title. A viewer idea takes over within a strip or two, with a
+  CFG boost. Image ideas steer the scene through IP-Adapter.
+- **Auto fills the gaps.** When the queue runs low, Auto (Claude Haiku 5.5) plans the next scenes. Each request
+  carries the recent scenes, the time of day and a random *spark* (an era, a place, a subject and a look), so it keeps
+  finding new territory. A pick can be a short journey with one premise and one look.
+- **Stories.** Multi-scene stories with one consistent style are written in admin or drafted with *Talk to Auto*, and
+  play without an LLM call per scene.
+- **Safety** is enforced on the input: keyword and allowlist screens, optional OpenAI moderation, rate limits and an
+  NSFW classifier for uploaded images. See [docs/SAFETY.md](docs/SAFETY.md).
+
+### Storing and streaming
+
+Every strip is stored forever. The pod writes it to **Cloudflare R2** as WebP (`live-sdxl/strips/{index}.webp`, served
+through the CDN) and writes an index row to **Supabase**. It then broadcasts a small reference over a WebSocket. The
+browser fetches the image from the CDN, feathers the overlap and scrolls. In auto mode, scroll speed follows the GPU's
+actual throughput (60 px/s nominal for SDXL), staying a little under it so the buffer never runs dry.
+
+- **Replay mode.** When the GPU is offline, the site keeps playing: each page load starts at a random point in the
+  stored history, and the prompt box becomes a quiet *GPU is offline · You're watching a replay* status.
+- **Time Machine.** [/time-machine](https://infinitetapestry.app/time-machine) maps any hour of any day to its strips
+  and opens the viewer right there. A Vercel cron (`/api/tm`, every 5 minutes) folds new strips into the time index and
+  extends a zoomable tile pyramid on R2.
+- **Accounts, ideas, votes and chat** live in Supabase Postgres, with row-level security on every table and server-side
+  functions for writes.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-  V[Viewers] -- ideas, votes --> API[Vercel: site + /api]
-  API <--> DB[(Supabase Postgres)]
-  DB -- queue, auto_config, stories --> POD[RunPod GPU: SDXL inpaint worker]
+  V[Viewers] -- ideas, votes, chat --> API[Vercel: site + /api]
+  API <--> DB[(Supabase: ideas, chat, accounts,<br/>auto_config, strip index)]
+  DB -- queue, settings, stories --> POD[RunPod GPU worker:<br/>SDXL inpaint + Auto]
+  AUTO[Claude Haiku] <--> POD
   POD -- strip refs over WebSocket --> V
-  POD -- webp strips, canvas --> R2[(Cloudflare R2 CDN)]
+  POD -- WebP strips, LOD tiles --> R2[(Cloudflare R2 + CDN)]
   POD -- strip index rows --> DB
-  CRON[Vercel cron /api/tm] -- Time Machine tiles --> R2
+  CRON[Vercel cron /api/tm] -- Time Machine index + tiles --> R2
+  CTRL[GPU controller] -- on / off --> POD
   R2 --> V
 ```
 
-1. **Outpaint.** SDXL inpainting (a RealVisXL V5 merge, DPM++ 2M Karras, fp16) sees a 1024×1024 window: 768 px of
-   what is already on screen plus a masked 256 px slot to fill. Steps and CFG are live settings (`auto_config.render`).
-2. **Fuse.** The masked slot starts as *mean colour + noise*, not stretched edge pixels, so nothing seeds horizontal
-   bands. Each strip carries a 192 px overlap that is cross-faded into the canvas.
-3. **Change scenes cleanly.** A new subject is painted *fresh* and stitched on with a crossfade plus a "bridge"
-   repaint, so the old layout never bleeds into the new one.
-4. **Direct.** Ideas from viewers take over in a strip or two. Otherwise Auto picks scenes from a rotating pool of
-   eras, places, subjects and looks, or plays a story with one consistent look.
-5. **Remember.** Every strip is stored forever on R2 by index. The [Time Machine](https://infinitetapestry.app/time-machine)
-   maps any hour of any day back to its strips.
+| Piece | Runs on | Role |
+|---|---|---|
+| GPU worker (`infinite_tapestry/`) | RunPod (24 GB GPU, RTX 4090 preferred) | paints, joins and stores strips; runs Auto; WebSocket server |
+| Site and API (`static/`, `web/`) | Vercel | viewer, Time Machine, ideas, chat, admin, GPU switch, cron jobs |
+| Database (`supabase/migrations/`) | Supabase Postgres + Auth | ideas queue, chat, accounts, settings, strip index |
+| Images | Cloudflare R2 + CDN | every strip and tile, served publicly |
 
-| Before (row-mean prefill) | After (mean + noise, fresh anchors) |
-|---|---|
-| ![banding](docs/img/banding_before.jpg) | ![clean](docs/img/banding_after.jpg) |
-
-*The same prompt sequence before and after v1.0. The old prefill copied each row's edge colour across the hole, which grew into stripes, banners and rows of people.*
-
-## Repo map
+## Repo layout
 
 | Path | What |
 |---|---|
-| `infinite_tapestry/` | GPU worker: generator, SDXL inpaint backend (SD1.5 fallback), director (`prompts.py`), Auto (`autopilot.py`, `interpreter.py`, `variety.py`), storage (`store.py` → R2 + Postgres, `lod.py`), WebSocket server |
-| `web/api/`, `web/lib/` | Vercel functions: live config (`live.js`), history and tiles (`about.js`, `tm.js`), ideas, admin, GPU switch (`gpu.js`), Talk to Auto, share pages |
-| `static/` | The site: live viewer (`client.js`), landing, Time Machine, Fuel, profile |
+| `infinite_tapestry/` | GPU worker: generator, SDXL inpaint backend (SD 1.5 optional), director (`prompts.py`), Auto (`autopilot.py`, `interpreter.py`, `variety.py`), storage (`store.py`, `lod.py`), WebSocket server (`server.py`) |
+| `web/api/`, `web/lib/` | Vercel functions: live config, history and tiles (`about.js`, `tm.js`), ideas, chat, admin, GPU switch, Talk to Auto, share pages |
+| `static/` | The site: live viewer (`client.js`), landing, Time Machine, Fuel, profiles |
 | `web/admin_src/` | Admin UI source, packed by `scripts/gen_admin_ui.py` |
 | `supabase/migrations/` | Database schema |
-| `scripts/pod/` | Pod boot, release fetch, supervisor (follows CI releases) |
-| `scripts/ci/` | Secrets manifest + sync (GitHub secrets → Vercel, pod) |
-| `scripts/ops/` | Ops tools that run anywhere (pod health, pod SSH, storage migration) |
+| `scripts/pod/` | Pod boot, release fetch, supervisor |
+| `scripts/ci/` | Secrets manifest and sync |
+| `scripts/ops/` | Operator tools (pod health, pod SSH) |
 | `tests/` | `pytest` suite (CPU, mock backend, no network) |
 
-## Clone → configure → run → deploy
+## Running locally
 
 ```bash
 git clone https://github.com/bicrick/infinite-tapestry && cd infinite-tapestry
-make setup            # .venv + package + test deps (Python 3.10+, Node 18+ for the JS checks)
-make test             # no secrets, no network
-make dev              # mock worker + viewer at http://127.0.0.1:8000 (PORT=… to change)
-cp .env.example .env  # optional: real Auto director, ops helpers
-make deploy           # tests, push main, follow CI: site to Vercel, worker release to the pod
+make setup    # .venv + package + test deps (Python 3.10+)
+make test     # pytest + JS syntax check (needs Node); no secrets, no network
+make dev      # CPU mock worker + viewer at http://127.0.0.1:8000 (PORT=... to change)
 ```
 
-On a 24 GB GPU, `pip install -e ".[gpu]"` and `make dev-gpu` run the real SDXL worker. Production deploys only
-through CI; the pod picks up new worker releases by itself. Secrets, CI flow, rollback and rebuilding from scratch:
-**[docs/OPERATIONS.md](docs/OPERATIONS.md)**.
+`cp .env.example .env` to enable optional pieces such as the Auto director (Anthropic key). On a 24 GB GPU,
+`pip install -e ".[gpu]"` and `make dev-gpu` run the real SDXL worker. `make help` lists every target.
 
-## Admin live settings
+## Deploying
 
-Scene widths, the join crossfade width and the bridge repaint strength are set in the admin's **Configuration** tab.
-Values are saved to `auto_config.render` (which also takes the sampler keys `steps` and `cfg`), and the pod re-reads
-them every 15 s, so no restart is needed.
+Production deploys only through GitHub Actions (`.github/workflows/ci.yml`). Every push to `main` runs the tests,
+publishes a new worker release when the worker code changed, syncs runtime secrets from GitHub to Vercel, and deploys
+the site to Vercel with a smoke test before the domains move. The GPU pod picks up new worker releases on its own.
+`make deploy` runs the tests, pushes and follows the CI run. Secrets, scheduled jobs and setting up a new environment
+are covered in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## License and models
 
@@ -92,7 +154,7 @@ OpenRAIL licenses, which apply to anyone who runs this code:
 | [stabilityai/stable-diffusion-xl-base-1.0](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0) | merge base | CreativeML Open RAIL++-M |
 | [diffusers/stable-diffusion-xl-1.0-inpainting-0.1](https://huggingface.co/diffusers/stable-diffusion-xl-1.0-inpainting-0.1) | merge inpaint UNet | CreativeML Open RAIL++-M |
 | [SG161222/RealVisXL_V5.0](https://huggingface.co/SG161222/RealVisXL_V5.0) | merge tuned weights, text encoders, VAE | CreativeML Open RAIL++-M |
-| [OzzyGT/RealVisXL_V4.0_inpainting](https://huggingface.co/OzzyGT/RealVisXL_V4.0_inpainting) | previous default model | CreativeML Open RAIL++-M |
+| [OzzyGT/RealVisXL_V4.0_inpainting](https://huggingface.co/OzzyGT/RealVisXL_V4.0_inpainting) | fallback model | CreativeML Open RAIL++-M |
 | [madebyollin/sdxl-vae-fp16-fix](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix) | fp16-safe VAE | MIT |
 | [Lykon/dreamshaper-8-inpainting](https://huggingface.co/Lykon/dreamshaper-8-inpainting) | SD 1.5 backend (optional) | CreativeML OpenRAIL-M |
 | [nerijs/pixel-art-xl](https://huggingface.co/nerijs/pixel-art-xl) | style LoRA | CreativeML OpenRAIL-M |
@@ -101,5 +163,5 @@ OpenRAIL licenses, which apply to anyone who runs this code:
 
 ---
 
-Deeper dive: **[docs/METHOD.md](docs/METHOD.md)** covers fusion, the model, Auto and stories, storage and streaming, and
-how the Time Machine finds a moment. [docs/SAFETY.md](docs/SAFETY.md) explains how ideas and uploaded images are screened.
+More: [docs/METHOD.md](docs/METHOD.md) (the method at three zoom levels) · [docs/SAFETY.md](docs/SAFETY.md) (how ideas
+and images are screened) · [docs/OPERATIONS.md](docs/OPERATIONS.md) (running production).
