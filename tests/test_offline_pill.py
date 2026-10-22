@@ -3,9 +3,9 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-HTML = (ROOT / "static/index.html").read_text()
-JS = (ROOT / "static/client.js").read_text()
-CSS = (ROOT / "static/style.css").read_text()
+HTML = (ROOT / "frontend/index.html").read_text()
+JS = (ROOT / "frontend/src/viewer/app.ts").read_text()
+CSS = (ROOT / "frontend/src/styles/style.css").read_text()
 
 
 def test_pill_markup_is_a_status_not_a_control():
@@ -20,7 +20,7 @@ def test_pill_markup_is_a_status_not_a_control():
 
 def test_offline_follows_the_replay_state_and_blocks_submits():
     assert "setOffline(!connected && (replay || podDown));" in JS
-    body = JS[JS.index("function setOffline(on)"):JS.index("function setAway(on)")]
+    body = JS[JS.index("function setOffline(on: boolean)"):JS.index("function setAway(on: boolean)")]
     assert '$("cmd").inert = on' in body and ".drawer-foot input, .drawer-foot button" in body
     submit = JS[JS.index('$("cmd").addEventListener("submit"'):]
     assert submit.index("if (offline) return;") < submit.index("S.submitIdea(") < submit.index('send({ type: "intent"')

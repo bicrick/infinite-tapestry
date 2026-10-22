@@ -32,7 +32,7 @@ def test_report_endpoint_and_legal_pages():
     assert "ip_hash" in r and "reports" in r
     v = json.loads(rd("web/vercel.json"))
     assert any(x.get("source") == "/privacy" for x in v.get("rewrites", []))
-    assert "privacy" in rd("static/terms.html").lower() and (ROOT / "static/privacy.html").exists()
+    assert "privacy" in rd("frontend/terms.html").lower() and (ROOT / "frontend/privacy.html").exists()
 
 
 def test_stripe_mode_is_config_only():
@@ -55,8 +55,8 @@ def test_site_url_single_source():
 
 
 def test_no_model_vendor_name_in_static():
-    for f in (ROOT / "static").rglob("*"):
-        if f.suffix in (".html", ".js", ".css"):
+    for f in (ROOT / "frontend").rglob("*"):
+        if f.suffix in (".html", ".js", ".ts", ".tsx", ".css"):
             t = f.read_text().lower().replace('x === "claude"', "")  # the handle filter that hides it
             t = re.sub(r'<ul class="built-logos".*?</ul>', "", t, flags=re.S)  # the /about "Built using" credits may name it
             assert "claude" not in t, f
@@ -80,10 +80,10 @@ def test_apply_config_pause_theme_weights():
 
 
 def test_admin_shell_ships_no_admin_ui():
-    h = rd("static/admin.html") + rd("static/gate.js")
+    h = rd("frontend/admin.html") + rd("frontend/src/legacy/gate.js")
     for w in ["GPU", "Steer", "overview", "rollback", "Reports", "admin.js"]:
         assert w not in h, w
-    assert not (ROOT / "static/admin.js").exists()
+    assert not (ROOT / "frontend/src/legacy/admin.js").exists()
     import importlib.util
     spec = importlib.util.spec_from_file_location("g", ROOT / "scripts/gen_admin_ui.py"); g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
     assert json.loads(rd("web/api/_admin_ui.json")) == g.pack()

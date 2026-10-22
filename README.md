@@ -106,7 +106,7 @@ flowchart LR
 | Piece | Runs on | Role |
 |---|---|---|
 | GPU worker (`infinite_tapestry/`) | RunPod (24 GB GPU, RTX 4090 preferred) | paints, joins and stores strips; runs Auto; WebSocket server |
-| Site and API (`static/`, `web/`) | Vercel | viewer, Time Machine, ideas, chat, admin, GPU switch, cron jobs |
+| Site and API (`frontend/`, `web/`) | Vercel | viewer, Time Machine, ideas, chat, admin, GPU switch, cron jobs |
 | Database (`supabase/migrations/`) | Supabase Postgres + Auth | ideas queue, chat, accounts, settings, strip index |
 | Images | Cloudflare R2 + CDN | every strip and tile, served publicly |
 
@@ -116,7 +116,7 @@ flowchart LR
 |---|---|
 | `infinite_tapestry/` | GPU worker: generator, SDXL inpaint backend (SD 1.5 optional), director (`prompts.py`), Auto (`autopilot.py`, `interpreter.py`, `variety.py`), storage (`store.py`, `lod.py`), WebSocket server (`server.py`) |
 | `web/api/`, `web/lib/` | Vercel functions: live config, history and tiles (`about.js`, `tm.js`), ideas, chat, admin, GPU switch, Talk to Auto, share pages |
-| `static/` | The site: live viewer (`client.js`), landing, Time Machine, Fuel, profiles |
+| `frontend/` | The site (Vite + TypeScript): pages (`*.html`), live viewer (`src/viewer/`: camera, renderer, motion, stream), shared code (`src/core/`), page entries (`src/entries/`), not-yet-ported page scripts (`src/legacy/`), CSS (`src/styles/`), static files (`public/`) |
 | `web/admin_src/` | Admin UI source, packed by `scripts/gen_admin_ui.py` |
 | `supabase/migrations/` | Database schema |
 | `scripts/pod/` | Pod boot, release fetch, supervisor |
@@ -129,10 +129,14 @@ flowchart LR
 
 ```bash
 git clone https://github.com/bicrick/infinite-tapestry && cd infinite-tapestry
-make setup    # .venv + package + test deps (Python 3.10+)
-make test     # pytest + JS syntax check (needs Node); no secrets, no network
-make dev      # CPU mock worker + viewer at http://127.0.0.1:8000 (PORT=... to change)
+make setup    # .venv + package + test deps (Python 3.10+) + npm ci (Node 20+)
+make test     # pytest + typecheck + Vitest + JS syntax check; no secrets, no network
+make dev      # builds the site (npm run build), then CPU mock worker + viewer at http://127.0.0.1:8000 (PORT=... to change)
+make dev-ui   # Vite dev server with hot reload (proxies /ws, /timeline, /lod to the worker on :8000)
 ```
+
+The site builds with `npm ci && npm run build` into `dist/site` (what the worker serves locally);
+`scripts/build_web.sh OUT` assembles the full Vercel bundle (site + `web/api` + config).
 
 `cp .env.example .env` to enable optional pieces such as the Auto director (Anthropic key). On a 24 GB GPU,
 `pip install -e ".[gpu]"` and `make dev-gpu` run the real SDXL worker. `make help` lists every target.

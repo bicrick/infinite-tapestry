@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" class="page">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Profile · Infinite Tapestry</title>
+  <meta name="robots" content="noindex, follow" />
+  <meta name="description" content="Ideas woven into Infinite Tapestry, an endless AI painting steered by everyone watching." />
+  <meta name="theme-color" content="#0b0b0d" />
+  <meta property="og:image" content="https://infinite-tapestry.vercel.app/brand/og/og-3-close.jpg" />
+  <meta property="og:title" content="Infinite Tapestry" />
+  <meta property="og:description" content="An endless painting, steered by everyone watching." />
+  <meta name="twitter:image" content="https://infinite-tapestry.vercel.app/brand/og/og-3-close.jpg" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="/brand/icon-48.png" sizes="48x48" type="image/png" />
+  <link rel="icon" href="/brand/icon-96.png" sizes="96x96" type="image/png" />
+  <link rel="icon" href="/brand/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="/src/styles/style.css" />
+  <!--chrome:head-->
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+  <script src="/theme.js"></script>
+</head>
+<body class="page">
+  <div id="page-bg" class="page-bg"></div>
+  <!--chrome:header-->
+  <main class="profile">
+    <section class="p-head">
+      <h1 id="p-handle">&nbsp;</h1>
+      <div id="p-meta" class="p-meta">&nbsp;</div>
+      <div id="p-banner" class="p-banner hidden"></div>
+      <form id="p-banner-edit" class="p-banner-edit hidden" autocomplete="off">
+        <div class="pbe-title">Your shout-out <span class="muted">· shown with your name wherever fuel buyers are listed</span></div>
+        <input id="pbe-tag" maxlength="60" placeholder="A short line (60 characters)" />
+        <input id="pbe-url" maxlength="200" placeholder="Your website (optional)" inputmode="url" />
+        <div class="pbe-row"><span id="pbe-count" class="muted">0/60</span><button type="submit">Save</button></div>
+      </form>
+      <nav id="p-filter" class="p-filter hidden">
+        <button data-f="all" class="on">All</button><button data-f="woven">Painted</button><button data-f="pending">Pending</button><button data-f="rejected" class="own-only hidden">Not used</button>
+      </nav>
+    </section>
+    <ol id="p-list" class="p-list"></ol>
+    <div id="p-empty" class="p-empty hidden"></div>
+  </main>
+  <!--chrome:footer-->
+  <div id="toast" class="toast"></div>
+  <script src="/config.js"></script>
+  <script type="module" src="/src/entries/profile.ts"></script>
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+<script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+<!--chrome:scripts-->
+</body>
+</html>

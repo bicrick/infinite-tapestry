@@ -60,7 +60,7 @@ def test_busy_queue_uses_atomic_fair_pick_and_short_holds():
 def test_gpu_rate_default_is_real_runpod_rate():
     if "TAPESTRY_GPU_CENTS_PER_HOUR" not in os.environ:
         assert crowd_mod.GPU_CENTS_PER_HOUR == 89
-    html = (ROOT / "static/index.html").read_text()
+    html = (ROOT / "frontend/index.html").read_text()
     assert "$0.17" not in html
 
 
@@ -76,7 +76,7 @@ def test_migration_defines_fair_queue_without_llm():
 
 
 def test_woven_section_removed():
-    for f in ("static/index.html", "static/social.js"):
+    for f in ("frontend/index.html", "frontend/src/legacy/social.js"):
         assert "woven-list" not in (ROOT / f).read_text()
 
 
@@ -102,14 +102,14 @@ def test_soft_title_word_boundary():
 
 
 def test_low_fuel_banner_removed():
-    for f in ("static/index.html", "static/social.js", "static/style.css"):
+    for f in ("frontend/index.html", "frontend/src/legacy/social.js", "frontend/src/styles/style.css"):
         assert "nudge-line" not in (ROOT / f).read_text() and "maybeNudge" not in (ROOT / f).read_text()
 
 
 def test_strip_scenes_insert_in_order_for_replay():
-    js = (ROOT / "static/client.js").read_text()
+    js = (ROOT / "frontend/src/viewer/timeline.ts").read_text()
     assert "older strip: /timeline backfill covers it" not in js
-    assert "tlScenes.splice(lo, 0," in js
+    assert "rows.splice(lo, 0," in js
 
 
 def test_busy_pick_round_robins_by_submitter():

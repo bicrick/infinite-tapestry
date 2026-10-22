@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Infinite Tapestry · a live AI art stream and AI screensaver that never ends</title>
+  <meta name="description" content="An endless AI painting, streamed live around the clock. Type an idea and watch it get painted into the scroll for everyone watching. Use it as a free AI screensaver." />
+  <link rel="canonical" href="https://infinitetapestry.app/about" />
+  <meta name="theme-color" content="#0b0b0c" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Infinite Tapestry" />
+  <meta property="og:url" content="https://infinitetapestry.app/about" />
+  <meta property="og:title" content="Infinite Tapestry · a live AI art stream that never ends" />
+  <meta property="og:description" content="An endless AI painting, streamed live. Type an idea and watch it get painted in." />
+  <meta property="og:image" content="https://infinitetapestry.app/about-img/og-about.jpg" />
+  <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Infinite Tapestry · a live AI art stream" />
+  <meta name="twitter:image" content="https://infinitetapestry.app/about-img/og-about.jpg" />
+  <meta name="twitter:description" content="An endless AI painting, streamed live. Type an idea and watch it get painted in." />
+  <meta property="og:image:alt" content="A stretch of the Infinite Tapestry, an endless AI painting" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebApplication","@id":"https://infinite-tapestry.vercel.app/#app","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/","applicationCategory":"EntertainmentApplication","applicationSubCategory":"AI art","operatingSystem":"Any (web browser)","browserRequirements":"Requires JavaScript and a modern browser","description":"A live AI art stream: an endless AI painting that anyone watching can steer by typing an idea. Works as a free AI screensaver.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"image":"https://infinite-tapestry.vercel.app/about-img/og-about.jpg","publisher":{"@id":"https://infinite-tapestry.vercel.app/#org"},"keywords":"live AI art stream, AI screensaver, endless AI painting, infinite AI art, AI art you can steer"},{"@type":"Organization","@id":"https://infinite-tapestry.vercel.app/#org","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/","logo":"https://infinite-tapestry.vercel.app/brand/icon-512.png","email":"support@infinitetapestry.app"},{"@type":"WebPage","@id":"https://infinite-tapestry.vercel.app/about#page","url":"https://infinite-tapestry.vercel.app/about","name":"About Infinite Tapestry","isPartOf":{"@type":"WebSite","@id":"https://infinite-tapestry.vercel.app/#website","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/"},"about":{"@id":"https://infinite-tapestry.vercel.app/#app"}}]}</script>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="/brand/icon-48.png" sizes="48x48" type="image/png" />
+  <link rel="icon" href="/brand/icon-96.png" sizes="96x96" type="image/png" />
+  <link rel="icon" href="/brand/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/src/styles/about.css" />
+  <!--chrome:head-->
+  <script src="/theme.js"></script>
+  <script src="/config.js"></script>
+</head>
+<body>
+  <!--chrome:header overlay-->
+
+  <header class="hero">
+    <div class="wrap hero-copy">
+      <h1 class="hi" style="--i:0">Infinite Tapestry</h1>
+      <p class="lede hi" style="--i:1">An endless painting. You choose where it goes.</p>
+      <a class="cta hi" style="--i:2" href="/">Enter the tapestry <span>→</span></a>
+      <p class="tcount hi" style="--i:3" id="tcount" hidden><b id="tcount-n">0</b> individually painted bands on the tapestry, and counting</p>
+    </div>
+    <!-- Archive art: strips idx >= 30632 only (painted at/after Oct 14 04:00 UTC = Oct 13 11pm America/Chicago blend cutoff; 30592@03:57:48Z, 30656@04:01:22Z). Ribbon contiguous strip-index order with viewer paste-over stitch (OV=192). Hero 47913–47956; steps 56041/45849/45833; feats 55030/45020/47225. -->
+    <!-- about-hero.js paints the band onto #hero-cv and mirrors it with the production reflection (refl.js);
+         the <img> reel below is the no-JS / no-canvas fallback. -->
+    <canvas id="hero-cv" class="hero-cv" aria-hidden="true"></canvas>
+    <div class="band" aria-label="A desert-to-oasis stretch from the live tapestry, drifting">
+      <div class="reel"><img src="/about-img/hero-band.webp" width="6712" height="600" alt="Dune crest at dusk rolling into an oasis and camel caravan — contiguous strips from the live archive after the blend cutoff" fetchpriority="high" /><img src="/about-img/hero-band.webp" width="6712" height="600" alt="" aria-hidden="true" /></div>
+      <div class="live"><span class="dot"></span>painted live, one strip every few seconds</div>
+      <div class="cap">Dune Crest at Dusk → oasis → caravan · contiguous archive strips</div>
+    </div>
+    <div class="band-below" aria-hidden="true"></div>
+  </header>
+
+  <main>
+    <section id="built" class="built" aria-label="Built using">
+      <div class="wrap">
+        <p class="eyebrow m m-up">Built using</p>
+        <ul class="built-logos" role="list">
+          <li class="built-item m m-scatter" style="--i:0"><span class="built-icon" style="--built-mask:url('/brand/built/vercel.svg')" aria-hidden="true"></span><span>Vercel</span></li>
+          <li class="built-item m m-scatter" style="--i:1"><span class="built-icon" style="--built-mask:url('/brand/built/cloudflare.svg')" aria-hidden="true"></span><span>Cloudflare</span></li>
+          <li class="built-item m m-scatter" style="--i:2"><span class="built-icon" style="--built-mask:url('/brand/built/stablediffusion.svg')" aria-hidden="true"></span><span>Stable Diffusion</span></li>
+          <li class="built-item m m-scatter" style="--i:3"><span class="built-icon" style="--built-mask:url('/brand/built/claude.svg')" aria-hidden="true"></span><span>Claude</span></li>
+          <li class="built-item m m-scatter" style="--i:4"><span class="built-icon" style="--built-mask:url('/brand/built/grokbot.svg')" aria-hidden="true"></span><span>Grok Bot</span></li>
+          <li class="built-item m m-scatter" style="--i:5"><span class="built-icon" style="--built-mask:url('/brand/built/runpod.svg')" aria-hidden="true"></span><span>RunPod</span></li>
+          <li class="built-item m m-scatter" style="--i:6"><span class="built-icon" style="--built-mask:url('/brand/built/googlecloud.svg')" aria-hidden="true"></span><span>Google Cloud</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="wrap">
+        <p class="eyebrow m m-left">How it works</p>
+        <h2 class="m m-focus">Type a place. Watch the world walk into it.</h2>
+        <p class="m m-up m-late" style="max-width:52ch">The tapestry never stops scrolling. Anyone watching can say where it goes next, and a few seconds later the painting turns toward it, seamlessly.</p>
+        <div class="demo" id="demo">
+          <div class="demo-pin">
+            <div class="demo-stage">
+              <ol class="demo-steps">
+                <li class="ds m m-left" style="--i:0"><h3><span class="n">01</span>&nbsp; Type an idea</h3><p>A place, a mood, something ridiculous. No account needed.</p><i class="ds-bar" aria-hidden="true"><b></b></i></li>
+                <li class="ds m m-left" style="--i:1"><h3><span class="n">02</span>&nbsp; It joins the queue</h3><p>Sort by Up next, New or Most liked, and heart the ones you want to see. When it's busy, everyone takes turns.</p><i class="ds-bar" aria-hidden="true"><b></b></i></li>
+                <li class="ds m m-left" style="--i:2"><h3><span class="n">03</span>&nbsp; Watch it land</h3><p>Your idea scrolls in for everyone watching, titled, with its own page you can share.</p><i class="ds-bar" aria-hidden="true"><b></b></i></li>
+              </ol>
+              <div class="demo-card m m-rise" aria-hidden="true">
+                <div class="app">
+                  <div class="app-band"><img src="/about-img/hero-band.webp" alt="" decoding="async" /></div>
+                  <div class="app-tile">
+                    <img class="soft" src="/about-img/step-type.webp" alt="" decoding="async" />
+                    <img class="sharp" src="/about-img/step-type.webp" alt="" decoding="async" />
+                    <i class="scan"></i>
+                    <span class="tile-cap">Dog Naps in Sunlight<small>by you · just now</small></span>
+                  </div>
+                  <div class="app-top"><span class="app-brand"><img src="/brand/mark-plain.svg" alt="" width="22" height="13" />Infinite Tapestry</span><span class="app-live"><i class="dot"></i>Live</span></div>
+                  <div class="app-dock">
+                    <div class="app-now"><span class="lbl">Now</span><span class="now-t"><span class="now-a">Comet Tail Over Ice</span><span class="now-b">Dog Naps in Sunlight</span></span><span class="app-prog"><span></span></span></div>
+                    <div class="app-cmd">
+                      <span class="app-input"><span class="ph">Where should the world go next?</span><span class="typed">dog naps in sunlight</span><i class="caret"></i></span>
+                      <span class="app-send"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></span>
+                    </div>
+                  </div>
+                  <div class="app-drawer">
+                    <div class="app-tabs"><b>Queue</b><span>Fuel</span><span>Chat</span><span>You</span></div>
+                    <div class="app-seg"><b>Up next</b><span>New</span><span>Most liked</span></div>
+                    <ol class="app-list">
+                      <li class="app-item mine"><span class="n"><span>1</span></span><div><div class="t">dog naps in sunlight<em>you</em></div><div class="meta"><span class="m-a">You · Up next</span><span class="m-b">You · Painting now</span></div></div><span class="heart"><svg viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg><svg class="on" viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg><span class="odo"><span>0<br>1<br>2<br>3</span></span></span></li>
+                      <li class="app-item"><span class="n"><span>1</span><span>2</span></span><div><div class="t">cats wearing baseball hats</div><div class="meta">mira · Waiting</div></div><span class="heart"><svg class="on" viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg><span class="odo"><span>4</span></span></span></li>
+                      <li class="app-item"><span class="n"><span>2</span><span>3</span></span><div><div class="t">minecraft dragon</div><div class="meta">jules · Waiting</div></div><span class="heart"><svg class="on" viewBox="0 0 16 16"><path d="M8 13.5S2 10 2 5.8A3 3 0 0 1 8 4.3a3 3 0 0 1 6 1.5C14 10 8 13.5 8 13.5z"/></svg><span class="odo"><span>2</span></span></span></li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="fuel" class="how-fuel">
+          <div class="how-fuel-copy">
+            <p class="eyebrow m m-left">04 · Fuel</p>
+            <h3 class="m m-focus">People buy fuel. Fuel pays GPU inference costs. The tapestry keeps generating.</h3>
+            <p class="m m-up m-late">Every strip is painted by a rented GPU. Fuel is prepaid GPU time you purchase for that inference — the same compute that turns ideas into the live scroll.</p>
+          </div>
+          <div class="fuel-stage">
+            <div class="fuel-cash m m-rise" aria-labelledby="fc-headline">
+              <p class="fc-headline" id="fc-headline">Loading GPU budget…</p>
+              <div class="fc-totals" role="group" aria-label="GPU budget totals">
+                <div class="fc-stat"><b id="fc-left">—</b><span>remaining</span></div>
+                <div class="fc-stat"><b id="fc-budget">$100</b><span>budget</span></div>
+                <div class="fc-stat"><b id="fc-spend">—</b><span id="fc-spend-l">GPU spend</span></div>
+                <div class="fc-stat"><b id="fc-bought">—</b><span>fuel bought</span></div>
+              </div>
+              <figure class="fc-chart-wrap">
+                <svg id="fc-chart" class="fc-chart" viewBox="0 0 640 240" role="img" aria-label="Remaining GPU budget over time; fuel purchases bump the line up"></svg>
+                <figcaption id="fc-caption" class="fc-caption">Loading GPU budget…</figcaption>
+              </figure>
+              <p class="fc-legend" id="fc-legend" hidden>
+                <span class="fc-key line"></span>Remaining budget
+                <span class="fc-key fuel"></span>Fuel purchase
+              </p>
+            </div>
+            <div class="fuel-side">
+              <div class="fuel-heroes m m-right">
+                <div class="fh-head">
+                  <h3>Latest Hall of Heroes</h3>
+                  <p>Recent buyers of prepaid GPU fuel.</p>
+                </div>
+                <ol class="fh-list" id="about-heroes" aria-live="polite">
+                  <li class="fh-skel"></li><li class="fh-skel"></li><li class="fh-skel"></li><li class="fh-skel"></li>
+                </ol>
+              </div>
+              <a class="cta fuel-cta m m-up m-late" href="/fuel">Buy GPU fuel <span>→</span></a>
+              <p class="fuel-fine m m-up m-late">Costs, the full Hall of Heroes, and checkout are on the <a href="/fuel">Fuel page</a>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing" style="padding-top:0">
+      <div class="wrap" style="text-align:center">
+        <h2 class="m m-zoom">It's painting right now.</h2>
+        <p class="m m-up m-late" style="margin:0 0 30px">Come say where it goes.</p>
+        <a class="cta m m-up m-late" href="/">Enter the tapestry <span>→</span></a>
+      </div>
+    </section>
+  </main>
+
+  <!--chrome:footer-->
+  <script type="module" src="/src/entries/about.ts"></script>
+  <!-- StippleFill (UI Tapestry): uncomment to stipple the ribbon and cards in. <script src="/stipple-fill.js" defer></script><script src="/stipple-slots.js" defer></script> -->
+  <!--chrome:scripts-->
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+<script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+</html>

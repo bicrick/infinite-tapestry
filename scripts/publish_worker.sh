@@ -6,7 +6,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd); cd "$ROOT"
 SHA=$(git rev-parse HEAD)
-# Content id of everything the pod runs (static/ ships too, but Vercel serves the site, so it does not count).
+# Content id of everything the pod runs (the site is built and served by Vercel, so it is not part of the release).
 TREE=$(for p in infinite_tapestry scripts/pod pyproject.toml requirements.txt; do git rev-parse "HEAD:$p"; done | sha1sum | cut -c1-40)
 B="$SUPABASE_URL/storage/v1/object/deploy/worker"
 A=(-H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY")
@@ -16,7 +16,9 @@ if [ "$CUR" = "$TREE" ] && [[ " $* " != *" --force "* ]]; then
   echo "worker unchanged (tree ${TREE:0:12}); not publishing, the pod keeps its release"; exit 0
 fi
 T=$(mktemp -d)/w.tgz
-tar czf "$T" --exclude='__pycache__' infinite_tapestry static pyproject.toml requirements.txt scripts/pod
+# Pods' fetch_release.sh accepts a release only if it has a static/ dir: ship a placeholder (the site itself is on Vercel).
+S=$(mktemp -d); mkdir -p "$S/static" && echo "The site is built from frontend/ and served by Vercel." > "$S/static/README.txt"
+tar czf "$T" --exclude='__pycache__' infinite_tapestry pyproject.toml requirements.txt scripts/pod -C "$S" static
 curl -sf "${R[@]}" "${A[@]}" -H "x-upsert: true" -H "content-type: application/gzip" --data-binary @"$T" "$B/$SHA.tgz" > /dev/null
 if [[ " $* " != *" --no-latest "* ]]; then
   printf '%s\n' "$SHA" | curl -sf "${R[@]}" "${A[@]}" -H "x-upsert: true" -H "content-type: text/plain" --data-binary @- "$B/latest.txt" > /dev/null

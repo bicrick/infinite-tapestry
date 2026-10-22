@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Time Machine · every day of the endless AI painting · Infinite Tapestry</title>
+  <meta name="description" content="Everything the Infinite Tapestry has ever painted, day by day. Pick a day and replay any hour." />
+  <link rel="canonical" href="https://infinitetapestry.app/time-machine" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Infinite Tapestry" />
+  <meta property="og:url" content="https://infinitetapestry.app/time-machine" />
+  <meta property="og:title" content="Time Machine · Infinite Tapestry" />
+  <meta property="og:description" content="Everything it has ever painted, day by day." />
+  <meta property="og:image" content="https://infinitetapestry.app/about-img/og-about.jpg" />
+  <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Time Machine · Infinite Tapestry" />
+  <meta name="twitter:description" content="Everything the endless AI painting has ever painted, day by day." />
+  <meta name="twitter:image" content="https://infinitetapestry.app/about-img/og-about.jpg" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"Time Machine","url":"https://infinite-tapestry.vercel.app/time-machine","description":"Everything the Infinite Tapestry has ever painted, day by day.","isPartOf":{"@type":"WebSite","@id":"https://infinite-tapestry.vercel.app/#website","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/"}}</script>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="/brand/icon-48.png" sizes="48x48" type="image/png" />
+  <link rel="icon" href="/brand/icon-96.png" sizes="96x96" type="image/png" />
+  <link rel="icon" href="/brand/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="stylesheet" href="/src/styles/about.css" />
+  <link rel="stylesheet" href="/src/styles/time-machine.css" />
+  <!--chrome:head-->
+  <script src="/theme.js"></script>
+  <script src="/config.js"></script>
+</head>
+<body class="tm">
+  <!--chrome:header-->
+  <main class="tm-main">
+    <header class="tm-head">
+      <p class="eyebrow">Time Machine</p>
+      <h1>Everything it has painted, day by day.</h1>
+      <p class="tm-lede">Pick a day, skim its 24 hours, then tap any moment to replay it in the live viewer.</p>
+    </header>
+    <div class="tm-grid">
+      <section class="tm-cal" aria-label="Calendar">
+        <div class="cal-h"><button id="m-prev" class="cal-nav" type="button" aria-label="Previous month">‹</button><h2 id="m-title">&nbsp;</h2><button id="m-next" class="cal-nav" type="button" aria-label="Next month">›</button></div>
+        <div class="cal-dow" id="dow"></div>
+        <div class="cal-grid" id="grid"></div>
+        <p class="cal-key"><span><i class="k-on"></i>Painted</span><span><i class="k-today"></i>Today</span></p>
+      </section>
+      <section class="day" id="day" aria-live="polite">
+        <div class="day-h">
+          <button id="d-prev" class="cal-nav" type="button" aria-label="Previous painted day">‹</button>
+          <div class="day-t"><h3 id="d-title">&nbsp;</h3><span class="small" id="d-meta"></span></div>
+          <button id="d-next" class="cal-nav" type="button" aria-label="Next painted day">›</button>
+        </div>
+        <nav class="dayrib" id="d-rib" aria-label="Jump to an hour"></nav>
+        <ol class="hours" id="d-hours"></ol>
+      </section>
+    </div>
+  </main>
+  <!--chrome:footer-->
+  <script type="module" src="/src/entries/time-machine.ts"></script>
+  <!--chrome:scripts-->
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+<script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+</html>

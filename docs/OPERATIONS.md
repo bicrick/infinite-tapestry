@@ -7,7 +7,7 @@ source of truth: a lost machine is replaced by cloning and pushing.
 
 | Piece | Where | Deployed by |
 |---|---|---|
-| Site + API (`static/`, `web/api`, `web/lib`) | Vercel project `infinite-tapestry-app` | CI on every push to `main` |
+| Site + API (`frontend/`, `web/api`, `web/lib`) | Vercel project `infinite-tapestry-app` | CI on every push to `main` |
 | GPU worker (`infinite_tapestry/`, `scripts/pod/`) | RunPod pod (id in Supabase `pod_state.pod_id`) | CI publishes a release, the pod follows it |
 | Database (ideas, strips index, pod_state, auto_config, …) | Supabase Postgres, schema in `supabase/migrations/` | by hand (SQL editor / `supabase db push`) |
 | Images (strips, Time Machine tiles, canvas, crops) | Cloudflare R2 bucket (`R2_BUCKET`), public via `R2_PUBLIC_URL` | written by the pod and the Vercel cron |

@@ -1,44 +1,24 @@
-"""Replay (GPU off) starts at a uniformly random spot across the whole history: static/replay.js."""
-import json
-import shutil
-import subprocess
-from pathlib import Path
+"""Replay (GPU off) starts at a uniformly random spot across the whole history.
 
-import pytest
+The distribution itself (uniform, runway, lost-span skip, small histories) is tested in
+frontend/src/core/replay-start.test.ts (Vitest, run by `npm test`); these checks pin the wiring.
+"""
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _node(script: str):
-    r = subprocess.run(["node", "-e", script], cwd=ROOT, capture_output=True, text=True, check=True)
-    return json.loads(r.stdout)
-
-
-@pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
-def test_random_start_spans_history_with_runway_and_skips_lost_span():
-    out = _node("""
-      const { replayStart, RUNWAY, LOST } = require('./static/replay.js');
-      const max = 115418, xs = [];
-      for (let i = 0; i < 20000; i++) xs.push(replayStart(max));
-      const ends = [0, 1 - 1e-12].map((u) => replayStart(max, () => u));
-      console.log(JSON.stringify({ xs, ends, runway: RUNWAY, lost: LOST, small: [replayStart(10), replayStart(0)] }));
-    """)
-    xs, max_ = out["xs"], 115418
-    hi = max_ - out["runway"]
-    assert all(0 <= x <= hi for x in xs)
-    for a, b in out["lost"]:
-        assert not any(a - out["runway"] <= x <= b for x in xs)
-    # Uniform over the whole range, not clustered near the end: every tenth of the history gets picked.
-    deciles = {min(9, x * 10 // hi) for x in xs}
-    assert deciles == set(range(10))
-    assert min(xs) < hi * 0.02 and max(xs) > hi * 0.98
-    assert out["ends"] == [0, hi]
-    assert out["small"] == [5, 0]
+def test_replay_start_is_unit_tested():
+    test = (ROOT / "frontend/src/core/replay-start.test.ts").read_text()
+    assert "LOST" in test and "RUNWAY" in test and "decile" in test
 
 
 def test_client_uses_random_start_for_boot_and_loop():
-    client = (ROOT / "static/client.js").read_text()
-    assert client.count("window.TapestryReplayStart(") == 2
-    assert "90 + Math.floor(Math.random() * 120)" not in client
-    html = (ROOT / "static/index.html").read_text()
-    assert html.index('src="replay.js"') < html.index('src="client.js"')
+    app = (ROOT / "frontend/src/viewer/app.ts").read_text()
+    assert app.count("window.TapestryReplayStart(") == 2
+    assert "90 + Math.floor(Math.random() * 120)" not in app
+    boot = (ROOT / "frontend/src/viewer/boot.ts").read_text()
+    assert "window.TapestryReplayStart = replayStart;" in boot
+    assert boot.index("window.TapestryReplayStart = replayStart;") < boot.index("startViewer();")
+    main = (ROOT / "frontend/src/entries/main.ts").read_text()
+    assert main.index('viewer/reflection"') < main.index('viewer/boot"') < main.index('legacy/intro.js"') < main.index('chrome/offline-boot"')

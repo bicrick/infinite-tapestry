@@ -1,8 +1,7 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  push:   # every branch runs the tests; only main deploys (publish-worker / deploy-web are gated on refs/heads/main)
   pull_request:
     branches: [main]
   workflow_dispatch:   # manual redeploy of main (web always; worker only if changed unless force_worker)
@@ -35,17 +34,21 @@ jobs:
           node-version: "22"
       - name: Install package (dev)
         run: pip install -e ".[dev]"
+      - name: Install frontend deps
+        run: npm ci --no-audit --no-fund
       - name: pytest
         run: pytest -q
-      - name: Syntax-check JS (static/ and web/)
+      - name: Frontend typecheck + unit tests (tsc, vitest)
+        run: npm run check
+      - name: Syntax-check JS (web/ serverless + scripts)
         run: |
           set -e
-          find static web -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -not -path '*/node_modules/*' -print0 \
+          find web scripts -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \) -not -path '*/node_modules/*' -print0 \
             | xargs -0 -n1 node --check
       - name: Never show "Claude" in the UI
         run: |
           # The /about "Built using" credits list may name it; nothing else in the UI may.
-          for f in static/*.html static/*.js static/*.css; do
+          for f in frontend/*.html $(find frontend/src frontend/public -type f \( -name '*.js' -o -name '*.ts' -o -name '*.tsx' -o -name '*.css' \)); do
             if sed '/<ul class="built-logos"/,/<\/ul>/d' "$f" | grep -q "Claude"; then echo "UI mentions Claude: $f"; exit 1; fi
           done
       - name: Build the site (no secrets) and smoke-test it
@@ -62,7 +65,8 @@ jobs:
           for f in index.html about.html fuel.html time-machine.html privacy.html terms.html profile.html; do
             test -s "$OUT/$f" || { echo "::error::build is missing $f"; exit 1; }
           done
-          grep -q 'src="client.js' "$OUT/index.html" || { echo "::error::index.html lost client.js"; exit 1; }
+          grep -qE 'type="module" crossorigin src="/assets/index-[A-Za-z0-9_-]+\.js"' "$OUT/index.html" || { echo "::error::index.html lost the viewer bundle"; exit 1; }
+          test -s "$OUT/sb.js" && test -s "$OUT/chrome.js" || { echo "::error::stable /sb.js or /chrome.js missing"; exit 1; }
           if grep -q 'unified.js' "$OUT/index.html"; then echo "::error::index.html still loads the unified viewer"; exit 1; fi
           grep -q 'class="it-links"' "$OUT/about.html" || { echo "::error::shared header not injected"; exit 1; }
           if [ -e "$OUT/unified.js" ] || [ -e "$OUT/u-9b600a56.html" ] || [ -e "$OUT/classic-7f3e21.html" ] || [ -e "$OUT/tm-lab.html" ]; then
@@ -70,7 +74,8 @@ jobs:
           fi
           python3 -m http.server 8790 --bind 127.0.0.1 --directory "$OUT" >/dev/null 2>&1 &
           sleep 1
-          for p in / /about.html /fuel.html /time-machine.html /config.js /client.js /social.js; do
+          MAIN=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' "$OUT/index.html" | head -1)
+          for p in / /about.html /fuel.html /time-machine.html /config.js /sb.js /chrome.js /theme.js "$MAIN"; do
             curl -sf -o /dev/null "http://127.0.0.1:8790$p" || { echo "::error::$p did not serve"; exit 1; }
           done
           echo "build + smoke OK"
@@ -79,7 +84,7 @@ jobs:
   # the pod's supervisor polls latest.txt and switches to it within ~2 min (rolls back if /health fails).
   publish-worker:
     needs: test
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       HAS_SECRETS: ${{ secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
@@ -162,10 +167,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           if [ -n "${VERCEL_BYPASS:-}" ]; then
             curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
-            curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'client.js'
+            curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '/assets/index-'
             curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'unified.js' && { echo "::error::homepage still loads the unified viewer"; exit 1; }
-            curl -sf --retry 3 "$URL/intro.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'Halftone bloom'
-            curl -sf --retry 3 "$URL/intro-levels.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'OffscreenCanvas'
+            curl -sf --retry 3 "$URL/sb.js?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'export'
           fi
       - name: Comment preview URL on PR
         if: env.HAS_SECRETS == 'true' && success()
@@ -194,7 +198,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/cap"
-          cp scripts/intro-capture.mjs "$RUNNER_TEMP/cap/"
+          cp scripts/dev/intro-capture.mjs "$RUNNER_TEMP/cap/"
           cd "$RUNNER_TEMP/cap"
           npm init -y >/dev/null
           npm i --no-audit --no-fund playwright-core@1.64.1 >/dev/null
@@ -214,7 +218,7 @@ jobs:
     concurrency:
       group: deploy-prod
       cancel-in-progress: true
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
@@ -280,7 +284,7 @@ jobs:
           echo "deployed $URL"
           # smoke test before the domain moves (deployment URLs are protected; the bypass secret gets through)
           curl -sf --retry 3 "$URL/api/live?n=1&x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '"config"'
-          curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'client.js'
+          curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q '/assets/index-'
           curl -sf --retry 3 "$URL/?x-vercel-protection-bypass=$VERCEL_BYPASS" | grep -q 'unified.js' && { echo "::error::homepage still loads the unified viewer"; exit 1; }
           BID=$(curl -sf "$URL/build.json?x-vercel-protection-bypass=$VERCEL_BYPASS")
           echo "build $BID"

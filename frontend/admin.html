@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" class="page">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Sign in · Infinite Tapestry</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="/brand/icon-48.png" sizes="48x48" type="image/png" />
+  <link rel="icon" href="/brand/icon-96.png" sizes="96x96" type="image/png" />
+  <link rel="icon" href="/brand/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="/src/styles/style.css" />
+  <!--chrome:head-->
+  <style>
+    #gate { min-height: calc(100vh - 260px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; }
+    #gate img { width: 44px; opacity:.9 } #gate h1 { margin:0; font-size:24px; font-weight:500; letter-spacing:-.02em } #gate p { margin:-8px 0 0 } #gate button { font: inherit; font-size: 14px; padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line); background: rgba(var(--ink),.06); color: var(--fg); cursor: pointer; }
+  </style>
+  <script src="/theme.js"></script>
+</head>
+<body class="page gate-page">
+  <!--chrome:header-->
+  <main id="gate" hidden><img src="/brand/mark-plain.svg" alt="" /><h1>Admin</h1><p class="fine">Sign in with the owner account to continue.</p><button id="g" type="button">Sign in with Google</button></main>
+  <!--chrome:footer-->
+  <script src="/config.js"></script>
+  <script type="module" src="/src/entries/admin.ts"></script>
+<!--chrome:scripts-->
+</body>
+</html>

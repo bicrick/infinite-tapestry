@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en" class="page">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Privacy · Infinite Tapestry</title>
+  <meta name="description" content="How Infinite Tapestry handles your data: what we collect when you watch or suggest ideas for the live AI painting, and how to contact us." />
+  <link rel="canonical" href="https://infinite-tapestry.vercel.app/privacy" />
+  <meta property="og:type" content="website" /><meta property="og:site_name" content="Infinite Tapestry" />
+  <meta property="og:title" content="Privacy · Infinite Tapestry" /><meta property="og:description" content="How Infinite Tapestry handles your data: what we collect when you watch or suggest ideas for the live AI painting, and how to contact us." />
+  <meta property="og:url" content="https://infinite-tapestry.vercel.app/privacy" /><meta property="og:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
+  <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:image" content="https://infinite-tapestry.vercel.app/about-img/og-about.jpg" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="/brand/icon-48.png" sizes="48x48" type="image/png" />
+  <link rel="icon" href="/brand/icon-96.png" sizes="96x96" type="image/png" />
+  <link rel="icon" href="/brand/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="/src/styles/style.css" />
+  <!--chrome:head-->
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+  <script src="/theme.js"></script>
+  <script src="/config.js"></script>
+</head>
+<body class="page doc-page">
+  <!--chrome:header-->
+  <main class="doc">
+    <h1>Privacy policy</h1>
+    <p class="lede">What Infinite Tapestry collects, why, and who processes it. Last updated October 13, 2026.</p>
+
+    <h2>What we collect</h2>
+    <ul>
+      <li><b>Google sign-in:</b> your Google account email and the public handle you pick. We don't get your password or contacts.</li>
+      <li><b>Ideas and activity:</b> the ideas and images you submit, votes, chat messages, and reports, linked to your handle (or a random guest handle).</li>
+      <li><b>Guests:</b> a random handle, a signed cookie, and salted hashes of your network address and a few coarse browser traits, used only for limits and abuse prevention.</li>
+      <li><b>Analytics:</b> privacy-friendly, cookieless page and performance analytics (Vercel Web Analytics and Speed Insights). No ad trackers, and we don't sell data.</li>
+      <li><b>Fuel purchases:</b> Stripe handles payment details for prepaid GPU fuel; we only see the amount, time and an optional note.</li>
+    </ul>
+
+    <h2>Why</h2>
+    <p>To run the shared painting, show who suggested a scene, apply rate limits and moderation, and understand performance.</p>
+
+    <h2>Processors</h2>
+    <ul>
+      <li>Supabase (database, sign-in, storage)</li>
+      <li>Vercel (website hosting, analytics)</li>
+      <li>Cloudflare (R2 image storage, Turnstile bot checks)</li>
+      <li>RunPod (the GPU that paints)</li>
+      <li>Google (sign-in), Stripe (fuel purchases), and an AI model provider that helps Auto plan scenes from public scene text</li>
+    </ul>
+
+    <h2>Retention and deletion</h2>
+    <p>Painted scenes are part of the public canvas. To delete your account, handle and ideas, or to get a copy of your data, email <a href="mailto:support@infinitetapestry.app">support@infinitetapestry.app</a> from the address you signed in with. We'll act within 30 days.</p>
+
+    <p class="fine">See also the <a href="/terms">terms</a>.</p>
+  </main>
+  <!--chrome:footer-->
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+<script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+<!--chrome:scripts-->
+</body>
+</html>

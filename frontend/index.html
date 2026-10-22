@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style id="first-paint">html,body{background:#000}@media (prefers-color-scheme: light){html,body{background:#fff}}.seo-intro{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.noscript-msg{position:fixed;left:0;right:0;bottom:24px;text-align:center;color:#ccc;font:14px system-ui}.noscript-msg a{color:#fff}</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+  <title>Infinite Tapestry · live AI art stream, an endless AI painting</title>
+  <meta name="description" content="An endless AI painting, streamed live 24/7. Type an idea and watch it get painted in for everyone watching. Go fullscreen for a free AI screensaver." />
+  <link rel="canonical" href="https://infinite-tapestry.vercel.app/" />
+  <meta name="theme-color" content="#0b0b0d" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/mark.svg" type="image/svg+xml" />
+  <link rel="icon" href="/brand/icon-48.png" sizes="48x48" type="image/png" />
+  <link rel="icon" href="/brand/icon-96.png" sizes="96x96" type="image/png" />
+  <link rel="icon" href="/brand/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="icon" href="/brand/icon-32.png" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Tapestry" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Infinite Tapestry · live AI art stream, an endless AI painting" />
+  <meta property="og:description" content="An endless painting, steered by everyone watching. Suggest what comes next and watch it paint itself in, live." />
+  <meta property="og:site_name" content="Infinite Tapestry" />
+  <meta property="og:image" content="https://infinite-tapestry.vercel.app/api/og?card=home" />
+  <meta property="og:image:alt" content="A stretch of the Infinite Tapestry, an endless AI painting" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Infinite Tapestry · live AI art stream, an endless AI painting" />
+  <meta name="twitter:image:alt" content="A stretch of the Infinite Tapestry, an endless AI painting" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://infinite-tapestry.vercel.app/#website","name":"Infinite Tapestry","alternateName":["Infinite Tapestry live AI art stream","Infinite Tapestry AI screensaver"],"url":"https://infinite-tapestry.vercel.app/","description":"An endless AI painting, streamed live 24/7 and steered by everyone watching.","publisher":{"@id":"https://infinite-tapestry.vercel.app/#org"},"inLanguage":"en"},{"@type":"Organization","@id":"https://infinite-tapestry.vercel.app/#org","name":"Infinite Tapestry","url":"https://infinite-tapestry.vercel.app/","logo":"https://infinite-tapestry.vercel.app/brand/icon-512.png","email":"support@infinitetapestry.app"}]}</script>
+  <meta name="twitter:description" content="An endless painting, steered by everyone watching. Suggest what comes next and watch it paint itself in, live." />
+  <meta name="twitter:image" content="https://infinite-tapestry.vercel.app/api/og?card=home" />
+  <link rel="preconnect" href="https://rsms.me/" />
+  <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+  <link rel="stylesheet" href="/src/styles/style.css" />
+  <script src="theme.js"></script>
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+</head>
+<body class="intro">
+  <section class="seo-intro" aria-labelledby="seo-h1">
+    <h1 id="seo-h1">Infinite Tapestry: a live AI art stream and endless AI painting</h1>
+    <p>Infinite Tapestry is an endless AI painting that scrolls past live, 24 hours a day. It never repeats and never ends: each new stretch of the scroll is painted in real time, and anyone watching can type an idea to steer where it goes next. It is infinite AI art you can steer, together with everyone else watching.</p>
+    <p>Leave it running fullscreen as a free AI screensaver or ambient art for a TV or second monitor, replay any moment in the <a href="/time-machine">Time Machine</a>, or read <a href="/about">how Infinite Tapestry works</a>.</p>
+  </section>
+  <noscript><p class="noscript-msg">Infinite Tapestry needs JavaScript to stream the live painting. <a href="/about">Learn how it works</a>.</p></noscript>
+  <canvas id="view"></canvas>
+  <div class="veil"></div>
+
+  <header class="top ui">
+    <div class="brand"><a class="brand-link" href="/about" aria-label="About Infinite Tapestry"><img class="brand-mark" src="brand/mark-plain.svg" alt="" width="22" height="13" /></a>Infinite Tapestry<span id="top-clock" class="top-clock" aria-label="Local time"></span><button id="snd-btn" class="snd-btn" type="button" aria-label="Ambient sound" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6v4h2.5l3.5 3V3L5 6z"/><path class="w1" d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8"/><path class="w2" d="M12.6 3.8a6 6 0 0 1 0 8.4"/><path class="x" d="M11 6l3.5 4M14.5 6L11 10"/></svg></button></div>
+    <div class="top-right">
+      <button id="chat-toggle" class="chat-toggle social-only hidden" type="button" aria-label="Chat" aria-pressed="true" title="Chat (C)"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5v-2.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/><path class="off" d="M2.5 2.5l11 11"/></svg></button>
+      <button id="fs-btn" class="fs-btn top-fs" type="button" aria-label="Full screen" title="Full screen (Esc exits)"><svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+      <div id="status" class="status"><span class="dot"></span><span id="status-text">connecting</span><span id="status-mini" class="status-mini"></span></div>
+      <button id="queue-btn" type="button" class="panel-btn" title="Panel" aria-label="Open panel"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M10 3v10"/></svg><span id="queue-count" class="panel-n"></span></button>
+    </div>
+  </header>
+
+  <button id="live-btn" class="pill ui hidden" type="button"><span class="ago"></span>Back to live <span aria-hidden="true">→</span></button>
+  <div id="amb" class="amb" aria-hidden="true">
+    
+    <div id="amb-title" class="amb-title"></div>
+    <div id="amb-time" class="amb-time"></div>
+    <div id="amb-when" class="amb-when"></div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <div id="chat" class="chat ui hidden" aria-label="Live chat">
+    <div class="chat-head"><span class="chat-title">Chat</span><button id="chat-close" class="chat-x" type="button" aria-label="Close chat"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+    <button id="chat-pill" class="chat-pill" type="button" aria-label="Open chat"><svg class="cp-ic" viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 4.5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v4.5a2 2 0 0 1-2 2H7l-3 2.5v-2.5h0.5a2 2 0 0 1-2-2z"/></svg><span id="cp-text" class="cp-text"></span><i class="cp-dot" aria-hidden="true"></i></button>
+    <ol id="chat-list" class="chat-list" aria-live="polite"></ol>
+    <div class="chat-foot">
+      <div id="chat-form" class="chat-form hidden" role="group" data-form-type="other"><input id="chat-input" type="text" name="x-c1" data-form-type="other" maxlength="200" placeholder="Say something" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="false" inputmode="text" data-lpignore="true" data-1p-ignore aria-label="Chat message" /><button id="chat-send" class="chat-send" type="button" data-submit aria-label="Send"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5"/></svg></button></div>
+      <button id="chat-signin" class="chat-signin" type="button">Sign in to chat</button>
+      <div id="chat-note" class="chat-note" role="status"></div>
+    </div>
+  </div>
+
+  <div id="auth-pop" class="sheet hidden">
+    <div class="sheet-card">
+      <div class="sheet-title">Join the tapestry</div>
+      <p id="auth-sub" class="fine sheet-sub">Watching, ideas and hearts are open to everyone. Sign in to get a handle, a profile and keep your ideas.</p>
+      <button id="auth-google" class="google wide hidden" type="button"><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Continue with Google</button>
+      <div id="auth-or" class="auth-or hidden"><span>or</span></div>
+      <form id="auth-form" autocomplete="on">
+        <input id="auth-email" type="email" name="email" autocomplete="email" inputmode="email" class="vibe" placeholder="you@example.com" required />
+        <button id="auth-send" class="primary wide" type="submit">Continue with email</button>
+      </form>
+      <form id="auth-code-form" class="hidden" autocomplete="off">
+        <p class="fine">We sent a sign-in link to <b id="auth-sent-to"></b>. Tap it on any device — or enter the code from the email here.</p>
+        <input id="auth-code" class="vibe code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" aria-label="6-digit code" />
+        <div class="auth-row"><button id="auth-change" type="button" class="link">Use a different email</button><button id="auth-resend" type="button" class="link">Resend email</button></div>
+      </form>
+      <p id="auth-msg" class="fine auth-msg" role="status"></p>
+      <form id="handle-form" class="hidden" autocomplete="off">
+        <input id="handle-input" type="text" name="x-h1" data-form-type="other" class="vibe" maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" enterkeyhint="done" data-lpignore="true" data-1p-ignore placeholder="handle" aria-label="Handle (letters, numbers, underscore)" />
+        <button class="primary" type="submit">Save</button>
+      </form>
+      <div id="auth-signed" class="hidden"><p class="fine">Signed in as <b id="auth-handle"></b></p><button id="auth-out" class="ghost wide" type="button">Sign out</button></div>
+    </div>
+  </div>
+
+  <div id="sleep" class="sleep hidden">
+    <div class="sleep-card">
+      <div class="sleep-title">The tapestry is asleep</div>
+      <p>The painter is resting. It wakes up where it left off.</p>
+      <div class="tiers" id="sleep-tiers">
+        <button data-cents="300">$3</button><button data-cents="1000">$10</button><button data-cents="2500">$25</button>
+      </div>
+      <p class="fine" id="sleep-note"></p>
+    </div>
+  </div>
+
+  <div class="dock ui">
+    <div class="now">
+      <span id="now-src" class="src"></span>
+      <span id="now-title">—</span>
+      <span id="now-arrow" class="hidden">→</span>
+      <span id="next-title"></span>
+      <span id="now-time" class="now-time"></span>
+      <span class="bar"><span id="now-bar"></span></span>
+    </div>
+    <p class="cmd-terms">By submitting you agree to the <a href="/terms" target="_blank" rel="noopener">terms</a> and <a href="/privacy" target="_blank" rel="noopener">privacy</a>.<span class="anon-only"> No account needed; sign in for more.</span></p>
+    <div id="cmd" class="cmd" role="group" data-form-type="other">
+      <span id="ref-chip" class="ref-chip hidden"><img id="ref-thumb" alt="" /><button type="button" id="ref-clear" title="Remove image">×</button></span>
+      <textarea id="cmd-input" name="x-c2" data-form-type="other" rows="1" placeholder="Where should the world go next?" spellcheck="false" enterkeyhint="send" autocomplete="off" autocorrect="off" autocapitalize="sentences" data-lpignore="true" data-1p-ignore></textarea>
+      <label id="ref-btn" class="icon social-only hidden" title="Add a reference image (optional)">
+        <svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9.5" cy="10" r="1.6"/><path d="M5 17l4.5-4.5 3 3L15 13l4 4"/></svg>
+        <input id="ref-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+      </label>
+      <div class="seg compose-only" role="group" aria-label="When">
+        <button type="button" data-when="end" class="on">Queue</button>
+        <button type="button" data-when="now">Now</button>
+      </div>
+      <span class="sep sec"></span>
+      <button id="speed-btn" type="button" class="icon text sec" title="Speed">Auto</button>
+      <button id="skip" type="button" class="icon sec" title="Next scene">
+        <svg viewBox="0 0 24 24"><path d="M6 6l8 6-8 6V6zm10 0h2v12h-2z"/></svg>
+      </button>
+      <button id="hide-btn" type="button" class="icon sec" title="Hide interface (H) · or press and hold the canvas">
+        <svg viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/></svg>
+      </button>
+      <button id="fullscreen-btn" type="button" class="icon sec" title="Full screen (Shift+F)">
+        <svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+      <button id="export-btn" type="button" class="icon sec" title="Export tapestry (E)">
+        <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+      </button>
+      <button id="send-btn" type="button" data-submit class="icon send phone-only" title="Send" aria-label="Send">
+        <svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      </button>
+      <button id="more-btn" type="button" class="icon phone-only" title="More" aria-label="More" aria-expanded="false">
+        <svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg>
+      </button>
+    </div>
+    <div id="offline-pill" class="offline-pill" role="status" aria-live="polite"><span class="msg"></span></div>
+    <div id="export-pop" class="pop hidden">
+      <div class="pop-title">Export the tapestry</div>
+      <p class="fine" id="export-meta">Everything painted so far, stitched into one PNG.</p>
+      <div class="pop-row">
+        <div class="seg small" id="export-scale">
+          <button type="button" data-s="1">Full</button>
+          <button type="button" data-s="0.5" class="on">½</button>
+          <button type="button" data-s="0.25">¼</button>
+        </div>
+        <button id="export-go" type="button" class="primary">Download PNG</button>
+      </div>
+    </div>
+    <div id="speed-pop" class="pop hidden">
+      <div class="pop-row">
+        <button type="button" data-mode="auto" class="mode on">Auto</button>
+        <button type="button" data-mode="manual" class="mode">Manual</button>
+      </div>
+      <div id="manual-row" class="pop-row dim">
+        <input id="manual-speed" type="range" min="4" max="120" value="30" />
+        <span id="manual-val" class="num">30 px/s</span>
+      </div>
+      <p class="fine">Auto follows the GPU's measured paint rate and keeps a few strips in reserve, easing speed so it never stalls.</p>
+    </div>
+  </div>
+
+  <aside id="drawer" class="drawer">
+    <div class="grab phone-only" id="drawer-grab" aria-hidden="true"><span></span></div>
+    <div class="drawer-head">
+      <nav class="tabs" id="tabs">
+        <button data-tab="next" class="on">Queue</button>
+                <button data-tab="fuel" class="social-only hidden">Fuel</button>
+        <button data-tab="audit" class="admin-only hidden">Audit</button>
+        <button data-tab="you" id="you-tab" type="button">You</button>
+      </nav>
+      <button id="drawer-close" type="button" class="icon" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="build-id" id="build-id" aria-hidden="true"></div>
+    <section class="panel hidden" id="panel-you">
+      <button id="account-btn" class="hidden" type="button" hidden aria-hidden="true">Sign in</button>
+      <div id="you-hub" class="you-hub"></div>
+    </section>
+    <section class="panel" id="panel-next" data-sort="up">
+    <div class="seg small qsort" id="qsort" aria-label="Sort"><button data-s="up" class="on" type="button">Up next</button><button data-s="new" type="button">New</button><button data-s="liked" type="button">Most liked</button></div>
+    <div id="current-card" class="card current"></div>
+    <ol id="queue-list" class="list skeleton"></ol>
+    <ol id="queue-more" class="list"></ol>
+    <div id="queue-empty" class="empty hidden">Nothing queued. Type a destination below.</div>
+      <ol id="idea-list" class="list social-only"></ol>
+      <div id="idea-empty" class="empty hidden">No ideas waiting. Auto is improvising.</div>
+      <button id="q-more" class="q-more hidden" type="button">Show more</button>
+    <div class="drawer-foot">
+      <div class="auto-row">
+        <label class="toggle"><input id="autopilot" type="checkbox" checked /><span class="sw"></span><b class="spark">✦</b> Autopilot</label>
+        <span id="auto-status" class="auto-status"></span>
+      </div>
+      <input id="vibe" class="vibe" type="text" placeholder="Steer the autopilot (optional vibe)…" maxlength="200" autocomplete="off" />
+      <label class="num-field">Hold <input id="hold" type="number" min="0" max="500" value="16" /></label>
+      <label class="num-field">Blend <input id="blend" type="number" min="1" max="64" value="8" /></label>
+      <button id="clear" type="button" class="ghost">Clear</button>
+    </div>
+    </section>
+    <section class="panel hidden" id="panel-fuel">
+      <div class="fuel-big"><div class="fuel-line big"><span id="fuel-fill-big"></span></div>
+        <div class="fuel-caption" id="fuel-caption">…</div>
+        <p class="fine" id="fuel-sub"></p></div>
+      <svg id="fuel-chart" class="fuel-chart" viewBox="0 0 600 160" role="img" aria-label="Daily painting cost versus fuel purchased"></svg>
+      <p id="fuel-chart-note" class="fine pad fuel-legend"></p>
+      <p class="fine pad" id="fuel-rate-note">Fuel is prepaid GPU compute time used to generate images here (GPU + Auto, the director). The tapestry keeps painting around the clock either way.</p>
+      <div class="tiers" id="tiers">
+        <button data-cents="300">$3<small>&nbsp;</small></button>
+        <button data-cents="1000">$10<small>&nbsp;</small></button>
+        <button data-cents="2500">$25<small>&nbsp;</small></button>
+      </div>
+      <input id="donor-note" class="vibe pad-x" maxlength="140" placeholder="A note for the wall (optional)" />
+      <p class="fine pad">Buy prepaid GPU fuel as a paid digital service. Buyers are listed on the <a href="/fuel">Fuel page</a>.</p>
+    </section>
+    <section class="panel hidden" id="panel-audit">
+      <div class="pad"><input id="audit-filter" class="vibe" placeholder="Filter by action (e.g. chat, vote, admin_ban)" /></div>
+      <ol id="audit-list" class="list audit"></ol>
+    </section>
+    <div class="drawer-bar">
+      <button id="fuel-chip" class="fuel-chip hidden" type="button" title="Fuel"><span class="fuel-line"><span id="fuel-fill"></span></span><span id="fuel-text"></span></button>
+      <button id="clip-btn" class="bar-btn" type="button" title="Share the last 10 seconds">Clip</button>
+      <div class="drawer-theme" role="group" aria-label="Theme"><button data-theme="">Auto</button><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
+    </div>
+  </aside>
+
+  <script src="config.js"></script>
+  <script type="module" src="/src/entries/main.ts"></script>
+<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};window.si=window.si||function(){(window.siq=window.siq||[]).push(arguments)};</script>
+<script defer src="/_vercel/insights/script.js"></script>
+<script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+</html>
