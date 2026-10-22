@@ -20,8 +20,12 @@ export class LodStore {
   private cache = new Map<string, Tile>();
   constructor(private readonly deps: { maxIndex: () => number; lodBase: () => string | undefined; httpBase: () => string }) {}
 
-  /** The tile image if loaded (starting the load if new); null while loading, missing, or the chunk is still filling. */
-  tile(level: number, c: number): HTMLImageElement | null {
+  /** tiles requested and neither loaded nor failed yet */
+  pending(): number { let n = 0; for (const t of this.cache.values()) if (!t.ok && !t.failed) n++; return n; }
+
+  /** The tile image if loaded (starting the load if new); null while loading, missing, or the chunk is still filling.
+   *  `low`: background prefetch, fetched at low priority. */
+  tile(level: number, c: number, low = false): HTMLImageElement | null {
     const key = level + ":" + c;
     let t = this.cache.get(key);
     if (!t) {
@@ -29,6 +33,7 @@ export class LodStore {
       const tile: Tile = { img: new Image(), ok: false, used: 0 };
       t = tile;
       tile.img.crossOrigin = "anonymous";
+      if (low) tile.img.fetchPriority = "low";   // background prefetch: visible strips and tiles go first
       tile.img.onload = () => { tile.ok = true; };
       const pod = `${this.deps.httpBase()}/lod/${level}/${c}.jpg`;
       // CDN first; a tile not mirrored yet falls back to the pod once (which builds and mirrors it). R2 only: no Supabase fallback.

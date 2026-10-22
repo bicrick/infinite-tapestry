@@ -50,7 +50,17 @@ export function historyPoints(j: { days?: Array<{ b?: number; t1?: string; times
   return out.filter((p, k) => k === 0 || p[0] !== out[k - 1][0]);
 }
 
-export interface TimelineDeps { httpBase: () => string; maxIndex: () => number; prefetchL2: (c: number) => void; stripSeconds: () => number | undefined }
+export interface TimelineDeps {
+  httpBase: () => string; maxIndex: () => number; prefetchL2: (c: number) => void; stripSeconds: () => number | undefined;
+  /** the strips on screen are decoded (history prefetch waits for them so it never competes with the first frame) */
+  viewReady?: () => boolean;
+  /** overview tiles still loading (the prefetch keeps only a few in flight, leaving connections for strips) */
+  lodPending?: () => number;
+}
+
+/** History prefetch: max tiles in flight, and how long it waits for incomplete on-screen strips before going anyway. */
+export const PREFETCH_INFLIGHT = 4;
+export const PREFETCH_WAIT_MS = 8000;
 
 export class Timeline {
   scenes: SceneRow[] = [];
@@ -88,9 +98,34 @@ export class Timeline {
     try { const r = await fetch(this.d.httpBase() + "/timeline?points=300"); const j = await r.json(); this.points = j.points || []; this.scenes = j.scenes || this.scenes; this.at = Date.now(); } catch (_) { /* pod off */ }
     this.busy = false;
     void this.loadHistPoints();
-    // the whole history at 1/16 is small: prefetch it so flights never hit an empty frame
-    for (let c = 0; (c + 1) * LOD_N[2] <= this.d.maxIndex() && c < 300; c++) this.d.prefetchL2(c);   // cached; only new tiles load
+    this.prefetchHistory();
     this.timer = window.setTimeout(this.refresh, 60000);
+  };
+
+  // The early history at 1/16 is small: prefetch it so flights never hit an empty frame (same tiles as before;
+  // cached, only new tiles load). Deferred until the on-screen strips are in, then trickled a few at a time.
+  private prefetchQ: number[] = [];
+  private prefetchWait = 0;
+  private trickling = false;
+  prefetchHistory(): void {
+    this.prefetchQ = [];
+    for (let c = 0; (c + 1) * LOD_N[2] <= this.d.maxIndex() && c < 300; c++) this.prefetchQ.push(c);
+    if (!this.trickling) { this.prefetchWait = performance.now(); this.trickle(); }
+  }
+  readonly trickle = (): void => {
+    this.trickling = true;
+    // Runs only while the strips on screen are in, so it pauses whenever they're loading (load-in, pans, flights);
+    // a view that stays incomplete for PREFETCH_WAIT_MS (strips missing on the CDN) doesn't block it forever.
+    const now = performance.now();
+    const vis = !this.d.viewReady || this.d.viewReady();
+    if (vis) this.prefetchWait = 0; else if (!this.prefetchWait) this.prefetchWait = now;
+    const ready = vis || now - this.prefetchWait > PREFETCH_WAIT_MS;
+    if (ready) {
+      const room = PREFETCH_INFLIGHT - (this.d.lodPending ? this.d.lodPending() : 0);
+      for (let k = 0; k < room && this.prefetchQ.length; k++) this.d.prefetchL2(this.prefetchQ.shift() as number);
+    }
+    if (!this.prefetchQ.length) { this.trickling = false; return; }
+    setTimeout(this.trickle, ready ? 60 : 200);
   };
 
   start(): void {

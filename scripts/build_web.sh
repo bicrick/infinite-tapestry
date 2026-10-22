@@ -45,4 +45,11 @@ VER=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || date +%s)-$(date +%s)
 if [ -n "${CRITICAL_BUILD:-}" ]; then printf '{"id":"%s","critical":true}\n' "$VER" > "$OUT/build.json"; else printf '{"id":"%s"}\n' "$VER" > "$OUT/build.json"; fi
 sed -i "s|^window.TAPESTRY_CONFIG = {|window.TAPESTRY_CONFIG = {\n  buildId: \"${VER}\",|" "$OUT/config.js"
 for f in "$OUT"/*.html; do sed -i -E "s#(src|href)=\"(/?[a-z0-9_-]+\.(js|css))\"#\1=\"\2?v=${VER}\"#g" "$f"; done
+# Warm the connection to the image host (strips + overview tiles) before the app asks for its first strip. Derived from
+# R2_PUBLIC_URL (the same value /api/live hands out as strip_base), so it follows a custom-domain switch; default = stripcdn.js.
+IMG_DEFAULT=$(sed -nE 's/^const R2_PUBLIC_DEFAULT = "([^"]+)".*/\1/p' "$ROOT/web/lib/stripcdn.js")
+IMG_ORIGIN=$(printf '%s' "${R2_PUBLIC_URL:-$IMG_DEFAULT}" | sed -nE 's#^(https://[A-Za-z0-9.-]+).*#\1#p')
+if [ -n "$IMG_ORIGIN" ] && [ -f "$OUT/index.html" ]; then
+  sed -i "s#<link rel=\"preconnect\" href=\"https://rsms.me/\" />#&\n  <link rel=\"preconnect\" href=\"${IMG_ORIGIN}\" crossorigin />#" "$OUT/index.html"
+fi
 echo "built $OUT"

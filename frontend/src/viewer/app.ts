@@ -86,7 +86,8 @@ export function startViewer(): void {
 
   // ---------- core modules ----------
   const SW = () => config.strip_width;
-  const timeline = new Timeline({ httpBase, maxIndex: () => strips.maxIndex, prefetchL2: (c) => lod.tile(2, c), stripSeconds: () => (gpu && gpu.strip_seconds) || undefined });
+  const timeline = new Timeline({ httpBase, maxIndex: () => strips.maxIndex, prefetchL2: (c) => lod.tile(2, c, true), stripSeconds: () => (gpu && gpu.strip_seconds) || undefined,
+    viewReady: () => renderer.coverage >= 1 || cam.zoom <= 0.3, lodPending: () => lod.pending() });
   const strips: StripStore = new StripStore({
     config: () => config, send, connected: () => connected, apiMissing: (a, b) => apiMissing(a, b),
     addStripScene: (i, sc) => timeline.addStripScene(i, sc),
