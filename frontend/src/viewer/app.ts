@@ -12,6 +12,7 @@ import { Motion } from "./motion";
 import { COARSE, Renderer } from "./renderer";
 import { StripStore } from "./strips";
 import { Timeline } from "./timeline";
+import { ZoomController } from "./zoom";
 
 type OdoEl = HTMLElement & { _odo?: { set(n: number): void } | null; _pre?: HTMLElement; _num?: HTMLElement; _post?: HTMLElement };
 interface Gesture { x0: number; y0: number; t0: number; moved: number; wasIdle: boolean; armed: boolean; touch?: boolean; dead?: boolean; scrub?: boolean; hist: Array<[number, number]> }
@@ -105,9 +106,14 @@ export function startViewer(): void {
   const renderer: Renderer = new Renderer({
     cam, strips, lod, motion, follower, connected: () => connected, saver, paintHeight: () => config.height,
     afterFrame: () => updateTimeline(),
+    beforeDraw: () => { if (zoom) zoom.step(); },
     hud: (speed, ahead) => updateHud(speed, ahead),
   });
   renderer.gestureHeld = () => gesture !== null;
+  // Zoom (branch preview only, behind ?zoom): ctrl/pinch-wheel zooms about the cursor, - / = / 0 keys.
+  const ZOOM = new URLSearchParams(location.search).has("zoom");
+  const zoom = ZOOM ? new ZoomController(cam, motion) : null;
+  if (zoom) (window.TapestryView as Record<string, unknown>).zoomTo = (z: number, cssX?: number) => zoom.zoomTo(z, cssX);
   const viewLeft = () => motion.viewLeft();
   const viewWorld = () => cam.viewWorld();
   const centerIdx = () => cam.centerIdx(viewLeft());
@@ -429,7 +435,7 @@ export function startViewer(): void {
   let mwEndT = 0;
   canvas.addEventListener("wheel", (ev) => {
     ev.preventDefault();
-    if (ev.ctrlKey) return;      // pinch-zoom gesture: ignore
+    if (ev.ctrlKey) { if (zoom) zoom.zoomBy(Math.exp(-ev.deltaY * 0.01), ev.clientX); return; }      // pinch-zoom gesture: ignored unless ?zoom
     const unit = ev.deltaMode === 1 ? 32 : ev.deltaMode === 2 ? innerHeight : 1;
     // Horizontal (trackpad swipe / shift+wheel) moves content with the fingers like a sideways page; vertical wheel down = back.
     const dx = ev.deltaX || (ev.shiftKey ? ev.deltaY : 0);
@@ -595,6 +601,9 @@ export function startViewer(): void {
     else if (e.key === "q" || e.key === "Q") toggleDrawer();
     else if (e.key === "e" || e.key === "E") toggleExport();
     else if (e.key === "Escape") { drawer.classList.remove("open"); pop.classList.add("hidden"); }
+    else if (zoom && (e.key === "-" || e.key === "_")) zoom.zoomBy(0.5);
+    else if (zoom && (e.key === "=" || e.key === "+")) zoom.zoomBy(2);
+    else if (zoom && e.key === "0") zoom.reset();
   });
 
   // ---------- export ----------

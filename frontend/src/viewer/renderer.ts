@@ -27,6 +27,8 @@ export interface RendererDeps {
   /** after each frame (captions / timeline pill) and every 0.5 s (HUD) */
   afterFrame: () => void;
   hud: (speed: number, ahead: number) => void;
+  /** after the camera springs, before drawing (zoom anchor) */
+  beforeDraw?: () => void;
 }
 
 export class Renderer {
@@ -156,6 +158,7 @@ export class Renderer {
       const b = document.body.classList;
       cam.step(dt, motion.viewLeft() - (live ? cam.nudge : 0) + cam.viewWorld() / 2, b.contains("immersive"), live || motion.panMode === "return");
     }
+    if (this.d.beforeDraw) this.d.beforeDraw();
     // During the load-in the view is hidden behind the loader (opacity 0 until it resolves): paint it every other frame.
     // (only halve it on fast displays: at a throttled ~30 fps every frame is needed or the hand-over stutters)
     if (!(document.body.classList.contains("intro") && cam.canvas.style.opacity === "" && dt < 0.02 && (this.frameK = this.frameK + 1) % 2)) this.draw();
