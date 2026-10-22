@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { readdirSync } from "node:fs";
 import { defineConfig } from "vite";
 
-const root = resolve(__dirname, "frontend");
+const root = resolve(import.meta.dirname, "frontend");
 const pages = Object.fromEntries(readdirSync(root).filter((f) => f.endsWith(".html")).map((f) => [f.slice(0, -5), resolve(root, f)]));
 const STABLE = new Set(["sb", "chrome"]);
 
@@ -15,7 +15,7 @@ export default defineConfig({
   root,
   publicDir: resolve(root, "public"),
   build: {
-    outDir: resolve(__dirname, "dist/site"),
+    outDir: resolve(import.meta.dirname, "dist/site"),
     emptyOutDir: true,
     target: "es2022",
     // CSS ships as written (no lowering/minify rewrites): the stylesheet is the visual spec.

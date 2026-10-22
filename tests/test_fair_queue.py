@@ -107,9 +107,9 @@ def test_low_fuel_banner_removed():
 
 
 def test_strip_scenes_insert_in_order_for_replay():
-    js = (ROOT / "frontend/src/legacy/client.js").read_text()
+    js = (ROOT / "frontend/src/viewer/timeline.ts").read_text()
     assert "older strip: /timeline backfill covers it" not in js
-    assert "tlScenes.splice(lo, 0," in js
+    assert "rows.splice(lo, 0," in js
 
 
 def test_busy_pick_round_robins_by_submitter():
