@@ -118,6 +118,7 @@ flowchart LR
 | `scripts/pod/` | Pod boot, release fetch, supervisor |
 | `scripts/ci/` | Secrets manifest and sync |
 | `scripts/ops/` | Operator tools (pod health, pod SSH) |
+| `scripts/dev/` | Developer tools (load-in frame-timing capture) |
 | `tests/` | `pytest` suite (CPU, mock backend, no network) |
 
 ## Running locally

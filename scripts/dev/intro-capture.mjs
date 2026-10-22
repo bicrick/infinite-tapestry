@@ -1,5 +1,5 @@
 // Load-in intro capture: frame timing (no recording) + a separate recorded pass.
-// Usage: node intro-capture.mjs <base-url> <out-dir>
+// Usage: node scripts/dev/intro-capture.mjs <base-url> <out-dir>
 // Env: CHROME (executable path), VERCEL_BYPASS (optional, for protected previews).
 // Needs playwright-core resolvable from the working directory.
 import fs from "node:fs";

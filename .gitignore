@@ -15,5 +15,4 @@ huggingface/
 web/node_modules/
 .env
 .data/
-ops-logs/
 node_modules/
