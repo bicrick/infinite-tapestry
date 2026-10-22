@@ -33,6 +33,18 @@ export function fmtTime(t: number | null | undefined, now: Date = new Date()): s
   return d.toDateString() === now.toDateString() ? hm : d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + hm;
 }
 
+/** View date line: "Today · 1:58 AM", "Yesterday · …", "Oct 21 · 1:58 AM", other years "Oct 21, 2025 · 1:58 AM" (viewer's local zone). */
+export function fmtWhen(t: number | null | undefined, now: Date = new Date()): string {
+  if (t == null || !Number.isFinite(t)) return "";
+  const d = new Date(t * 1000);
+  const hm = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86400000);
+  const date = diff === 0 ? "Today" : diff === 1 ? "Yesterday"
+    : d.toLocaleDateString([], d.getFullYear() === now.getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+  return date + " · " + hm;
+}
+
 // "Back to live" pill: how far back the view is.
 export function agoText(t: number | null, nowSec: number, fmt: (t: number) => string = (x) => fmtTime(x)): string {
   if (t == null) return "";

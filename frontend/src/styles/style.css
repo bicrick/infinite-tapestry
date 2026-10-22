@@ -1372,3 +1372,20 @@ body.gpu-off.away .dock .offline-pill { opacity: 0; transform: translate(-50%, 6
 body.gpu-off .dock .cmd { opacity: 0; transform: translateY(6px); pointer-events: none; visibility: hidden;
   transition: opacity .3s var(--ease), transform .3s var(--ease), visibility 0s linear .3s; }
 @media (max-width: 420px) { .dock .offline-pill { font-size: 12px; padding: 0 16px; } }
+
+/* ---------- view date line: when the strip at the view centre was painted, just above the title ---------- */
+/* Same family/tracking as the title, smaller and quieter; out of flow, so the title never moves. Supersedes the
+   old under-title history time (.amb-time), which showed the same thing in history only. */
+.amb-when { display: none; }
+@media all {
+  .amb-when { display: block; position: absolute; left: 0; right: 0; margin: 0 auto; width: max-content; max-width: calc(100vw - 48px);
+    top: calc(var(--band-top, 30vh) - 52px); text-align: center; font-size: 11px; line-height: 14px; letter-spacing: 0;
+    color: rgba(var(--ink),.34); font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+    transition: opacity .9s var(--ease), transform .9s var(--ease); }
+  .amb-when:empty { display: none; }
+  body.intro .amb-when { opacity: 0; transform: translateY(4px); }
+  body.loaded .amb-when { transition-delay: 2s; } body.loaded.settled .amb-when { transition-delay: 0s; }
+  .amb-time { display: none !important; }
+}
+body.saver .amb-when, body:has(.drawer.open) .amb-when { opacity: 0 !important; }
+@media (max-height: 760px) { body:has(.toast.show) .amb-when, body:has(.share-toast.show) .amb-when { opacity: 0 !important; } }

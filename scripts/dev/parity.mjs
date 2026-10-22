@@ -19,7 +19,7 @@ const SEED = `(() => { let s = 0x2545F491; Math.random = () => { s |= 0; s = (s 
 const PIN_REPLAY = `(() => { let f = null; Object.defineProperty(window, "TapestryReplayStart", { configurable: true,
   set(v) { f = v; }, get() { return f && ((m) => f(m, () => 0.37)); } }); })();`;
 const HIDE_PAINT = `#view, #intro, #refl, #amb-blobs, #past-veil, .off-bg { visibility: hidden !important; }
-  #top-clock, #now-time, #amb-time { visibility: hidden !important; }
+  #top-clock, #now-time, #amb-time, #amb-when { visibility: hidden !important; }   /* #amb-when: intentional new date line (additive) */
   *, *::before, *::after { caret-color: transparent !important; }`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

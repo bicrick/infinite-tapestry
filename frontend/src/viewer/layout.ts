@@ -17,3 +17,17 @@ export const bandTopFor = (h: number, bh: number, dpr: number): number =>
 /** Desktop ribbon: windowed, nudged up 3% to clear the dock; fullscreen: true vertical centre. */
 export const ribbonTop = (h: number, bh: number, ribbon: number, fullscreen: boolean): number =>
   (h * (1 - (fullscreen ? 0 : 0.06) * (1 - ribbon) / (1 - RIBBON)) - bh) / 2;
+
+/**
+ * Zoomed-out surround. The reflection/halo falloff is measured in band heights, so when the band shrinks with zoom it
+ * collapsed into a thin line. Measure it in a larger unit instead: reach (multiplier on the band height) grows
+ * smoothly as zoom decreases, so the halo keeps a substantial on-screen height around the smaller band, and the halo
+ * lifts gently. Exactly 1 at zoom >= 1 (pixel-identical default viewer).
+ *   zoom 0.5 -> reach 1.62, glow 1.17;  zoom 0.15 -> reach 3.77, glow 1.33
+ */
+export function surroundReach(zoom: number): number { return zoom >= 1 ? 1 : Math.pow(Math.max(zoom, 1e-3), -0.7); }
+export function surroundGlow(zoom: number): number {
+  if (zoom >= 1) return 1;
+  const t = Math.min(1, 1 - zoom), e = t * t * (3 - 2 * t);   // smoothstep: no jump leaving zoom 1
+  return 1 + 0.4 * e;
+}

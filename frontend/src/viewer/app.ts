@@ -3,7 +3,7 @@
 // now lives in its own modules (camera, live-follower, motion, renderer, strips, lod, timeline).
 import "../core/globals";
 import { DEFAULT_STREAM_CONFIG, stale, type ClientMsg, type Director, type GpuInfo, type LiveApi, type ServerMsg, type StreamConfig } from "../core/protocol";
-import { credit, esc, fmtTime, ideaTitle, srcLabel } from "../core/text";
+import { credit, esc, fmtTime, fmtWhen, ideaTitle, srcLabel } from "../core/text";
 import type { SubmitEvent2 } from "../chrome/forms";
 import { Camera } from "./camera";
 import { LiveFollower } from "./live-follower";
@@ -864,6 +864,21 @@ export function startViewer(): void {
   // If live goes quiet (no new strip for a minute, or the pod is unreachable), quietly replay from a random spot in history.
   let podDown = false, liveChecked = false, podPollAt = performance.now();   // /api/live says the GPU is off or the stream is stale: calm "replay", not "reconnecting"
   let replayAt = 0, wsConfigSeen = false, replay = false, lastFreshAt = performance.now(), downSince = 0, replayBusy = false;
+
+  // ---------- view date line (#amb-when, above the title): when the strip at the view centre was painted ----------
+  // Polled 4x/s (no per-frame DOM work); the DOM is only touched when the text changes.
+  {
+    const whenEl = document.getElementById("amb-when");
+    let whenTxt = "";
+    const updateWhen = () => {
+      if (!whenEl || document.hidden) return;
+      let t = strips.maxIndex >= 0 ? timeline.whenAt(Math.max(0, Math.min(strips.maxIndex, Math.round(centerIdx())))) : null;
+      if (t == null && motion.live && !replay && connected) t = Date.now() / 1000;   // following live with no index yet: live time
+      const txt = fmtWhen(t);
+      if (txt !== whenTxt) { whenTxt = txt; whenEl.textContent = txt; }
+    };
+    window.setInterval(updateWhen, 250);
+  }
   const apiReq = new Set<number>();
   function apiMissing(a: number, b: number) {
     a = Math.max(0, a); b = Math.min(b, strips.maxIndex);

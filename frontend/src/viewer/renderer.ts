@@ -7,6 +7,7 @@ import { LOD_N, lodCovers, lodLevelForZoom, type LodStore } from "./lod";
 import type { Motion } from "./motion";
 import type { LiveFollower } from "./live-follower";
 import type { Reflection, SurroundView } from "./reflection";
+import { surroundGlow, surroundReach } from "./layout";
 
 declare global {
   interface Window { __probe?: number[]; __ov?: number[]; __dx?: number; __nolod?: boolean; __noblur?: boolean }
@@ -107,7 +108,12 @@ export class Renderer {
     ctx.fillRect(0, 0, w, yOff); ctx.fillRect(0, yOff + bandH, w, h - yOff - bandH);
     const a = (Math.round(this.surroundA * 20) / 20).toFixed(2);
     if (a !== this.surroundAStr) { this.surroundAStr = a; document.documentElement.style.setProperty("--amb-a", a); }
-    if (this.refl && this.surroundV) this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA);
+    if (this.refl && this.surroundV) {
+      const z = this.d.cam.zoom;   // zoomed out: keep the halo/reflection large around the smaller band
+      if (z >= 1) this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA);
+      // reach never needs to exceed ~0.42 of the screen height (the halo already fills the surround there)
+      else this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA, Math.min(bandH * surroundReach(z), Math.max(bandH, h * 0.42)), surroundGlow(z));
+    }
   }
 
   private lodCovers(x0: number, x1: number): boolean { return lodCovers(this.lodSpans, x0, x1); }

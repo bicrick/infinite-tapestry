@@ -39,6 +39,17 @@ export function timeAt(points: Array<[number, number]>, idx: number, stripSecond
   return tl + (idx - il) * (stripSeconds ? stripSeconds : 2);
 }
 
+/** /api/about?kind=history -> sorted [stripIndex, unixSeconds] samples. */
+export function historyPoints(j: { days?: Array<{ b?: number; t1?: string; times?: Array<[number, string]> }> } | null | undefined): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  for (const d of (j && j.days) || []) {
+    for (const [i, iso] of d.times || []) { const t = Date.parse(iso) / 1000; if (Number.isFinite(t)) out.push([i, t]); }
+    if (typeof d.b === "number" && d.t1) { const t = Date.parse(d.t1) / 1000; if (Number.isFinite(t)) out.push([d.b, t]); }
+  }
+  out.sort((a, b) => a[0] - b[0]);
+  return out.filter((p, k) => k === 0 || p[0] !== out[k - 1][0]);
+}
+
 export interface TimelineDeps { httpBase: () => string; maxIndex: () => number; prefetchL2: (c: number) => void; stripSeconds: () => number | undefined }
 
 export class Timeline {
@@ -52,6 +63,19 @@ export class Timeline {
   sceneAt(idx: number): SceneRow | null { return sceneAt(this.scenes, idx); }
   addStripScene(i: number, sc: SceneTuple | null | undefined): void { addStripScene(this.scenes, i, sc); }
   timeAt(idx: number): number | null { return timeAt(this.points, idx, this.d.stripSeconds()); }
+  /** When strip idx was painted (unix s), for the view date line: the pod's points, else the public history index
+   *  (/api/about?kind=history, one sample per 64 strips) so it also works with the GPU off. timeAt() is unchanged. */
+  whenAt(idx: number): number | null { return timeAt(this.points.length ? this.points : this.histPoints, idx, this.d.stripSeconds()); }
+  histPoints: Array<[number, number]> = [];
+  private histAt = 0;
+  private async loadHistPoints(): Promise<void> {
+    if (this.points.length || Date.now() - this.histAt < 10 * 60000) return;
+    this.histAt = Date.now();
+    try {
+      const r = await fetch("/api/about?kind=history"); if (!r.ok) return;
+      this.histPoints = historyPoints(await r.json());
+    } catch (_) { /* offline: no date line */ }
+  }
 
   // One timer, ever: wait for the load-in, skip hidden tabs, refresh every 60 s, refetch on becoming visible if stale.
   readonly refresh = async (): Promise<void> => {
@@ -61,6 +85,7 @@ export class Timeline {
     this.busy = true;
     try { const r = await fetch(this.d.httpBase() + "/timeline?points=300"); const j = await r.json(); this.points = j.points || []; this.scenes = j.scenes || this.scenes; this.at = Date.now(); } catch (_) { /* pod off */ }
     this.busy = false;
+    void this.loadHistPoints();
     // the whole history at 1/16 is small: prefetch it so flights never hit an empty frame
     for (let c = 0; (c + 1) * LOD_N[2] <= this.d.maxIndex() && c < 300; c++) this.d.prefetchL2(c);   // cached; only new tiles load
     this.timer = window.setTimeout(this.refresh, 60000);

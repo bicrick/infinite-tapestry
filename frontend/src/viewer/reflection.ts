@@ -9,7 +9,9 @@
 
 /** What the surround layers need from the last frame. */
 export interface SurroundView { left: number; ww: number; fi: number; li: number; cov: number; lod: boolean; fading: number }
-export interface Reflection { frame(v: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number): void; off(): void }
+/** reach: device px the mirror/halo falloff is measured in (default bandH); glowK: halo strength multiplier (default 1).
+ *  Both are only changed when zoomed out (see layout surroundReach/surroundGlow); the defaults are the original look. */
+export interface Reflection { frame(v: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number, reach?: number, glowK?: number): void; off(): void }
 export interface ReflectionOpts { surr: () => string; coarse: () => boolean }
 
 declare global { interface Window { TapestryReflection?: { create(canvas: HTMLCanvasElement, opts: ReflectionOpts): Reflection | null } } }
@@ -69,11 +71,11 @@ void main(){
   document.documentElement.classList.add("refl-gl");
   let hasTex = false, key = "", motion = 0, lastLeft: number | null = null, cleared = true;
   return {
-    frame(V: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number) {
+    frame(V: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number, reach = bandH, glowK = 1) {
       const now = performance.now();
       if (lastLeft !== null) motion = Math.max(motion * 0.96, Math.min(1, Math.abs(V.left - lastLeft) / 40));
       lastLeft = V.left;
-      const k = (V.left * 8 | 0) + ":" + Math.round(yOff) + ":" + Math.round(bandH) + ":" + a.toFixed(2) + ":" + w + "x" + h + ":" + opts.surr() + ":" + V.cov.toFixed(3) + ":" + V.fading;
+      const k = (V.left * 8 | 0) + ":" + Math.round(yOff) + ":" + Math.round(bandH) + ":" + Math.round(reach) + ":" + a.toFixed(2) + ":" + w + "x" + h + ":" + opts.surr() + ":" + V.cov.toFixed(3) + ":" + V.fading;
       if (k === key && motion < 0.01) return;   // idle: zero work; any change: same-frame redraw
       const div = opts.coarse() || innerWidth <= 560 ? 6 : 4, W = Math.max(1, Math.round(w / div)), H = Math.max(1, Math.round(h / div));
       if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
@@ -91,10 +93,10 @@ void main(){
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src); gl.generateMipmap(gl.TEXTURE_2D); hasTex = true;
         }
       }
-      gl.uniform2f(U.band, yOff / h, (yOff + bandH) / h); gl.uniform1f(U.bandH, bandH / h);
+      gl.uniform2f(U.band, yOff / h, (yOff + bandH) / h); gl.uniform1f(U.bandH, reach / h);   // falloff + mirror unit (== bandH at zoom 1)
       gl.uniform1f(U.t, now / 1000); gl.uniform1f(U.amp, motion); gl.uniform1f(U.alpha, a); const lt = opts.surr()[0] === "2";
       gl.uniform1f(U.aBelow, VAR[0]); gl.uniform1f(U.aAbove, VAR[1]); gl.uniform1f(U.fade, VAR[2]); gl.uniform1f(U.gain, lt ? 1 + (VAR[3] - 1) * .5 : VAR[3]);
-      gl.uniform1f(U.sat, VAR[4]); gl.uniform1f(U.glow, VAR[5]); gl.uniform1f(U.light, lt ? 1 : 0);
+      gl.uniform1f(U.sat, VAR[4]); gl.uniform1f(U.glow, VAR[5] * glowK); gl.uniform1f(U.light, lt ? 1 : 0);
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3); cleared = false;
     },
     off() { if (cleared) return; cleared = true; key = ""; gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); },
