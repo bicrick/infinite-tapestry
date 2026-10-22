@@ -403,15 +403,21 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     t.used = performance.now();
     return t.ok ? t.img : null;
   }
+  // World-x spans the LOD layer actually painted this frame: a strip only crossfades where it has an underlay.
+  const lodSpans = [];
+  function lodCovers(x0, x1) {
+    for (const [a, b] of lodSpans) { if (a > x0) return false; if (b > x0) { x0 = b; if (x0 >= x1) return true; } }
+    return false;
+  }
   function drawLodChunk(level, c, left) {
     const tw = LOD_N[level] * SW();
     const img = lodTile(level, c);
-    if (img) { ctx.drawImage(img, c * tw - left, 0, tw, config.height); return; }
+    if (img) { ctx.drawImage(img, c * tw - left, 0, tw, config.height); lodSpans.push([c * tw, (c + 1) * tw]); return; }
     // Gap: the L2 overview is prefetched for all history, so slice it (blurry beats blank);
     // from L3 also try finer tiles (needed at the still-filling live edge).
     if (level !== 2) {
       const p = LOD_N[2], cc = Math.floor(c * LOD_N[level] / p), t2 = lodTile(2, cc);
-      if (t2 && level === 1) { const part = t2.width / 4; ctx.drawImage(t2, (c % 4) * part, 0, part, t2.height, c * tw - left, 0, tw, config.height); return; }
+      if (t2 && level === 1) { const part = t2.width / 4; ctx.drawImage(t2, (c % 4) * part, 0, part, t2.height, c * tw - left, 0, tw, config.height); lodSpans.push([c * tw, (c + 1) * tw]); return; }
     }
     if (level > 1) for (let k = 0; k < 4; k++) drawLodChunk(level - 1, c * 4 + k, left);   // finer tiles fill the gap
   }
@@ -422,6 +428,9 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     if (!thumbCv) { thumbCv = document.createElement("canvas"); thumbCv.width = 8; thumbCv.height = 24; thumbCtx = thumbCv.getContext("2d", { willReadFrequently: true }); }
     try { thumbCtx.drawImage(e.bitmap, e.overlap || 0, 0, SW(), config.height, 0, 0, 8, 24); e.th = thumbCtx.getImageData(0, 0, 8, 24).data; } catch (_) { e.th = null; }
     return e.th;
+  }
+  function prefetchLod(idx) {   // L1 + L2 tiles around a strip index (a seek / flight / coast landing): the underlay is in before the strips
+    for (let L = 1; L <= 2; L++) { const c = Math.floor(idx / LOD_N[L]); for (let k = -1; k <= 1; k++) if (c + k >= 0) lodTile(L, c + k); }
   }
   function drawLod(left, span, z) {
     const level = z > 0.55 ? 1 : z > 0.14 ? 2 : 3;
@@ -710,7 +719,10 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     ctx.translate(0, yOff);
     ctx.scale(s, s);
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet.
-    const lodOn = !window.__nolod && (zoom < 0.97 || fast || coverage < 1); let fading = 0;
+    // Kept on while any strip is still crossfading: dropping it the frame coverage hit 1 faded those strips over the bare
+    // background (pale washed-out columns and background-colour gaps during load-in and replay).
+    const lodOn = !window.__nolod && (zoom < 0.97 || fast || coverage < 1 || draw.fading > 0); let fading = 0;
+    lodSpans.length = 0;
     if (lodOn) drawLod(left, w / s, zoom);   // LOD underlay until strips are in (never blank)
     {
       let want = 0, have = 0;
@@ -722,13 +734,16 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
         if (!fast) ensureDecoded(e);
         if (!e.bitmap) continue;
         have++;
-        if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) ? performance.now() : -1e9;
-        const fa = Math.min(1, (performance.now() - e.seenAt) / 1000);                                      // then crossfade it in over ~1 s
+        // Crossfade a newly visible strip over its LOD underlay (~1 s); with no underlay painted it is drawn opaque at once.
+        if (e.seenAt == null) e.seenAt = (i * SW() - e.overlap < left + w / s) && lodCovers(i * SW() - e.overlap, (i + 1) * SW()) ? performance.now() : -1e9;
+        let fa = Math.min(1, (performance.now() - e.seenAt) / 1000);
+        if (fa < 1 && !lodCovers(i * SW() - e.overlap, (i + 1) * SW())) { e.seenAt = -1e9; fa = 1; }   // underlay gone (evicted / zoom change): finish now
         if (fa < 1) { ctx.globalAlpha = fa * fa * (3 - 2 * fa); fading = (fa * 20 | 0) + 1; }
         ctx.drawImage(e.bitmap, i * SW() - e.overlap - left, 0);   // no live-edge clip: the old particle-era clip hid the next strip's inpaint band until it popped in
         ctx.globalAlpha = 1;
       }
       coverage = want ? have / want : 0;
+      draw.fading = fading;
     }
     if (mark) {
       const age = (performance.now() - mark.t0) / 1000;
@@ -860,6 +875,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
     const target = Math.max(0, from * SW() - Math.max(0, (viewWorld() - span) / 2));
     seek = { from: shownPan(), to: target, t0: performance.now(), dur: Math.min(2200, 600 + Math.sqrt(Math.abs(target - shownPan())) * 12) };
     panMode = "seek"; panVel = 0;
+    prefetchLod((target + viewWorld() / 2) / SW());
     mark = { from, to, t0: performance.now() + seek.dur * 0.6 };
   }
   let pendingSeek = null;
@@ -930,7 +946,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       const land = (panPos + panVel * 0.6 + viewWorld() / 2) / SW();
       const a0 = Math.max(0, Math.floor(land) - 8), b0 = Math.min(maxIndex, Math.ceil(land) + 8);
       if (b0 >= a0) requestMissing(a0, b0);
-      for (let L = 1; L <= 2; L++) { const c = Math.floor(land / LOD_N[L]); for (let k = -1; k <= 1; k++) if (c + k >= 0) lodTile(L, c + k); }
+      prefetchLod(land);
     }
   }
   window.addEventListener("keydown", (e) => {
@@ -979,7 +995,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
           const land = (panPos + panVel / 2.0 + viewWorld() / 2) / SW();
           const a = Math.max(0, Math.floor(land) - 8), b = Math.min(maxIndex, Math.ceil(land) + 8);
           if (b >= a) requestMissing(a, b);
-          for (let L = 1; L <= 2; L++) { const c = Math.floor(land / LOD_N[L]); for (let d = -1; d <= 1; d++) if (c + d >= 0) lodTile(L, c + d); }
+          prefetchLod(land);
         }
         panPos += panVel * dt;
         if (Math.abs(panVel) < 4) { panVel = 0; wheelGlide = false; }
@@ -1676,6 +1692,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
         panPos = Math.max(0, start * SW() - viewWorld() / 2); panVel = 0; panMode = "glide";
         lastFreshAt = performance.now() - 61000;
         apiMissing(start - 12, start + 12);   // on-screen refs first (the bootstrap only carries the newest 240)
+        prefetchLod(start);
       }
       if (it.length) onStripRef(it[it.length - 1], false);   // newest first: the live view initialises at the real edge
       it.forEach((r) => onStripRef(r, false));
@@ -1701,6 +1718,7 @@ if (chatIn) chatIn.addEventListener("keydown", (e) => { if (e.key === "Enter" &&
       enterHistory(); setAway(false);
       panPos = Math.max(0, start * SW() - viewWorld() / 2); panVel = 0; panMode = "glide";
     });
+    prefetchLod(start);
   }
   function endReplay() {
     if (!replay || replayBusy) return;
