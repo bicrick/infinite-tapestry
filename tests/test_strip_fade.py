@@ -31,6 +31,7 @@ def test_every_lod_draw_records_its_span():
 
 def test_jumps_prefetch_the_underlay():
     # seek, flight + coast (prefetchLanding), replay start (load + loop)
-    assert "this.d.lod.prefetch((target + vw / 2) / SW)" in MOTION
+    # seek prefetches the overview tile under the landing centre (viewCenter() == viewWorld()/2 at zoom 1)
+    assert "this.d.lod.prefetch((target + cam.viewCenter()) / SW)" in MOTION
     assert MOTION.count("this.prefetchLanding(") == 2 and "this.d.lod.prefetch(land)" in MOTION
     assert APP.count("lod.prefetch(start)") == 2
