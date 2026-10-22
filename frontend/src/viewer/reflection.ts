@@ -34,7 +34,7 @@ in vec2 p; out vec2 uv; void main(){ uv = p * .5 + .5; uv.y = 1. - uv.y; gl_Posi
   gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `#version 300 es
 precision mediump float; in vec2 uv; out vec4 o;
 uniform sampler2D tex; uniform vec2 band; uniform float bandH, t, amp, alpha, aspect; uniform vec3 bg;
-uniform float aBelow, aAbove, fade, gain, sat, glow, light;
+uniform float aBelow, aAbove, fade, gain, sat, glow, light, soft;
 vec3 tap(vec2 q, float lod){ return textureLod(tex, q, lod).rgb; }
 void main(){
   float top = band.x, bot = band.y; float d; float y;
@@ -54,8 +54,9 @@ void main(){
   c = clamp(mix(vec3(dot(c, vec3(.2126, .7152, .0722))), c, sat), 0., 1.);
   vec3 bloom = tap(vec2(x, .5), 6.5); bloom = mix(vec3(dot(bloom, vec3(.33))), bloom, sat) * gain;
   float f = exp(-dn * 3.) * smoothstep(0., .012, d + .006);   // starts right at the band edge
-  float k = f * (uv.y > bot ? aBelow : aAbove) * alpha;
-  float g = glow * exp(-dn * 1.8) * (uv.y > bot ? 1. : .6) * alpha * .35;
+  float edge = mix(1., 1. - smoothstep(.55, 1.15, dn), soft);         // zoomed out: no visible cut-off (soft = 0 at zoom 1)
+  float k = f * (uv.y > bot ? aBelow : aAbove) * alpha * edge;
+  float g = glow * exp(-dn * 1.8) * (uv.y > bot ? 1. : .6) * alpha * .35 * edge;
   o = vec4(c * k + bloom * g, k + g * light);                            // premultiplied; glow is additive on dark
 }`));
   gl.linkProgram(pr); gl.useProgram(pr);
@@ -63,7 +64,7 @@ void main(){
   const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   const lp = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
-  const U: Record<string, WebGLUniformLocation | null> = {}; for (const n of ["band", "bandH", "t", "amp", "alpha", "bg", "aBelow", "aAbove", "fade", "gain", "sat", "glow", "light"]) U[n] = gl.getUniformLocation(pr, n);
+  const U: Record<string, WebGLUniformLocation | null> = {}; for (const n of ["band", "bandH", "t", "amp", "alpha", "bg", "aBelow", "aAbove", "fade", "gain", "sat", "glow", "light", "soft"]) U[n] = gl.getUniformLocation(pr, n);
   const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -96,7 +97,7 @@ void main(){
       gl.uniform2f(U.band, yOff / h, (yOff + bandH) / h); gl.uniform1f(U.bandH, reach / h);   // falloff + mirror unit (== bandH at zoom 1)
       gl.uniform1f(U.t, now / 1000); gl.uniform1f(U.amp, motion); gl.uniform1f(U.alpha, a); const lt = opts.surr()[0] === "2";
       gl.uniform1f(U.aBelow, VAR[0]); gl.uniform1f(U.aAbove, VAR[1]); gl.uniform1f(U.fade, VAR[2]); gl.uniform1f(U.gain, lt ? 1 + (VAR[3] - 1) * .5 : VAR[3]);
-      gl.uniform1f(U.sat, VAR[4]); gl.uniform1f(U.glow, VAR[5] * glowK); gl.uniform1f(U.light, lt ? 1 : 0);
+      gl.uniform1f(U.sat, VAR[4]); gl.uniform1f(U.glow, VAR[5] * glowK); gl.uniform1f(U.soft, reach > bandH ? Math.min(1, (reach / Math.max(1, bandH) - 1) * 4) : 0); gl.uniform1f(U.light, lt ? 1 : 0);
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3); cleared = false;
     },
     off() { if (cleared) return; cleared = true; key = ""; gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); },

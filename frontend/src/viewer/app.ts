@@ -123,7 +123,12 @@ export function startViewer(): void {
 
   // For the load-in: lets intro.js anchor its points to the same moving world as the canvas.
   window.TapestryView = { portrait: () => cam.portrait(), band: () => cam.band(), drawScale: () => cam.drawScale(), setSurround: (a: number) => { renderer.setSurround(a); }, left: () => viewLeft(), scale: () => cam.scale(), ready: () => strips.maxIndex >= 0, coverage: () => renderer.coverage, zoom: () => cam.zoom, canvas, center: () => centerIdx(), max: () => strips.maxIndex, live: () => motion.panMode === "live" };
-  if (zoom) (window.TapestryView as Record<string, unknown>).zoomTo = (z: number, cssX?: number) => zoom.zoomTo(z, cssX);
+  if (zoom) Object.assign(window.TapestryView as Record<string, unknown>, {
+    zoomTo: (z: number, cssX?: number) => zoom.zoomTo(z, cssX),
+    /** ?zoom only (tests): world x / CSS px per world px of the last drawn frame */
+    worldAt: (cssX: number) => cam.screenToWorld(cssX).x,
+    cssPerWorld: () => (cam.last ? cam.last.s : 0) / (canvas.width / Math.max(1, canvas.clientWidth)),
+  });
 
   // ---------- shared timeline clock ----------
   let viewers = 1;
