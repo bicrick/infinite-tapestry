@@ -10,7 +10,7 @@ source of truth: a lost machine is replaced by cloning and pushing.
 | Site + API (`frontend/`, `web/api`, `web/lib`) | Vercel project `infinite-tapestry-app` | CI on every push to `main` |
 | GPU worker (`infinite_tapestry/`, `scripts/pod/`) | RunPod pod (id in Supabase `pod_state.pod_id`) | CI publishes a release, the pod follows it |
 | Database (ideas, strips index, pod_state, auto_config, …) | Supabase Postgres, schema in `supabase/migrations/` | by hand (SQL editor / `supabase db push`) |
-| Images (strips, Time Machine tiles, canvas, crops) | Cloudflare R2 bucket (`R2_BUCKET`), public via `R2_PUBLIC_URL` | written by the pod and the Vercel cron |
+| Images (strips, Time Machine tiles, canvas, crops) | Cloudflare R2 bucket (`R2_BUCKET`), public via `R2_PUBLIC_URL` (custom domain `https://img.infinitetapestry.app`; the r2.dev URL stays enabled) | written by the pod and the Vercel cron |
 | Small private objects | Supabase Storage: `deploy/worker/*` (releases), `deploy/secrets/r2.env`, `tapestry/tm/idx` (TM JSON index), `idea-refs` (user uploads) | CI / app |
 
 Scheduled jobs: Vercel cron `/api/tm` every 5 min (Time Machine index + tiles), Supabase pg_cron → `/api/controller`

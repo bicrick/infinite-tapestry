@@ -1,6 +1,6 @@
 // Where viewers load strip and LOD images: the public R2 bucket, always. R2 is the only binary store
 // (the pod uploads every strip, tile and canvas there; Supabase Storage holds no strips any more).
-const R2_PUBLIC_DEFAULT = "https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev";
+const R2_PUBLIC_DEFAULT = "https://img.infinitetapestry.app";
 const SESSION = "live-sdxl";   // the SDXL pod's storage prefix (strips rows, R2 keys)
 
 function session() {

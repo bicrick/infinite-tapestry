@@ -10,7 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
 SB = "https://proj.supabase.co"
-R2 = "https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev"
+R2 = "https://img.infinitetapestry.app"
 
 
 def node(script, env=None):
@@ -49,6 +49,7 @@ def test_live_handler_delegates_bases():
     src = (ROOT / "web/api/live.js").read_text()
     assert "stripBases()" in src
     assert "pub-631bdb4d40c54807b1c2de9402e07893" not in src
+    assert "img.infinitetapestry.app" not in src
 
 
 def _build(out, extra):

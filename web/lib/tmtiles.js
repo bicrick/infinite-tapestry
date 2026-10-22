@@ -7,7 +7,7 @@
 // rewrites the same bytes). Work is time-boxed per invocation.
 const sharp = require("sharp");
 const { getJSON, putObj, putJSON } = require("./tmbuild");
-const R2 = () => (process.env.R2_PUBLIC_URL || "https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev").replace(/\/$/, "");
+const R2 = () => (process.env.R2_PUBLIC_URL || "https://img.infinitetapestry.app").replace(/\/$/, "");
 const UPT = { 1: 16 }; for (let l = 2; l <= 7; l++) UPT[l] = UPT[l - 1] * 4;
 const TW = 1024, UW = 64, LMAX = 7, MAN = "tm/lod2/manifest.json", WEBP_FROM = 6598;
 const key = (l, t) => `tm/lod2/${l}/${String(t).padStart(6, "0")}.webp`;

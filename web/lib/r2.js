@@ -5,7 +5,7 @@
 //   r2Put(key, body, ct)  signed S3 PUT (SigV4, no SDK) using R2_ENDPOINT/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY
 //   readFirst(keys...)    first hit among [R2 key, Supabase fallback] fetchers
 const crypto = require("crypto");
-const PUBLIC_DEFAULT = "https://pub-631bdb4d40c54807b1c2de9402e07893.r2.dev";
+const PUBLIC_DEFAULT = "https://img.infinitetapestry.app";
 const e = (k, d = "") => (process.env[k] == null || process.env[k] === "" ? d : process.env[k]);
 const r2Url = (key) => `${e("R2_PUBLIC_URL", PUBLIC_DEFAULT).replace(/\/$/, "")}/${key.replace(/^\//, "")}`;
 const writeReady = () => ["R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"].every((k) => e(k));
