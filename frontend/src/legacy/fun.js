@@ -165,7 +165,7 @@ setInterval(async () => {
 
 async function makeClip() {
   if (frames.length < 5) throw new Error("warming up");
-  const { GIFEncoder, quantize, applyPalette } = await import("./lib/gifenc.js");
+  const { GIFEncoder, quantize, applyPalette } = await import("./gifenc.js");
   const snap = frames.slice();
   const w = snap[0].width, h = snap[0].height;
   const c = document.createElement("canvas"); c.width = w; c.height = h;

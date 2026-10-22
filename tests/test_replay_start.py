@@ -1,4 +1,4 @@
-"""Replay (GPU off) starts at a uniformly random spot across the whole history: static/replay.js."""
+"""Replay (GPU off) starts at a uniformly random spot across the whole history: frontend/src/legacy/replay.js."""
 import json
 import shutil
 import subprocess
@@ -17,7 +17,9 @@ def _node(script: str):
 @pytest.mark.skipif(not shutil.which("node"), reason="node not installed")
 def test_random_start_spans_history_with_runway_and_skips_lost_span():
     out = _node("""
-      const { replayStart, RUNWAY, LOST } = require('./static/replay.js');
+      const m = { exports: {} };
+      new Function('module', require('fs').readFileSync('./frontend/src/legacy/replay.js', 'utf8'))(m);
+      const { replayStart, RUNWAY, LOST } = m.exports;
       const max = 115418, xs = [];
       for (let i = 0; i < 20000; i++) xs.push(replayStart(max));
       const ends = [0, 1 - 1e-12].map((u) => replayStart(max, () => u));
@@ -37,8 +39,8 @@ def test_random_start_spans_history_with_runway_and_skips_lost_span():
 
 
 def test_client_uses_random_start_for_boot_and_loop():
-    client = (ROOT / "static/client.js").read_text()
+    client = (ROOT / "frontend/src/legacy/client.js").read_text()
     assert client.count("window.TapestryReplayStart(") == 2
     assert "90 + Math.floor(Math.random() * 120)" not in client
-    html = (ROOT / "static/index.html").read_text()
-    assert html.index('src="replay.js"') < html.index('src="client.js"')
+    main = (ROOT / "frontend/src/entries/main.ts").read_text()
+    assert main.index('legacy/replay.js"') < main.index('legacy/client.js"')

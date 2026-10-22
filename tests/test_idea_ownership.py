@@ -3,8 +3,8 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CSS = (ROOT / "static/style.css").read_text()
-SOCIAL = (ROOT / "static/social.js").read_text()
+CSS = (ROOT / "frontend/src/styles/style.css").read_text()
+SOCIAL = (ROOT / "frontend/src/legacy/social.js").read_text()
 
 
 def test_no_css_badge_keyed_on_audience_origin():

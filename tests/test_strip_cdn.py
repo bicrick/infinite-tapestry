@@ -35,7 +35,7 @@ def test_strips_always_load_from_r2():
 
 
 def test_client_has_no_supabase_strip_fallback():
-    src = (ROOT / "static/client.js").read_text()
+    src = (ROOT / "frontend/src/legacy/client.js").read_text()
     assert "strip_base_fb" not in src and "stripCdn" not in src and "cdnBase" not in src
 
 
@@ -65,12 +65,12 @@ def test_build_has_no_strip_cdn_switch(tmp_path):
 def test_live_reports_pod_heartbeat():
     src = (ROOT / "web/api/live.js").read_text()
     assert "ops_heartbeat" in src and "heartbeat_at" in src
-    client = (ROOT / "static/client.js").read_text()
+    client = (ROOT / "frontend/src/legacy/client.js").read_text()
     assert "j.heartbeat_at" in client
 
 
 def test_client_stream_hardening():
-    src = (ROOT / "static/client.js").read_text()
+    src = (ROOT / "frontend/src/legacy/client.js").read_text()
     assert "v=2&bytes=1" in src                     # live strip bytes on the socket
     assert "SW() * 6) livePos = projected" not in src   # no 6-strip snap
     assert "livePos = null;\n" not in src.split("ws.onopen")[1].split("ws.onmessage")[0]   # kept on reconnect

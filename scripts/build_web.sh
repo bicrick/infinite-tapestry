@@ -10,7 +10,9 @@ if [ -n "${REQUIRE_SUPABASE:-}" ] && { [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUP
   exit 1
 fi
 rm -rf "$OUT" && mkdir -p "$OUT"
-cp -r "$ROOT"/static/* "$OUT"/
+# Frontend: Vite + TypeScript (frontend/) -> hashed bundles in $OUT/assets, public files at the root.
+[ -d "$ROOT/node_modules" ] || (cd "$ROOT" && npm ci --no-audit --no-fund)
+(cd "$ROOT" && npx vite build --logLevel warn --outDir "$OUT")
 cp -r "$ROOT"/web/api "$ROOT"/web/lib "$ROOT"/web/package.json "$ROOT"/web/vercel.json "$OUT"/
 [ -f "$ROOT"/web/middleware.js ] && cp "$ROOT"/web/middleware.js "$OUT"/
 # Default matches the live 4090 burn rate; override with TAPESTRY_CENTS_PER_HOUR.
@@ -25,7 +27,7 @@ window.TAPESTRY_CONFIG = {
 };
 CFG
 # Shared header/footer partials (web/lib/chrome.js) into every static page.
-node "$ROOT/scripts/inject_chrome.js" "$OUT"
+node "$ROOT/scripts/inject_chrome.cjs" "$OUT"
 # Facebook/LinkedIn/iMessage need absolute og/twitter image URLs.
 SITE="${SITE_URL:-https://infinite-tapestry.vercel.app}"
 SITE="${SITE%/}"
@@ -38,7 +40,7 @@ done
 if [ -f "$OUT/index.html" ] && ! grep -q 'property="og:url"' "$OUT/index.html"; then
   sed -i "s|<meta property=\"og:type\" content=\"website\" />|<meta property=\"og:type\" content=\"website\" />\n  <meta property=\"og:url\" content=\"${SITE}/\" />|" "$OUT/index.html"
 fi
-# Cache-bust local scripts/styles per build so no browser keeps an old loader/client.
+# Cache-bust the unhashed root scripts/styles (theme.js, config.js, chrome.*) per build; /assets/* are content-hashed.
 VER=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || date +%s)-$(date +%s)
 if [ -n "${CRITICAL_BUILD:-}" ]; then printf '{"id":"%s","critical":true}\n' "$VER" > "$OUT/build.json"; else printf '{"id":"%s"}\n' "$VER" > "$OUT/build.json"; fi
 sed -i "s|^window.TAPESTRY_CONFIG = {|window.TAPESTRY_CONFIG = {\n  buildId: \"${VER}\",|" "$OUT/config.js"

@@ -4,7 +4,7 @@ import re
 import subprocess
 from pathlib import Path
 
-JS = (Path(__file__).resolve().parents[1] / "static/client.js").read_text()
+JS = (Path(__file__).resolve().parents[1] / "frontend/src/legacy/client.js").read_text()
 
 
 def _lod_covers(spans, x0, x1):

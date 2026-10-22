@@ -1,6 +1,6 @@
 // Shared header account: same Supabase session as the live site. Signed in -> @handle (profile) + Sign out; else Sign in.
 // The signed-in hint is applied before paint by theme.js (html.signed), so nothing pops in.
-import { client } from "/sb.js";
+import { client } from "./sb.js";
 const $ = (id) => document.getElementById(id);
 const show = (handle, signed) => {
   if (!$("acct-in")) return;

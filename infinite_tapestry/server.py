@@ -25,7 +25,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+# Local dev only (Vercel serves the site): the built frontend (`npm run build` -> dist/site), if present.
+STATIC_DIR = Path(os.environ.get("TAPESTRY_STATIC_DIR") or Path(__file__).resolve().parent.parent / "dist" / "site")
 
 # Binary frame: magic(4) + index(u32) + width(u16) + height(u16) + overlap(u16)
 # + prompt_len(u16) + prompt_utf8 + jpeg_bytes

@@ -26,7 +26,7 @@ let sb = null, token = null, data = null, filter = "all";
 async function auth() {
   if (!(CFG.supabaseUrl && CFG.supabaseAnonKey)) return;
   try {
-    sb = await (await import("/sb.js")).client();
+    sb = await (await import("./sb.js")).client();
     const { data: s } = await sb.auth.getSession();
     token = s.session && s.session.access_token;
   } catch (_) {}

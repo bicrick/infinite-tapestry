@@ -188,7 +188,7 @@ void main(){
   let lo = 0, hi = 1, loT = 0, hiT = 1, levelsAt = -1e9, leveled = false, lvBusy = false;
   if (window.Worker && window.OffscreenCanvas && window.createImageBitmap) {
     try {
-      lvWorker = new Worker("/intro-levels.js");
+      lvWorker = new Worker(new URL("./intro-levels.js", import.meta.url));
       lvWorker.onmessage = (e) => {
         lvBusy = false;
         loT = e.data[0]; hiT = e.data[1];

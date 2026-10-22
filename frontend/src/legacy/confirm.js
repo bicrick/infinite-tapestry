@@ -1,7 +1,7 @@
 // /auth/confirm — lands email links on our own domain.
 // Handles: ?token_hash=&type= (branded template) · #access_token (default template, any browser) ·
 // ?code= (legacy PKCE links) · #error_code=otp_expired etc. → one-tap resend.
-import { client, lastEmail, rememberEmail, AUTH_ERR } from "/sb.js";
+import { client, lastEmail, rememberEmail, AUTH_ERR } from "./sb.js";
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search), h = new URLSearchParams(location.hash.slice(1));
 const nextUrl = (() => { const n = q.get("next") || "/"; return n.startsWith("/") && !n.startsWith("//") ? n : "/"; })();

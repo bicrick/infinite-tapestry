@@ -12,7 +12,7 @@ export function storageKey() {
 export function client() {
   if (clientP) return clientP;
   clientP = (async () => {
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
+    const { createClient } = await import("@supabase/supabase-js");
     const sb = createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "implicit",
               storageKey: storageKey(), storage: window.localStorage,
