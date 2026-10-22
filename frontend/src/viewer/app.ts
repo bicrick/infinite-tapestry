@@ -13,6 +13,7 @@ import { COARSE, Renderer } from "./renderer";
 import { StripStore } from "./strips";
 import { Timeline } from "./timeline";
 import { ZoomController } from "./zoom";
+import { renderQueueList } from "../chrome/queue";
 
 type OdoEl = HTMLElement & { _odo?: { set(n: number): void } | null; _pre?: HTMLElement; _num?: HTMLElement; _post?: HTMLElement };
 interface Gesture { x0: number; y0: number; t0: number; moved: number; wasIdle: boolean; armed: boolean; touch?: boolean; dead?: boolean; scrub?: boolean; hist: Array<[number, number]> }
@@ -681,45 +682,8 @@ export function startViewer(): void {
     cc.classList.toggle("hidden", !now);
     cc.innerHTML = now ? `<div class="k">${now === tgt ? "Up now" : "Now"}<span class="src">${esc(credit(now.by, "user", { guestNames: true }))}</span></div>` +
       `<div class="t">${esc(ideaTitle(now.source || now.title, now.by, now.image))}</div>` : "";
-    // Keyed in-place diff: reuse unchanged rows so the sheet never flashes.
-    const old = new Map([...list.children].map((li) => [(li as HTMLElement).dataset.id, li as HTMLElement]));
-    let prev: HTMLElement | null = null;
-    const S = window.TapestrySocial;
-    items.forEach((s, i) => {
-      const key = String(s.id);
-      const voted = !!(S && S.myVotes && S.myVotes().has(s.idea_id));
-      const sig = JSON.stringify([i, s.title, s.origin, s.by, s.kind, s.prompt, s.votes, s.eta, voted]);
-      let li = old.get(key);
-      if (li && li.dataset.sig === sig) {
-        old.delete(key);
-        if (li.previousElementSibling !== prev) list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
-        prev = li;
-        return;
-      }
-      if (li) { old.delete(key); }
-      const fresh = document.createElement("li");
-      if (li) li.replaceWith(fresh);
-      li = fresh;
-      li.dataset.sig = sig;
-      li.className = "item " + (s.origin === "auto" ? "auto" : "user") + (s.kind === "idea" ? " idea" : "");
-      li.dataset.id = key;
-      if (s.kind === "idea") {
-        const c = credit(s.by, "user", { guestNames: true }), eta = s.eta != null && S && S.etaLabel ? S.etaLabel(s.eta) : "soon";
-        li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc("Suggested by " + c)}">${esc(ideaTitle(s.prompt || s.title, s.by, s.image))}</div>` +
-          `<div class="meta">${esc(c)} · Waiting · ${esc(eta)}</div><div class="p"><a class="open-s" href="/s/${s.idea_id}" target="_blank" rel="noopener">Open ↗</a><button class="linkish" type="button" data-report="${s.idea_id}">Report</button></div></div>` +
-          (S && S.heart ? S.heart(s.idea_id, s.votes) : "");
-        list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
-        prev = li;
-        return;
-      }
-      // View-only queue: no reorder, drag, edit or remove controls. Planned user scene (already picked, plays next).
-      const cs = credit(s.by, "user", { guestNames: true });
-      li.innerHTML = `<span class="n">${i + 1}</span><div class="body"><div class="t" data-tip="${esc("Suggested by " + cs)}">${esc(ideaTitle(s.source || s.title, s.by, s.ref))}</div>` +
-        `<div class="meta">${esc(cs)} · ${i === 0 ? "Up next" : "Planned"}</div></div>`;
-      list.insertBefore(li, prev ? prev.nextSibling : list.firstChild);
-      prev = li;
-    });
-    old.forEach((li) => li.remove());
+    // Keyed in-place diff (Preact): unchanged rows keep their node, so the sheet never flashes.
+    renderQueueList(list, items, window.TapestrySocial);
   }
   window.TapestryIdeaTitle = ideaTitle;
   function showDirector(d: Director) {

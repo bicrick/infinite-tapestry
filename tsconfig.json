@@ -12,6 +12,8 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmit": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
     "types": ["vite/client"]
   },
   "include": ["frontend/src", "vite.config.ts"]
