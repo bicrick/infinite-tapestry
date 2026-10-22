@@ -116,9 +116,6 @@ export function startViewer(): void {
   // Zoom (on for everyone; ?zoom=0 turns it off): ctrl/trackpad-pinch wheel and two-finger touch pinch zoom about the
   // pointer, - / = / 0 keys. At zoom 1 the viewer is exactly the unzoomed one.
   const ZOOM = new URLSearchParams(location.search).get("zoom") !== "0";
-  // ?floor=1 (option under review): far zoomed out the band keeps a minimum height (layout.floorScale), drawn from the
-  // 128 px tall macro tiles at every level past L1.
-  if (new URLSearchParams(location.search).get("floor") === "1") { cam.floor = true; lod.xMid = true; }
   const zoom = ZOOM ? new ZoomController(cam, motion, () => (lod.macro() && strips.maxIndex > 0 ? strips.maxIndex + 1 : null)) : null;
   const viewLeft = () => motion.viewLeft();
   const viewWorld = () => cam.viewWorld();

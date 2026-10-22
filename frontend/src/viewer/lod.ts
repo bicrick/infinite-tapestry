@@ -47,8 +47,6 @@ export interface TileHit { img: HTMLImageElement; at: number }
 export class LodStore {
   private cache = new Map<string, Tile>();
   private ov: { n: number; t: Tile } | null = null;   // loaded overview
-  /** use macro (X) tiles for L2/L3 too (vertical floor: the band is taller than the live tiles' 64/16 px) */
-  xMid = false;
   constructor(private readonly deps: { maxIndex: () => number; lodBase: () => string | undefined; httpBase: () => string }) {}
 
   /** R2 base for the macro pyramid (lod_base's sibling), or "" when tiles come from the pod only */
@@ -61,7 +59,7 @@ export class LodStore {
   /** loaded tiles per level (tests / gates) */
   stats(): Record<string, number> { const r: Record<string, number> = {}; for (const t of this.cache.values()) if (t.ok) r[t.level] = (r[t.level] || 0) + 1; return r; }
 
-  private isX(level: number): boolean { return level >= 4 || (this.xMid && level >= 2); }
+  private isX(level: number): boolean { return level >= 4; }
 
   private load(key: string, level: number, src: string, low: boolean, pod?: string): Tile {
     const tile: Tile = { img: new Image(), ok: false, used: 0, at: 0, level };

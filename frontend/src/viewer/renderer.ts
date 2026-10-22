@@ -7,7 +7,7 @@ import { LOD_N, MAX_LEVEL, REFINE_MS, lodCovers, lodLevelDeep, type LodStore } f
 import type { Motion } from "./motion";
 import type { LiveFollower } from "./live-follower";
 import type { Reflection, SurroundView } from "./reflection";
-import { surroundGlow, surroundReach } from "./layout";
+import { FAR_REACH, surroundFar, surroundGlow, surroundReach } from "./layout";
 
 declare global {
   interface Window { __probe?: number[]; __ov?: number[]; __dx?: number; __nolod?: boolean; __noblur?: boolean }
@@ -113,7 +113,10 @@ export class Renderer {
       const z = this.d.cam.zoom;   // zoomed out: keep the halo/reflection large around the smaller band
       if (z >= 1) this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA);
       // reach never needs to exceed ~0.42 of the screen height (the halo already fills the surround there)
-      else this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA, Math.min(bandH * surroundReach(z), Math.max(bandH, h * 0.42)), surroundGlow(z));
+      else {
+        const far = surroundFar(z), reach = Math.min(bandH * surroundReach(z), Math.max(bandH, h * 0.42));
+        this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA, reach + (Math.max(bandH, h * FAR_REACH) - reach) * far, surroundGlow(z), far);
+      }
     }
   }
 
@@ -151,7 +154,7 @@ export class Renderer {
     // from L3 also try finer tiles (needed at the still-filling live edge).
     if (level === 1) {
       const t2 = this.d.lod.tile(2, Math.floor(c / 4));
-      if (t2 && !this.d.lod.xMid) { const part = t2.width / 4; ctx.drawImage(t2, (c % 4) * part, 0, part, t2.height, c * tw - left, 0, tw, H); this.lodSpans.push([c * tw, (c + 1) * tw]); return; }
+      if (t2) { const part = t2.width / 4; ctx.drawImage(t2, (c % 4) * part, 0, part, t2.height, c * tw - left, 0, tw, H); this.lodSpans.push([c * tw, (c + 1) * tw]); return; }
     }
     // finer tiles fill the gap; only where the chunk is still filling (a complete chunk's own tile is coming, and the
     // coarser layers already cover it), so a zoomed-out view never fans out into thousands of fine requests

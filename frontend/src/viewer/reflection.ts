@@ -11,7 +11,7 @@
 export interface SurroundView { left: number; ww: number; fi: number; li: number; cov: number; lod: boolean; fading: number }
 /** reach: device px the mirror/halo falloff is measured in (default bandH); glowK: halo strength multiplier (default 1).
  *  Both are only changed when zoomed out (see layout surroundReach/surroundGlow); the defaults are the original look. */
-export interface Reflection { frame(v: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number, reach?: number, glowK?: number): void; off(): void }
+export interface Reflection { frame(v: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number, reach?: number, glowK?: number, far?: number): void; off(): void }
 export interface ReflectionOpts { surr: () => string; coarse: () => boolean }
 
 declare global { interface Window { TapestryReflection?: { create(canvas: HTMLCanvasElement, opts: ReflectionOpts): Reflection | null } } }
@@ -34,7 +34,7 @@ in vec2 p; out vec2 uv; void main(){ uv = p * .5 + .5; uv.y = 1. - uv.y; gl_Posi
   gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `#version 300 es
 precision mediump float; in vec2 uv; out vec4 o;
 uniform sampler2D tex; uniform vec2 band; uniform float bandH, t, amp, alpha, aspect; uniform vec3 bg;
-uniform float aBelow, aAbove, fade, gain, sat, glow, light, soft;
+uniform float aBelow, aAbove, fade, gain, sat, glow, light, soft, far;
 vec3 tap(vec2 q, float lod){ return textureLod(tex, q, lod).rgb; }
 void main(){
   float top = band.x, bot = band.y; float d; float y;
@@ -55,7 +55,7 @@ void main(){
   vec3 bloom = tap(vec2(x, .5), 6.5); bloom = mix(vec3(dot(bloom, vec3(.33))), bloom, sat) * gain;
   float f = exp(-dn * 3.) * smoothstep(0., .012, d + .006);   // starts right at the band edge
   float edge = mix(1., 1. - smoothstep(.55, 1.15, dn), soft);         // zoomed out: no visible cut-off (soft = 0 at zoom 1)
-  float k = f * (uv.y > bot ? aBelow : aAbove) * alpha * edge;
+  float k = f * (uv.y > bot ? aBelow : aAbove) * alpha * edge * (1. - .85 * far);   // far out: the mirror gives way to the glow
   float g = glow * exp(-dn * 1.8) * (uv.y > bot ? 1. : .6) * alpha * .35 * edge;
   o = vec4(c * k + bloom * g, k + g * light);                            // premultiplied; glow is additive on dark
 }`));
@@ -64,7 +64,7 @@ void main(){
   const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
   const lp = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
-  const U: Record<string, WebGLUniformLocation | null> = {}; for (const n of ["band", "bandH", "t", "amp", "alpha", "bg", "aBelow", "aAbove", "fade", "gain", "sat", "glow", "light", "soft"]) U[n] = gl.getUniformLocation(pr, n);
+  const U: Record<string, WebGLUniformLocation | null> = {}; for (const n of ["band", "bandH", "t", "amp", "alpha", "bg", "aBelow", "aAbove", "fade", "gain", "sat", "glow", "light", "soft", "far"]) U[n] = gl.getUniformLocation(pr, n);
   const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -72,11 +72,11 @@ void main(){
   document.documentElement.classList.add("refl-gl");
   let hasTex = false, key = "", motion = 0, lastLeft: number | null = null, cleared = true;
   return {
-    frame(V: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number, reach = bandH, glowK = 1) {
+    frame(V: SurroundView, yOff: number, bandH: number, w: number, h: number, a: number, reach = bandH, glowK = 1, far = 0) {
       const now = performance.now();
       if (lastLeft !== null) motion = Math.max(motion * 0.96, Math.min(1, Math.abs(V.left - lastLeft) / 40));
       lastLeft = V.left;
-      const k = (V.left * 8 | 0) + ":" + Math.round(yOff) + ":" + Math.round(bandH) + ":" + Math.round(reach) + ":" + a.toFixed(2) + ":" + w + "x" + h + ":" + opts.surr() + ":" + V.cov.toFixed(3) + ":" + V.fading;
+      const k = (V.left * 8 | 0) + ":" + Math.round(yOff) + ":" + Math.round(bandH) + ":" + Math.round(reach) + ":" + glowK.toFixed(2) + ":" + far.toFixed(2) + ":" + a.toFixed(2) + ":" + w + "x" + h + ":" + opts.surr() + ":" + V.cov.toFixed(3) + ":" + V.fading;
       if (k === key && motion < 0.01) return;   // idle: zero work; any change: same-frame redraw
       const div = opts.coarse() || innerWidth <= 560 ? 6 : 4, W = Math.max(1, Math.round(w / div)), H = Math.max(1, Math.round(h / div));
       if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
@@ -97,7 +97,7 @@ void main(){
       gl.uniform2f(U.band, yOff / h, (yOff + bandH) / h); gl.uniform1f(U.bandH, reach / h);   // falloff + mirror unit (== bandH at zoom 1)
       gl.uniform1f(U.t, now / 1000); gl.uniform1f(U.amp, motion); gl.uniform1f(U.alpha, a); const lt = opts.surr()[0] === "2";
       gl.uniform1f(U.aBelow, VAR[0]); gl.uniform1f(U.aAbove, VAR[1]); gl.uniform1f(U.fade, VAR[2]); gl.uniform1f(U.gain, lt ? 1 + (VAR[3] - 1) * .5 : VAR[3]);
-      gl.uniform1f(U.sat, VAR[4]); gl.uniform1f(U.glow, VAR[5] * glowK); gl.uniform1f(U.soft, reach > bandH ? Math.min(1, (reach / Math.max(1, bandH) - 1) * 4) : 0); gl.uniform1f(U.light, lt ? 1 : 0);
+      gl.uniform1f(U.sat, VAR[4]); gl.uniform1f(U.glow, VAR[5] * glowK); gl.uniform1f(U.soft, reach > bandH ? Math.min(1, (reach / Math.max(1, bandH) - 1) * 4) : 0); gl.uniform1f(U.light, lt ? 1 : 0); gl.uniform1f(U.far, far);
       gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3); cleared = false;
     },
     off() { if (cleared) return; cleared = true; key = ""; gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); },

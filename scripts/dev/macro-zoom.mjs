@@ -1,6 +1,6 @@
 // Macro zoom gate: zoom-out responsiveness and "never a blank band".
 // Usage: node scripts/dev/macro-zoom.mjs <base> [outDir] [query]   e.g. ... http://127.0.0.1:8792 /tmp/mz "floor=1"
-// Env: CHROME, VERCEL_BYPASS_FILE (protected previews; never printed), VP=desktop|phone (default desktop), SHOTS=1.
+// Env: CHROME, VERCEL_BYPASS_FILE (protected previews; never printed), VP=desktop|phone (default desktop), SHOTS=1, SHOTS_ONLY=1 (zoom shots + max-out paint, no gap/pinch phases).
 // Measures (one JSON line):
 //  - maxOut: time from zoomTo(min) until the zoom settled, no overview tile pending and no empty pixel in the band;
 //    image requests made on the way;
@@ -78,7 +78,7 @@ const out = { base: BASE, vp: VP, q: Q };
 await shot("z1");
 out.minZoom = await page.evaluate(() => window.TapestryView.minZoom ? window.TapestryView.minZoom() : null);
 // zoom-level shots
-for (const z of [0.25, 0.05, 0.01, 0.002]) { if (out.minZoom !== null && z < out.minZoom) continue; await zoomTo(z, W / 2); await settle(); await page.waitForTimeout(600); await shot("z" + z); }
+for (const z of [0.25, 0.05, 0.02, 0.01, 0.002]) { if (out.minZoom !== null && z < out.minZoom) continue; await zoomTo(z, W / 2); await settle(); await page.waitForTimeout(600); await shot("z" + z); }
 await zoomTo(1, W / 2); await settle(); await page.waitForTimeout(2500);
 // 1) time to full paint at max zoom-out (from settled zoom 1)
 net(); await page.evaluate(() => { window.__mz.sample = true; window.__mz.gap = []; });
@@ -92,6 +92,7 @@ for (let i = 0; i < 200 && settled; i++) {
 out.maxOut = { settled, fullPaintMs: full, net: net(), tiles: await page.evaluate(() => window.TapestryView.lodStats ? window.TapestryView.lodStats() : null) };
 await page.evaluate(() => { window.__mz.sample = false; });
 await page.waitForTimeout(600); await shot("max");
+if (process.env.SHOTS_ONLY) { console.log(JSON.stringify(out)); await browser.close(); process.exit(0); }
 await zoomTo(1, W / 2); await settle(); await page.waitForTimeout(3000);
 // 2) pinch frame times: ctrl-wheel 1 -> min and back (no sampling)
 const pinch = async (dir, n = 40, x = W / 2) => { await page.mouse.move(x, Hh / 2); await page.keyboard.down("Control");
