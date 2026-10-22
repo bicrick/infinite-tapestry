@@ -17,7 +17,10 @@ from infinite_tapestry.server import MAGIC, HEADER_FMT, create_app
 
 
 @pytest.fixture
-def mock_app():
+def mock_app(tmp_path, monkeypatch):
+    # "/" serves the built frontend (dist/site) when present; a fresh clone/CI has no build, so give it a stub.
+    (tmp_path / "index.html").write_text("<!doctype html><title>Infinite Tapestry</title>")
+    monkeypatch.setattr("infinite_tapestry.server.STATIC_DIR", tmp_path)
     cfg = Config(
         mock=True,
         height=32,
