@@ -96,10 +96,12 @@ describe("screen-space pan input (zoom-aware)", () => {
     expect(b.v / a.v).toBeCloseTo(b.feel, 6);
   });
 
-  it("past-live rubber-band never peeks further into the staged strips when zoomed out", () => {
+  it("zoomed out the live end can rest at the centre; past that the rubber-band is no larger than at zoom 1", () => {
     const a = rig({ zoom: 1 }), b = rig({ zoom: 0.25, ribbon: 1 });
-    const hi = a.m.maxPan();
-    expect(b.m.rubber(hi + 1e9) - hi).toBeLessThanOrEqual(a.m.rubber(hi + 1e9) - hi + 1e-9);
+    const hi = a.m.maxPan(), hf = b.m.hiFree();
+    expect(a.m.hiFree()).toBe(hi);
+    expect(b.m.rubber(hf)).toBeCloseTo(hf, 6);
+    expect(b.m.rubber(hf + 1e9) - hf).toBeLessThanOrEqual(a.m.rubber(hi + 1e9) - hi + 1e-9);
   });
 
   it("seek/jump are framed on the drawn screen centre and timed by on-screen distance when zoomed", () => {

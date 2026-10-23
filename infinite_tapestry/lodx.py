@@ -1,0 +1,109 @@
+"""Macro LOD pyramid ("lodx"): fixed-size overview tiles for zooming out to the whole timeline.
+
+The live LOD tiles (lod.py) scale both axes by 1/4^L, so past L3 they collapse to a few pixels tall. Macro tiles keep
+a fixed 1024 x 128 pixels at every level and only the horizontal span grows x4 per level:
+
+  level k (2..8): STRIPS[k] = 16 * 4^(k-1) strips per tile  (X2 = 64, X3 = 256, X4 = 1024 ... X8 = 262144)
+  key           : <prefix>/lodx/<k>/<chunk:06d>.webp        (immutable once written: only complete chunks exist)
+  overview      : <prefix>/lodx/ov/<n:08d>.webp, 2048 x 128, strips [0, n) for n a multiple of OV_STEP (4096)
+
+X2 is built from 4 live L1 tiles (1024 x 256, 16 strips each), every higher level from its 4 children, the overview
+from the complete X5 tiles. Nothing here needs a GPU: it is downsampling only (Pillow, BOX filter).
+The viewer picks the level by on-screen size, so any zoom needs a handful of tiles (see frontend/src/viewer/lod.ts).
+"""
+
+from __future__ import annotations
+
+import io
+from typing import Callable, Optional, Sequence
+
+from PIL import Image
+
+TILE_W, TILE_H = 1024, 128
+LEVELS = tuple(range(2, 9))
+STRIPS = {k: 16 * 4 ** (k - 1) for k in range(1, 9)}   # 1: the live L1 tile (16 strips)
+OV_STEP = STRIPS[5]   # 4096
+OV_W = 2048
+QUALITY = 60
+CTYPE = "image/webp"
+CACHE = "public, max-age=31536000, immutable"
+
+
+def key(level: int, chunk: int) -> str:
+    return f"lodx/{level}/{chunk:06d}.webp"
+
+
+def ov_key(n: int) -> str:
+    return f"lodx/ov/{n:08d}.webp"
+
+
+def complete_chunks(level: int, max_index: int) -> int:
+    """Chunks of `level` that are complete when strips [0, max_index] exist (the viewer's rule: (c+1)*N <= max_index)."""
+    return max(0, max_index // STRIPS[level])
+
+
+def encode(im: Image.Image) -> bytes:
+    b = io.BytesIO()
+    im.save(b, "WEBP", quality=QUALITY, method=6)
+    return b.getvalue()
+
+
+def _open(data: Optional[bytes]) -> Optional[Image.Image]:
+    if not data:
+        return None
+    try:
+        return Image.open(io.BytesIO(data)).convert("RGB")
+    except Exception:
+        return None
+
+
+def combine(children: Sequence[Optional[bytes]], fill=(10, 10, 12)) -> Optional[bytes]:
+    """4 children (left to right, each covering a quarter of the parent) -> one 1024 x 128 tile.
+    Children may be live L1 tiles (1024 x 256) or macro tiles (1024 x 128); a missing child stays `fill`."""
+    ims = [_open(c) for c in children]
+    if not any(ims):
+        return None
+    q = TILE_W  # each child is drawn at TILE_W wide, then the 4x-wide strip is downsampled to TILE_W
+    canvas = Image.new("RGB", (4 * q, TILE_H), fill)
+    for j, im in enumerate(ims):
+        if im is not None:
+            canvas.paste(im.resize((q, TILE_H), Image.Resampling.BOX), (j * q, 0))
+    return encode(canvas.resize((TILE_W, TILE_H), Image.Resampling.BOX))
+
+
+def overview(n: int, x5: Callable[[int], Optional[bytes]], fill=(10, 10, 12)) -> Optional[bytes]:
+    """Whole-timeline overview of strips [0, n) (n a multiple of OV_STEP) from the X5 tiles, OV_W x TILE_H."""
+    k = n // OV_STEP
+    if k <= 0:
+        return None
+    cw = 256   # each X5 tile drawn 256 wide (a quarter-resolution of its 1024), then fitted to OV_W
+    canvas = Image.new("RGB", (k * cw, TILE_H), fill)
+    got = 0
+    for c in range(k):
+        im = _open(x5(c))
+        if im is not None:
+            canvas.paste(im.resize((cw, TILE_H), Image.Resampling.BOX), (c * cw, 0))
+            got += 1
+    if not got:
+        return None
+    return encode(canvas.resize((OV_W, TILE_H), Image.Resampling.BOX))
+
+
+def l1_from_strips(strips: Sequence[Optional[bytes]], sw: int, h: int) -> Optional[bytes]:
+    """A missing live L1 tile (16 strips) composed from the strips like lod.LodBuilder (each strip image starts
+    `overlap` before its slot, later strips paint over earlier ones), returned as a 1024 x 256 JPEG."""
+    full = Image.new("RGB", (len(strips) * sw, h), (10, 10, 12))
+    got = 0
+    for j, s in enumerate(strips):
+        im = _open(s)
+        if im is None:
+            continue
+        if im.height != h:
+            im = im.resize((round(im.width * h / im.height), h), Image.Resampling.BILINEAR)
+        full.paste(im, (j * sw - (im.width - sw), 0))
+        got += 1
+    if not got:
+        return None
+    b = io.BytesIO()
+    full.resize((len(strips) * sw // 4, h // 4), Image.Resampling.BOX).save(b, "JPEG", quality=80)
+    return b.getvalue()

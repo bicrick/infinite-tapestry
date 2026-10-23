@@ -2,11 +2,12 @@
 // World space: x in painting pixels (strip i covers [i*SW - overlap, (i+1)*SW - overlap)), y in [0, paint height].
 // Device space: canvas pixels (CSS px * dpr). The scroll position itself (live edge / pan) comes from Motion via
 // viewLeft(); the camera adds the staging hold-back, ribbon/portrait band layout, the elastic nudge and zoom.
-import { RIBBON, baseScale, bandTopFor, isPortrait, ribbonTop } from "./layout";
+import { RIBBON, baseScale, bandTopFor, isPortrait, minBandScale, ribbonTop } from "./layout";
 
 export interface FrameGeometry {
   /** device px: canvas size */ w: number; h: number;
   /** world->device scale at zoom 1 / ribbon 1, and the scale actually drawn (s0 * zoom * ribbon) */ s0: number; s: number;
+  /** vertical draw scale: == s, except far zoomed out where the band keeps MIN_BAND_CSS px (layout.minBandScale) */ sy: number;
   /** world x of the left screen edge */ left: number;
   /** device px: top of the band */ yOff: number;
   /** strip range that can be on screen (inclusive, +1 margin each side) */ firstIdx: number; lastIdx: number;
@@ -73,7 +74,7 @@ export class Camera {
   pxToWorldZ(): number { return this.pxToWorld() * this.feel(); }
   /** Drawn scale (device px per world px) for a given zoom, as frame() computes it. */
   drawnScale(zoom = this.zoom): number { return this.scale() * zoom * (this.portrait() ? 1 : this.ribbon); }
-  /** frame(): left = viewLeft + leftOffset() (before the >= 0 clamp): centred/right-anchored framing, never past the staged live line. */
+  /** frame(): left = viewLeft + leftOffset() (before the >= -startSlack() clamp): centred/right-anchored framing, never past the staged live line. */
   leftOffset(zoom = this.zoom): number {
     const w = this.canvas.width, s = this.drawnScale(zoom), vw = this.viewWorld(), st = this.STAGE(), ra = this.ribbonAnchor;
     const right = vw - st - w / s;
@@ -83,6 +84,24 @@ export class Camera {
   viewCenter(): number { return this.zoom >= 1 ? this.viewWorld() / 2 : this.leftOffset() + this.canvas.width / this.drawnScale() / 2; }
   /** World px across the screen for framing seeks (zoom 1: the legacy viewWorld()). */
   visibleWorld(): number { return this.zoom >= 1 ? this.viewWorld() : this.canvas.width / this.drawnScale(); }
+  /** 0 at zoom >= 1, easing to 1 as zoom goes 1 -> 0.97: how much of the zoomed-out pan slack (centred ends) applies.
+   *  Quick, so a centred end stays centred at every zoom below 1 (zoom 1 itself keeps the legacy clamps). */
+  slackT(zoom = this.zoom): number { if (zoom >= 1) return 0; const t = Math.min(1, (1 - zoom) / 0.03); return t * t * (3 - 2 * t); }
+  /** Zoomed out, the drawn left edge may go below world 0 by up to half the screen, so strip 0 can be panned to the
+   *  screen centre. 0 at zoom >= 1: the zoom-1 framing is unchanged. */
+  startSlack(zoom = this.zoom): number { const t = this.slackT(zoom); return t ? t * this.canvas.width / this.drawnScale(zoom) / 2 : 0; }
+  /** Lowest pan (Motion.minPan): the view whose drawn left edge is exactly -startSlack(), so there is no dead travel
+   *  at the start (before, the >= 0 clamp in frame() swallowed up to a whole screen of pan; at max zoom-out all of it). */
+  minViewLeft(zoom = this.zoom): number { const v = -this.startSlack(zoom) - this.leftOffset(zoom); return Number.isFinite(v) ? v : 0; }
+  /** Zoomed out, the view may rest past the live edge by up to this much (world px): at most the end of the drawn
+   *  strips sits at the screen centre (Motion.hiFree), mirroring startSlack() at strip 0. `beyond` = how far the drawn
+   *  strips reach past the live view's right edge (liveScroll + viewWorld; the staged strips, shown veiled when parked).
+   *  0 at zoom >= 1 (zoom 1 unchanged). */
+  endRoom(beyond = 0, zoom = this.zoom): number {
+    const t = this.slackT(zoom); if (!t) return 0;
+    const v = t * (this.viewWorld() + Math.max(0, beyond) - this.leftOffset(zoom) - this.canvas.width / this.drawnScale(zoom) / 2);
+    return Number.isFinite(v) ? Math.max(0, v) : 0;
+  }
   /** Off-screen staging buffer: one full strip (the next arrival) + the inpaint band it repaints over its predecessor (+32 px). */
   BAND(): number { return this.d.maxOv() + 32; }
   /** + one more full strip of margin: the newest 2 strips + the inpaint band stay off-screen. */
@@ -141,20 +160,21 @@ export class Camera {
     const vw = this.viewWorld(), stage = this.STAGE();
     const center = viewLeft + vw / 2 - stage;
     const fullRight = viewLeft + vw - stage;
-    const left = Math.max(0, Math.min((center - (w / s) / 2) * (1 - this.ribbonAnchor) + (fullRight - w / s) * this.ribbonAnchor, fullRight - w / s));
+    const left = Math.max(-this.startSlack() || 0, Math.min((center - (w / s) / 2) * (1 - this.ribbonAnchor) + (fullRight - w / s) * this.ribbonAnchor, fullRight - w / s));
     this.drawCenter = left + w / s / 2;
     // Portrait band sits slightly above centre (optical centre); full-bleed otherwise.
-    const yOff = this.portrait() ? bandTopFor(h, H * s0, this.dpr()) + (H * s0 - H * s) / 2 : ribbonTop(h, H * s, this.ribbon, !!document.fullscreenElement);
+    const sy = minBandScale(s, H, this.dpr());
+    const yOff = this.portrait() ? bandTopFor(h, H * s0, this.dpr()) + (H * s0 - H * sy) / 2 : ribbonTop(h, H * sy, this.ribbon, !!document.fullscreenElement);
     const firstIdx = Math.max(0, Math.floor(left / SW) - 1);
     const lastIdx = Math.ceil((left + w / s) / SW) + 1;
-    this.last = { w, h, s0, s, left, yOff, firstIdx, lastIdx };
+    this.last = { w, h, s0, s, sy, left, yOff, firstIdx, lastIdx };
     return this.last;
   }
 
   /** Centre of what's actually drawn as a strip index (-0.5 so callers' Math.round() picks the strip under the centre). */
   centerIdx(viewLeft: number): number {
     const c = this.drawCenter != null ? this.drawCenter : viewLeft + this.viewWorld() / 2;
-    return (c + this.d.maxOv()) / this.SW() - 0.5;
+    return Math.max(-0.5, (c + this.d.maxOv()) / this.SW() - 0.5);   // zoomed-out start slack: never before strip 0
   }
 
   // ---- transforms (last drawn frame), CSS px <-> world ----
@@ -162,11 +182,11 @@ export class Camera {
   worldToScreen(x: number, y = 0): { x: number; y: number } {
     const g = this.last; if (!g) return { x: NaN, y: NaN };
     const k = this.cssK();
-    return { x: ((x - g.left) * g.s) / k, y: (g.yOff + y * g.s) / k };
+    return { x: ((x - g.left) * g.s) / k, y: (g.yOff + y * g.sy) / k };
   }
   screenToWorld(cssX: number, cssY = 0): { x: number; y: number } {
     const g = this.last; if (!g) return { x: NaN, y: NaN };
     const k = this.cssK();
-    return { x: g.left + (cssX * k) / g.s, y: (cssY * k - g.yOff) / g.s };
+    return { x: g.left + (cssX * k) / g.s, y: (cssY * k - g.yOff) / g.sy };
   }
 }

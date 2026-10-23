@@ -3,7 +3,11 @@
 Level L tile c covers strips [c*N_L, (c+1)*N_L) at 1/4^L resolution:
   L1: 16 strips @ 1/4, L2: 64 strips @ 1/16, L3: 256 strips @ 1/64.
 Tiles are built when a chunk completes (and on demand for older chunks), cached on disk
-and mirrored to Supabase Storage under <prefix>/lod/<L>/<c>.jpg.
+and mirrored to R2 under <prefix>/lod/<L>/<c>.jpg.
+
+Past L3 the macro pyramid (lodx.py: fixed-height WebP, x4 strips per level up to the whole timeline) is built the same
+way when its chunk completes, plus the whole-timeline overview every 4096 strips. Those tiles are immutable: an
+existing one (local or on the CDN) is never rebuilt or re-uploaded.
 """
 
 from __future__ import annotations
@@ -15,6 +19,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from PIL import Image
+
+from . import lodx
 
 logger = logging.getLogger(__name__)
 STRIPS_PER_TILE = {1: 16, 2: 64, 3: 256}
@@ -35,6 +41,69 @@ class LodBuilder:
         for level, n in STRIPS_PER_TILE.items():
             if (index + 1) % n == 0:
                 self._pool.submit(self._safe_build, level, index // n)
+        # macro pyramid (one worker: runs after the L1 it is built from)
+        for k in lodx.LEVELS:
+            if (index + 1) % lodx.STRIPS[k] == 0:
+                self._pool.submit(self._safe_build_x, k, index // lodx.STRIPS[k])
+        if (index + 1) % lodx.OV_STEP == 0:
+            self._pool.submit(self._safe_build_ov, index + 1)
+
+    def _safe_build_x(self, level: int, chunk: int) -> None:
+        try:
+            self.get_x(level, chunk, build=True)
+        except Exception:
+            logger.exception("macro LOD build failed X%d c%d", level, chunk)
+
+    def _safe_build_ov(self, n: int) -> None:
+        try:
+            self.overview(n)
+        except Exception:
+            logger.exception("overview build failed n=%d", n)
+
+    def xpath(self, rel: str) -> Path:
+        return self.dir.parent / rel
+
+    def _cached(self, rel: str) -> bytes | None:
+        p = self.xpath(rel)
+        if p.exists():
+            return p.read_bytes()
+        m = getattr(self.store, "mirror", None)
+        data = m.get(f"public:{rel}") if m else None
+        if data:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(data)
+        return data
+
+    def _publish(self, rel: str, data: bytes) -> None:
+        p = self.xpath(rel)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+        if getattr(self.store, "mirror", None):
+            self.store.mirror.put(f"public:{rel}", data, lodx.CTYPE)
+
+    def get_x(self, level: int, chunk: int, build: bool = False) -> bytes | None:
+        """Macro tile X<level> chunk (lodx.STRIPS[level] strips), from its 4 children (L1 tiles for X2)."""
+        rel = lodx.key(level, chunk)
+        data = self._cached(rel)
+        if data or not build:
+            return data
+        kids = [self.get(1, chunk * 4 + j, build=True) if level == 2 else self.get_x(level - 1, chunk * 4 + j, build=True)
+                for j in range(4)]
+        data = lodx.combine(kids)
+        if data:
+            self._publish(rel, data)
+        return data
+
+    def overview(self, n: int) -> bytes | None:
+        """The whole-timeline overview for strips [0, n), n a multiple of lodx.OV_STEP (from the X5 tiles)."""
+        rel = lodx.ov_key(n)
+        data = self._cached(rel)
+        if data:
+            return data
+        data = lodx.overview(n, lambda c: self.get_x(5, c, build=True))
+        if data:
+            self._publish(rel, data)
+        return data
 
     def _safe_build(self, level: int, chunk: int) -> None:
         try:

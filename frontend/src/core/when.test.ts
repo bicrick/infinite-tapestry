@@ -32,6 +32,6 @@ describe("zoomed-out surround", () => {
     expect(surroundReach(0.999)).toBeCloseTo(1, 2); expect(surroundGlow(0.999)).toBeCloseTo(1, 4);
     let r = 1, g = 1;
     for (let z = 0.99; z >= 0.05; z -= 0.01) { const r2 = surroundReach(z), g2 = surroundGlow(z); expect(r2).toBeGreaterThan(r); expect(g2).toBeGreaterThanOrEqual(g); expect((r2 - r) / r).toBeLessThan(0.15); r = r2; g = g2; }
-    expect(surroundGlow(0.01)).toBeLessThanOrEqual(1.4);   // a gentle lift, never a bloom
+    expect(surroundGlow(0.1)).toBeLessThanOrEqual(1.4);   // a gentle lift down to zoom 0.1 (further out: layout.test, capped)
   });
 });

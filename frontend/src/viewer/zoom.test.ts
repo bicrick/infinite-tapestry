@@ -8,7 +8,7 @@ import type { StripStore } from "./strips";
 import type { LodStore } from "./lod";
 import { fakeBrowser, fakeCanvas } from "./test-env";
 
-function rig() {
+function rig(deep: () => number | null = () => null) {
   fakeBrowser();
   const strips = { maxIndex: 100000, maxOv: 128, get: () => undefined, panoramaWidth: () => 100001 * 256, requestMissing: vi.fn() } as unknown as StripStore;
   const cam = new Camera(fakeCanvas(1280, 800, 1), { stripWidth: () => 256, paintHeight: () => 512, maxOv: () => 128, saver: { on: false } });
@@ -16,7 +16,7 @@ function rig() {
   const m = new Motion({ cam, strips, lod: { prefetch: vi.fn() } as unknown as LodStore, follower: new LiveFollower(cam, strips), setAway: () => {},
     refreshTimeline: () => {}, replay: () => false, scrollSpeed: () => 60, coverage: () => 0, gestureActive: () => false });
   cam.liveScroll = 100000 * 256; m.enterHistory(); m.panMode = "glide"; m.panPos = 50000 * 256;
-  return { cam, m, z: new ZoomController(cam, m) };
+  return { cam, m, z: new ZoomController(cam, m, deep) };
 }
 
 describe("ZoomController (?zoom)", () => {
@@ -34,5 +34,14 @@ describe("ZoomController (?zoom)", () => {
     const s = cam.scale() * cam.zoomTarget * cam.ribbon;
     expect(cam.canvas.width / s / (LOD_N[3] * 256)).toBeCloseTo(MAX_TILES, 6);
     z.zoomTo(5); expect(cam.zoomTarget).toBe(1);
+  });
+  it("with the macro pyramid, zooms out until the whole timeline fits the screen", () => {
+    const { cam, m, z } = rig(() => 100001);
+    z.zoomTo(1e-9);
+    const s = cam.scale() * cam.zoomTarget * cam.ribbon;
+    expect(cam.canvas.width / s / 256).toBeCloseTo(100001, 3);
+    cam.zoom = cam.zoomTarget; m.panPos = m.minPan(); const g = cam.frame(m.viewLeft());
+    expect(g.left).toBeCloseTo(-cam.canvas.width / g.s / 2, 3);   // strip 0 centred (start slack), so the start isn't a wall
+    expect(m.maxPan() - m.minPan()).toBeGreaterThan(cam.canvas.width / g.s / 3);   // and there is room to pan
   });
 });

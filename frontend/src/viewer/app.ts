@@ -116,7 +116,7 @@ export function startViewer(): void {
   // Zoom (on for everyone; ?zoom=0 turns it off): ctrl/trackpad-pinch wheel and two-finger touch pinch zoom about the
   // pointer, - / = / 0 keys. At zoom 1 the viewer is exactly the unzoomed one.
   const ZOOM = new URLSearchParams(location.search).get("zoom") !== "0";
-  const zoom = ZOOM ? new ZoomController(cam, motion) : null;
+  const zoom = ZOOM ? new ZoomController(cam, motion, () => (lod.macro() && strips.maxIndex > 0 ? strips.maxIndex + 1 : null)) : null;
   const viewLeft = () => motion.viewLeft();
   const viewWorld = () => cam.viewWorld();
   const centerIdx = () => cam.centerIdx(viewLeft());
@@ -130,6 +130,10 @@ export function startViewer(): void {
     /** ?zoom only (tests): world x / CSS px per world px of the last drawn frame */
     worldAt: (cssX: number) => cam.screenToWorld(cssX).x,
     cssPerWorld: () => (cam.last ? cam.last.s : 0) / (canvas.width / Math.max(1, canvas.clientWidth)),
+    /** tests: zoom floor, overview tiles still loading, loaded tiles per level */
+    minZoom: () => zoom.minZoom(), panMode: () => motion.panMode, stage: () => cam.STAGE(), lodPending: () => lod.pending(), lodStats: () => lod.stats(),
+    /** world x of the painted live line (past it nothing is drawn yet), or null */
+    liveWorld: () => (follower.livePos === null ? null : follower.livePos - cam.STAGE()),
   });
 
   // ---------- shared timeline clock ----------
@@ -381,7 +385,7 @@ export function startViewer(): void {
       if (Math.abs(dx) < Math.abs(dy) * 1.3) { gesture.dead = true; return; }   // vertical-ish: not ours
       gesture.touch = false; gesture.scrub = true;
       if (gesture.armed && motion.panMode !== "live") gesture.armed = false;
-      if (gesture.armed && dx > 0) { gesture.armed = false; commitRewind(); }     // swipe right at live = back in time, 1:1 from here
+      if (gesture.armed && (dx > 0 || cam.zoom < 1)) { gesture.armed = false; commitRewind(); }     // swipe right at live = back in time, 1:1 from here (zoomed out either way: the live end can be pulled to the centre and rests there)
       else if (!gesture.armed) { motion.panPos = motion.shownPan(); motion.panMode = "drag"; motion.panVel = 0; motion.samples = [[now, motion.panPos]]; }
       lastPX = ev.clientX;
       if (gesture.armed) gesture.x0 = ev.clientX;                                 // swiping left at live: elastic nudge only
@@ -390,7 +394,7 @@ export function startViewer(): void {
     if (gesture.armed) {
       const back = ev.clientX - gesture.x0;   // dragging right = looking back in time
       const h0 = gesture.hist[0], v = (ev.clientX - h0[1]) / Math.max(1, now - h0[0]);
-      if (back > LEAVE_PX || (back > FLICK_MIN_PX && v > FLICK_PX_MS)) {
+      if (back > LEAVE_PX || (back > FLICK_MIN_PX && v > FLICK_PX_MS) || (cam.zoom < 1 && -back > FLICK_MIN_PX)) {   // zoomed out a forward pull leaves live too (centred live end)
         gesture.armed = false;
         commitRewind();
         lastPX = ev.clientX;
@@ -970,7 +974,7 @@ export function startViewer(): void {
         const start = window.TapestryReplayStart(it[it.length - 1].i);   // random spot across the whole history
         replay = true; motion.live = false;
         strips.onRef(it[it.length - 1], false);   // sets maxIndex so the pan range covers the start position
-        motion.panPos = Math.max(0, start * SW() - viewWorld() / 2); motion.panVel = 0; motion.panMode = "glide";
+        motion.panPos = motion.replayPan(start); motion.panVel = 0; motion.panMode = "glide";   // zoomed out: centred, never in the start slack nor where it hands straight back to live
         lastFreshAt = performance.now() - 61000;
         apiMissing(start - 12, start + 12);   // on-screen refs first (the bootstrap only carries the newest 240)
         lod.prefetch(start);
@@ -990,14 +994,19 @@ export function startViewer(): void {
       setTimeout(wait, 120);
     }, 720);
   }
+  // Backstop against a fade loop zoomed out: a replay pass that reaches live within REPLAY_MIN_MS doesn't restart at once.
+  const REPLAY_MIN_MS = 15000;
+  let replayPassAt = 0, replayHold = 0;
   function startReplay() {
-    if (replayBusy || strips.maxIndex < 40) return;
+    if (performance.now() < replayHold) return;
+    if (replayBusy || strips.maxIndex < 40 || activePointer !== null || !motion.replayRoom()) return;   // never under a finger; zoomed out with all history on screen: stay live
     if (!replay && !replayAt) { replayAt = performance.now(); window.TapestryOps && window.TapestryOps.report("replay", 0, { pod: podDown ? "down" : "running" }); }
     const start = window.TapestryReplayStart(strips.maxIndex);   // random spot across the whole history (also on each loop)
     fadeSwap(() => {
+      if (activePointer !== null) return;   // a finger landed during the fade-out: the user keeps the view
       replay = true;
-      motion.enterHistory(); setAway(false);
-      motion.panPos = Math.max(0, start * SW() - viewWorld() / 2); motion.panVel = 0; motion.panMode = "glide";
+      motion.enterHistory(); setAway(false); replayPassAt = performance.now();
+      motion.panPos = motion.replayPan(start); motion.panVel = 0; motion.panMode = "glide";   // zoomed out: centred, never in the start slack nor where it hands straight back to live
     });
     lod.prefetch(start);
   }
@@ -1025,7 +1034,10 @@ export function startViewer(): void {
     const quiet = performance.now() - lastFreshAt > Math.max(60000, grace) || (downSince && performance.now() - downSince > grace);
     if (!quiet) return;
     if (motion.panMode === "live" && !replay) startReplay();
-    else if (replay && motion.panMode === "live") startReplay();   // reached the end of the replay: loop
+    else if (replay && motion.panMode === "live") {   // reached the end of the replay: loop
+      if (cam.zoom < 1 && performance.now() - replayPassAt < REPLAY_MIN_MS) { replayHold = performance.now() + 60000; return; }   // zoomed out, too short: hold at live a while (never pulse)
+      startReplay();
+    }
   }, 1000);
   bootFromApi();
   connect();

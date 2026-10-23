@@ -34,9 +34,46 @@ describe("Motion", () => {
     const { m, cam } = rig();
     cam.liveScroll = 100000;
     expect(m.rubber(5000)).toBe(5000);
-    expect(m.rubber(-1000)).toBeGreaterThan(-1000); expect(m.rubber(-1000)).toBeLessThan(0);
+    const lo = m.minPan(); expect(lo).toBeGreaterThanOrEqual(0);   // zoom 1: the start edge (no dead travel before the rubber)
+    expect(m.rubber(lo - 1000)).toBeGreaterThan(lo - 1000); expect(m.rubber(lo - 1000)).toBeLessThan(lo);
+    expect(cam.frame(lo).left).toBe(0); expect(cam.frame(lo - 1000).left).toBe(0);   // zoom 1 never draws before strip 0
+    expect(cam.frame(lo + 10).left).toBeCloseTo(10, 6);   // and moves 1:1 from the very start
     const over = m.rubber(100000 + 1e6) - 100000;
     expect(over).toBeLessThanOrEqual(Math.min(cam.viewWorld() * 0.08, SW * 0.5) + 1e-9);
+  });
+  it("zoomed out, strip 0 can be panned to the screen centre and the live end pulled toward it", () => {
+    const { m, cam, strips } = rig({ maxIndex: 200000 });
+    cam.liveScroll = 20_000_000; cam.zoom = cam.zoomTarget = 0.001;
+    const lo = m.minPan(), g = cam.frame(lo), ww = cam.canvas.width / g.s;
+    expect(g.left).toBeCloseTo(-ww / 2, 3);                 // centre of the screen = world 0
+    expect(cam.frame(lo + 1000).left).toBeCloseTo(g.left + 1000, 3);   // and no dead travel from there
+    cam.liveScroll = strips.panoramaWidth() - cam.viewWorld() - 2 * cam.SW();   // as onFirstIndex sets it
+    const beyond = strips.panoramaWidth() - cam.liveScroll - cam.viewWorld();
+    expect(m.hiFree()).toBeCloseTo(m.maxPan() + cam.endRoom(beyond), 3);
+    expect(m.rubber(m.hiFree() - 10)).toBeCloseTo(m.hiFree() - 10, 6);       // free (1:1) up to the centred end
+    const gl = cam.frame(m.hiFree());
+    expect(gl.left + ww / 2).toBeCloseTo(strips.panoramaWidth(), 3);         // ... where the end of the drawn strips is the screen centre
+    cam.zoom = cam.zoomTarget = 1; expect(cam.endRoom(beyond)).toBe(0); expect(cam.startSlack()).toBe(0); expect(m.hiFree()).toBe(m.maxPan());
+  });
+  it("zoomed out, a view released at either centred end stays there (no snap-back, no hand-over to live)", () => {
+    const r = rig(); const { m, cam } = r;
+    cam.liveScroll = 20_000_000; cam.zoom = cam.zoomTarget = 0.001;
+    m.enterHistory(); m.panMode = "glide"; m.panVel = 0; m.panPos = m.hiFree();
+    r.tick(4); expect(m.panMode).toBe("glide"); expect(m.panPos).toBeCloseTo(m.hiFree(), 3);
+    m.panPos = m.minPan(); r.tick(4); expect(m.panMode).toBe("glide"); expect(m.panPos).toBeCloseTo(m.minPan(), 3);
+    m.panPos = m.maxPan() - 5; r.tick(2); expect(m.panMode).toBe("glide");   // no front magnet zoomed out
+  });
+  it("zoom 1: releasing at the live edge still springs into live", () => {
+    const r = rig(); const { m, cam } = r;
+    cam.liveScroll = 2_000_000; m.enterHistory(); m.panMode = "glide"; m.panVel = 0; m.panPos = m.maxPan() + 200;
+    r.tick(3); expect(m.panMode).toBe("live");
+  });
+  it("zoomed out, replay starts never land where they hand straight back to live", () => {
+    const { m, cam } = rig();
+    cam.liveScroll = 20_000_000; cam.zoom = cam.zoomTarget = 0.01;
+    const maxIdx = Math.round((cam.liveScroll + cam.viewWorld()) / SW);
+    const p = m.replayPan(maxIdx); expect(p).toBeLessThan(m.maxPan() - cam.viewWorld() * 0.5 * cam.feel() * 0.2);
+    expect(m.replayPan(0)).toBe(m.restMin());
   });
   it("seek eases to the target strip and marks it", () => {
     const { m, cam, lod } = rig();

@@ -10,7 +10,9 @@ export interface Strip {
 }
 
 export const KEEP_DECODED = 48;   // decoded bitmaps kept around the view
-export const KEEP_BLOBS = 360;    // compressed blobs kept within this many strips of the view or the live edge
+export const KEEP_BLOBS = 360;
+/** the newest strips (no LOD tile covers them yet) stay decoded wherever the view is: the zoom-out / fly-back placeholder */
+export const TAIL = 16;    // compressed blobs kept within this many strips of the view or the live edge
 
 export interface StripDeps {
   config: () => StreamConfig;
@@ -127,7 +129,7 @@ export class StripStore {
     const liveIdx = Math.floor(this.d.liveScroll() / this.SW());
     const sweepBlobs = (++this.evictTick % 60) === 0;
     for (const [i, e] of this.strips) {
-      if (e.bitmap && (i < firstIdx - KEEP_DECODED || i > lastIdx + KEEP_DECODED)) {
+      if (e.bitmap && (i < firstIdx - KEEP_DECODED || i > lastIdx + KEEP_DECODED) && i <= this.maxIndex - TAIL) {
         e.bitmap.close && e.bitmap.close();
         e.bitmap = null;
       }

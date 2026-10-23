@@ -8,7 +8,7 @@ import type { Motion } from "./motion";
 export function dragBy(m: Motion, cam: Camera, dxCss: number, now: number): void {
   const dx = dxCss * cam.pxToWorldZ();
   // Apply drag in "shown" space so overscroll resists the finger.
-  const lo = m.minPan(), hi = m.maxPan();
+  const lo = m.minPan(), hi = m.hiFree();   // zoomed out: no resistance up to the centred live end
   const resist = m.panPos < lo || m.panPos > hi ? 0.45 : 1;
   m.panPos -= dx * resist;
   m.samples.push([now, m.panPos]);

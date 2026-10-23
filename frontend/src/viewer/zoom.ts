@@ -1,8 +1,9 @@
 // Zoom (behind ?zoom on the branch only; additive, the default viewer never zooms).
 // The Camera springs toward zoomTarget; this controller sets the target and, while browsing history, keeps the world
 // point under the cursor fixed (anchor). While live the right edge stays pinned to the live line.
-// Overview tiles: LOD level follows the on-screen size (lodLevelForZoom); the coarsest level today is L3 (256 strips
-// per tile), so the zoom-out floor keeps at most MAX_TILES L3 tiles on screen.
+// Overview tiles: LOD level follows the on-screen size (lodLevelDeep). With the macro pyramid (lodx) any zoom draws a
+// handful of tiles, so the zoom-out floor is the whole timeline across the screen; without it (pod-only tiles) the
+// floor keeps at most MAX_TILES L3 tiles on screen as before.
 import type { Camera } from "./camera";
 import type { Motion } from "./motion";
 import { LOD_N } from "./lod";
@@ -10,13 +11,14 @@ import { LOD_N } from "./lod";
 export const MAX_TILES = 40;
 
 export class ZoomController {
-  private anchor: { cssX: number; worldX: number } | null = null;
-  constructor(private readonly cam: Camera, private readonly motion: Motion) {}
+  private anchor: { cssX: number; worldX: number; left0: number } | null = null;
+  /** deep: strips in the whole timeline when the macro pyramid is available, else null */
+  constructor(private readonly cam: Camera, private readonly motion: Motion, private readonly deep: () => number | null = () => null) {}
 
-  /** Smallest zoom where at most MAX_TILES coarsest overview tiles cover the screen. */
+  /** Smallest zoom: the whole timeline fits the screen (macro pyramid), else at most MAX_TILES L3 tiles on screen. */
   minZoom(): number {
-    const cam = this.cam, w = cam.canvas.width;
-    const sMin = w / (MAX_TILES * LOD_N[3] * cam.SW());
+    const cam = this.cam, w = cam.canvas.width, n = this.deep();
+    const sMin = n && n > MAX_TILES * LOD_N[3] ? w / (n * cam.SW()) : w / (MAX_TILES * LOD_N[3] * cam.SW());
     return Math.min(1, sMin / (cam.scale() * (cam.portrait() ? 1 : cam.ribbon)));
   }
 
@@ -28,7 +30,7 @@ export class ZoomController {
     if (this.motion.panMode !== "live" && this.motion.panMode !== "return") {
       if (this.motion.panMode !== "glide") { this.motion.panMode = "glide"; }
       this.motion.panVel = 0;
-      this.anchor = { cssX: x, worldX: cam.screenToWorld(x).x };
+      this.anchor = { cssX: x, worldX: cam.screenToWorld(x).x, left0: cam.screenToWorld(0).x };
     } else this.anchor = null;
     cam.zoomTarget = z;
   }
@@ -44,7 +46,12 @@ export class ZoomController {
     // world(cssX) = viewLeft + c + cssX*k/s.
     const k = cam.canvas.width / Math.max(1, cam.canvas.clientWidth);
     const vl = a.worldX - a.cssX * k / cam.drawnScale() - cam.leftOffset();
-    m.panPos = Math.max(m.minPan(), Math.min(m.maxPan(), vl));
+    // Zooming never pulls the drawn left edge into the start slack (before world 0) by itself: the anchored zoom stops
+    // at world 0 as before (max zoom-out frames the whole timeline), unless the view was already in the slack (panned there).
+    const lo = a.left0 < 0 ? Math.max(m.minPan(), a.left0 - cam.leftOffset()) : m.restMin();
+    // Upper bound: zoomed out a centred live end stays centred (Motion.hiFree); zoom 1: the live edge as before.
+    const hi = m.hiFree();
+    m.panPos = Math.max(Math.min(lo, hi), Math.min(hi, vl));
     if (cam.zoom === cam.zoomTarget && cam.zoomVel === 0) this.anchor = null;   // settled (the camera snaps exactly)
   }
 }

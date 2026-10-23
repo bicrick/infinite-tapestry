@@ -29,5 +29,23 @@ export function surroundReach(zoom: number): number { return zoom >= 1 ? 1 : Mat
 export function surroundGlow(zoom: number): number {
   if (zoom >= 1) return 1;
   const t = Math.min(1, 1 - zoom), e = t * t * (3 - 2 * t);   // smoothstep: no jump leaving zoom 1
-  return 1 + 0.4 * e;
+  // Far out (below zoom 0.1) the halo keeps growing with the zoom-out (log scale), so the whole timeline stays visible
+  // by its glow even when the band is a 2 px line; capped at GLOW_FAR_MAX x. Unchanged above zoom 0.1.
+  return (1 + 0.4 * e) * (1 + (GLOW_FAR_MAX - 1) * surroundFar(zoom));
 }
+/** 0 at zoom >= 0.1, easing (log scale) to 1 at ~1e-4.2: far out the mirror fades and the soft glow takes over. */
+export function surroundFar(zoom: number): number {
+  const u = Math.min(1, Math.max(0, Math.log10(0.1 / Math.max(zoom, 1e-6)) / 3.2));
+  return u * u * (3 - 2 * u);
+}
+/** far out the halo is a soft band this tall (fraction of the screen height), not a full-screen wash */
+export const FAR_REACH = 0.16;
+export const GLOW_FAR_MAX = 4;
+
+/**
+ * Minimum band height: far zoomed out the band would shrink to nothing (the timeline is ~30 000 : 1), so the vertical
+ * scale never goes below MIN_BAND_CSS CSS px for the band (true scale otherwise; centred on its true position by the
+ * camera). Only reached well below the strip layer's zoom, so strips are never stretched; at zoom 1 sy == s exactly.
+ */
+export const MIN_BAND_CSS = 2;
+export function minBandScale(s: number, paintHeight: number, dpr: number): number { return Math.max(s, (MIN_BAND_CSS * dpr) / Math.max(1, paintHeight)); }
