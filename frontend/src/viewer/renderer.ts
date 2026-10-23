@@ -8,7 +8,7 @@ import type { Motion } from "./motion";
 import type { LiveFollower } from "./live-follower";
 import type { Reflection, SurroundView } from "./reflection";
 import { FAR_REACH, surroundFar, surroundGlow, surroundReach } from "./layout";
-import { easeRgb, endsGeom, endsMask, seamBreath, type Ends } from "./ends";
+import { easeRgb, endsGeom, endsMask, endsQ, seamBreath, type Ends } from "./ends";
 
 declare global {
   interface Window { __probe?: number[]; __ov?: number[]; __dx?: number; __nolod?: boolean; __noblur?: boolean }
@@ -150,41 +150,46 @@ export class Renderer {
     for (let n = 0; n < 3; n++) this.seamTo[n] = Math.min(255, d[n] * k * 0.7 + 255 * 0.3);   // the edge's hue, lifted to light
   }
 
-  /** The newest strips feather into the background at the drawn end, strip 0 fades in from it (band rect only). */
-  private drawEndFades(e: Ends, top: number, bh: number): void {
-    const ctx = this.ctx, c = this.EMPTY_RGB;
+  /** Past either end only the background shows; strip 0 fades in from it and the newest strips feather into it (band
+   *  rect only). Everything scales with e.q, so it eases in from zoom 1 (where it is never drawn). */
+  private drawEndFades(e: Ends, top: number, bh: number, w: number): void {
+    const ctx = this.ctx, c = this.EMPTY_RGB, q = e.q;
+    ctx.fillStyle = `rgba(${c},${q})`;
+    if (e.start && e.sx > 0) ctx.fillRect(-2, top - 1, e.sx + 2, bh + 2);
+    if (e.end && e.ex < w) ctx.fillRect(e.ex, top - 1, w - e.ex + 2, bh + 2);
     if (e.start && e.fs > 0) {
       const g = ctx.createLinearGradient(e.sx, 0, e.sx + e.fs, 0);
-      g.addColorStop(0, `rgba(${c},1)`); g.addColorStop(0.5, `rgba(${c},.38)`); g.addColorStop(1, `rgba(${c},0)`);
+      g.addColorStop(0, `rgba(${c},${q})`); g.addColorStop(0.5, `rgba(${c},${0.38 * q})`); g.addColorStop(1, `rgba(${c},0)`);
       ctx.fillStyle = g; ctx.fillRect(e.sx, top, e.fs, bh);
     }
     if (e.end && e.fe > 0) {
       const g = ctx.createLinearGradient(e.ex - e.fe, 0, e.ex, 0);
-      g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(0.55, `rgba(${c},.3)`); g.addColorStop(1, `rgba(${c},.94)`);
+      g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(0.55, `rgba(${c},${0.3 * q})`); g.addColorStop(1, `rgba(${c},${0.94 * q})`);
       ctx.fillStyle = g; ctx.fillRect(e.ex - e.fe, top, e.fe, bh);
     }
   }
 
-  /** Light seam at the drawn end: a soft tinted bloom + a narrow brighter core, two radial gradients (no full-canvas pass). */
-  private drawSeam(e: Ends, cy: number, dt: number): void {
-    const ctx = this.ctx, C = this.seamC;
+  /** Light seam at the drawn end: a horizontal glow along the line axis (two radial gradients, no full-canvas pass).
+   *  The strips occlude its back half (clipped out of the band row before the end), so the light spills out of the tip. */
+  private drawSeam(e: Ends, top: number, bh: number, dt: number): void {
+    const ctx = this.ctx, C = this.seamC, w = ctx.canvas.width, h = ctx.canvas.height, cy = top + bh / 2;
     easeRgb(C, this.seamTo, dt);
     const breathing = this.devBreath || this.d.connected();
-    const b = seamBreath(performance.now() / 1000, breathing) * this.surroundA;
-    const k = Math.min(1, Math.max(0, (e.rx / e.ry - 0.2) / 0.3));   // 0 at zoom 1 (rx = .2 ry) .. 1 far out (rx = .5 ry)
+    const b = seamBreath(performance.now() / 1000, breathing) * this.surroundA * e.q;
     const col = `${C[0] | 0},${C[1] | 0},${C[2] | 0}`;
     const core = `${(C[0] + 255) / 2 | 0},${(C[1] + 255) / 2 | 0},${(C[2] + 255) / 2 | 0}`;
-    const lk = this.light ? 0.55 : 1;
+    const lk = (this.light ? 0.5 : 1) * (1 + 0.9 * Math.min(1, Math.max(0, 1 - bh / 40)));   // a thin line needs a brighter tip
     ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, w, h); ctx.rect(e.ex - e.rx - 2, top, e.rx + 2, bh); ctx.clip("evenodd");   // behind the strips
     if (!this.light) ctx.globalCompositeOperation = "lighter";
     ctx.translate(e.ex, cy);
     ctx.save(); ctx.scale(e.rx, e.ry);
-    let g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1), a = 0.34 * b * lk;
-    g.addColorStop(0, `rgba(${col},${a})`); g.addColorStop(0.3, `rgba(${col},${a * 0.5})`); g.addColorStop(0.65, `rgba(${col},${a * 0.14})`); g.addColorStop(1, `rgba(${col},0)`);
+    let g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1), a = 0.26 * b * lk;
+    g.addColorStop(0, `rgba(${col},${a})`); g.addColorStop(0.35, `rgba(${col},${a * 0.45})`); g.addColorStop(0.7, `rgba(${col},${a * 0.12})`); g.addColorStop(1, `rgba(${col},0)`);
     ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2); ctx.restore();
-    ctx.scale(e.rx * (0.45 + 0.2 * k), e.ry * 0.7);
-    g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); a = (0.26 + 0.3 * k) * b * lk;
-    g.addColorStop(0, `rgba(${core},${a})`); g.addColorStop(0.25, `rgba(${core},${a * 0.6})`); g.addColorStop(0.55, `rgba(${core},${a * 0.18})`); g.addColorStop(1, `rgba(${core},0)`);
+    ctx.scale(e.rx * 0.45, Math.max(bh * 0.5 + 1, e.ry * 0.7));
+    g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); a = 0.3 * b * lk;
+    g.addColorStop(0, `rgba(${core},${a})`); g.addColorStop(0.3, `rgba(${core},${a * 0.5})`); g.addColorStop(0.65, `rgba(${core},${a * 0.12})`); g.addColorStop(1, `rgba(${core},0)`);
     ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2);
     ctx.restore();
   }
@@ -328,7 +333,7 @@ export class Renderer {
       const ov = follower.livePos !== null && motion.panMode !== "live" ? Math.max(0, left + w / s - (follower.livePos - STAGE)) : 0;
       if (window.__ov) window.__ov.push(ov);
       // zoomed out the veil gives way to the end feather + seam (fades out over zoom 1 -> 0.97; zoom 1 unchanged)
-      const vk = cam.zoom >= 1 ? 1 : Math.round(Math.max(0, Math.min(1, (cam.zoom - 0.97) / 0.03)) * 20) / 20;
+      const vk = cam.zoom >= 1 ? 1 : Math.round((1 - endsQ(cam.zoom)) * 100) / 100;   // hands over to the seam as it eases in
       const px = vk > 0 ? Math.round(ov * s / (window.devicePixelRatio || 1)) : 0;
       if (px !== this.ovPx || vk !== this.veilK) { this.ovPx = px; this.veilK = vk; this.pastVeil.style.width = px + "px"; this.pastVeil.style.opacity = px > 0 ? String(vk) : "0"; }
     }
@@ -346,7 +351,6 @@ export class Renderer {
     ctx.save();
     ctx.translate(0, yOff);
     ctx.scale(s, sy);
-    if (this.ends) { ctx.beginPath(); ctx.rect(-left, -2, pw, H + 4); ctx.clip(); }   // past either end: background only
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet. Kept on while any
     // strip is still crossfading: dropping it the frame coverage hit 1 faded those strips over the bare background.
     const lodOn = !window.__nolod && (cam.zoom < 0.97 || fast || this.coverage < 1 || this.fading > 0 || this.lodFading); let fading = 0;
@@ -392,7 +396,7 @@ export class Renderer {
       }
     }
     ctx.restore();
-    if (this.ends) this.drawEndFades(this.ends, yOff, bandH);
+    if (this.ends) this.drawEndFades(this.ends, yOff, bandH, w);
     this.surroundV = { left, ww: w / s, fi: Math.max(0, firstIdx), li: Math.min(lastIdx, strips.maxIndex), cov: this.coverage, lod: lodOn, fading };
     const RIB = 0.6;
     if (cam.portrait()) this.drawSurround(w, h, Math.max(0, yOff), H * sy);
@@ -400,7 +404,7 @@ export class Renderer {
       const sa = this.surroundA, k = (1 - cam.ribbon) / (1 - RIB); this.surroundA = sa * k * k * (3 - 2 * k);
       this.drawSurround(w, h, Math.max(0, yOff), H * sy); this.surroundA = sa;
     } else if (this.surroundAStr !== "0.00") { this.surroundAStr = "0.00"; document.documentElement.style.setProperty("--amb-a", "0"); if (this.refl) this.refl.off(); }
-    if (this.ends && this.ends.end) { this.sampleSeam(); this.drawSeam(this.ends, yOff + bandH / 2, this.drawDt); }
+    if (this.ends && this.ends.end) { this.sampleSeam(); this.drawSeam(this.ends, yOff, bandH, this.drawDt); }
     // Speed blur that scales with scrub velocity, as a GPU-composited CSS filter (touch only).
     const blur = Math.min(12, Math.max(0, (Math.abs(cam.velS) / cam.feel() - 500) / 420)) * (window.devicePixelRatio || 1);
     {
