@@ -8,6 +8,10 @@ and mirrored to R2 under <prefix>/lod/<L>/<c>.jpg.
 Past L3 the macro pyramid (lodx.py: fixed-height WebP, x4 strips per level up to the whole timeline) is built the same
 way when its chunk completes, plus the whole-timeline overview every 4096 strips. Those tiles are immutable: an
 existing one (local or on the CDN) is never rebuilt or re-uploaded.
+
+The blended pyramid (lodx.BLEND_LIVE / lodx.BLEND_X: same keys under lodb/ and lodxb/) is the same set of tiles with
+the next chunk's first strip painted over each tile's right edge, so tile boundaries show the zoom-1 overlap blend
+instead of a hard cut. A blended tile is built once the strip after its chunk exists.
 """
 
 from __future__ import annotations
@@ -47,6 +51,67 @@ class LodBuilder:
                 self._pool.submit(self._safe_build_x, k, index // lodx.STRIPS[k])
         if (index + 1) % lodx.OV_STEP == 0:
             self._pool.submit(self._safe_build_ov, index + 1)
+        # blended pyramid: chunk c of N strips is ready once strip N*(c+1) (this one) exists
+        if index > 0:
+            for level, n in STRIPS_PER_TILE.items():
+                if index % n == 0:
+                    self._pool.submit(self._safe, self.get_b, level, index // n - 1)
+            for k in lodx.LEVELS:
+                if index % lodx.STRIPS[k] == 0:
+                    self._pool.submit(self._safe, self.get_xb, k, index // lodx.STRIPS[k] - 1)
+            if index % lodx.OV_STEP == 0:
+                self._pool.submit(self._safe, self.overview_b, index)
+
+    @staticmethod
+    def _safe(fn, *args) -> None:
+        try:
+            fn(*args, build=True)
+        except Exception:
+            logger.exception("blended LOD build failed %s%s", fn.__name__, args)
+
+    def get_b(self, level: int, chunk: int, build: bool = False) -> bytes | None:
+        """Blended live tile (lodb/<level>/<chunk>.jpg): same geometry as get(), edges blended with the next chunk."""
+        rel = lodx.live_key(level, chunk)
+        data = self._cached(rel)
+        if data or not build:
+            return data
+        n = STRIPS_PER_TILE[level]
+        if level == 1:
+            meta = self.store.load_meta()
+            strips = []
+            for i in range(chunk * n, (chunk + 1) * n + 1):
+                st = self.store.load_strip(i, meta.get(i))
+                strips.append(st.jpeg if st else None)
+            if strips[-1] is None:
+                return None   # the next chunk's first strip is not there yet: no blend to paint
+            data = lodx.l1_from_strips(strips, self.sw, self.h, n=n, quality=72)
+        else:
+            data = lodx.live_up([self.get_b(level - 1, chunk * 4 + j, build=True) for j in range(4)], *self.size(level))
+        if data:
+            self._publish(rel, data, "image/jpeg")
+        return data
+
+    def get_xb(self, level: int, chunk: int, build: bool = False) -> bytes | None:
+        """Blended macro tile (lodxb/...), from blended children."""
+        rel = lodx.key(level, chunk, lodx.BLEND_X)
+        data = self._cached(rel)
+        if data or not build:
+            return data
+        data = lodx.combine([self.get_b(1, chunk * 4 + j, build=True) if level == 2 else self.get_xb(level - 1, chunk * 4 + j, build=True)
+                             for j in range(4)])
+        if data:
+            self._publish(rel, data)
+        return data
+
+    def overview_b(self, n: int, build: bool = True) -> bytes | None:
+        rel = lodx.ov_key(n, lodx.BLEND_X)
+        data = self._cached(rel)
+        if data or not build:
+            return data
+        data = lodx.overview(n, lambda c: self.get_xb(5, c, build=True))
+        if data:
+            self._publish(rel, data)
+        return data
 
     def _safe_build_x(self, level: int, chunk: int) -> None:
         try:
@@ -74,12 +139,12 @@ class LodBuilder:
             p.write_bytes(data)
         return data
 
-    def _publish(self, rel: str, data: bytes) -> None:
+    def _publish(self, rel: str, data: bytes, ctype: str = lodx.CTYPE) -> None:
         p = self.xpath(rel)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
         if getattr(self.store, "mirror", None):
-            self.store.mirror.put(f"public:{rel}", data, lodx.CTYPE)
+            self.store.mirror.put(f"public:{rel}", data, ctype)
 
     def get_x(self, level: int, chunk: int, build: bool = False) -> bytes | None:
         """Macro tile X<level> chunk (lodx.STRIPS[level] strips), from its 4 children (L1 tiles for X2)."""

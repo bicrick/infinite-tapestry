@@ -5,6 +5,10 @@
 //    infinite_tapestry/lodx.py) for zooming out past L3 to the whole timeline, plus one whole-timeline overview image
 //    (lodx/ov/<n>.webp, strips [0, n), n a multiple of 4096) that is always resident as the bottom underlay.
 // Only complete chunks exist (immutable), so a URL never changes content.
+// Blended pyramid: lodb/ (live) and lodxb/ (macro + overview) hold the same tiles rebuilt so each tile's right edge
+// carries the next chunk's first strip, i.e. the same inpainted overlap blend as the zoom-1 strips (the original lod/
+// and lodx/ tiles end in a hard cut every chunk). Each tile tries blended -> original -> pod, so a tile the blended
+// builder has not reached yet still shows exactly as before.
 import { cdn, cdnOk, onCdnSwitch } from "./cdn";
 export const LOD_N: Record<number, number> = { 1: 16, 2: 64, 3: 256, 4: 1024, 5: 4096, 6: 16384, 7: 65536, 8: 262144 };
 export type LodLevel = number;
@@ -42,7 +46,28 @@ export function lodLevelDeep(z: number, devPxPerStrip: number, macro: boolean): 
 /** Whole-timeline overview size for the newest index: the last multiple of OV_STEP that is complete. */
 export const overviewN = (maxIndex: number): number => Math.floor(Math.max(0, maxIndex) / OV_STEP) * OV_STEP;
 
-interface Tile { img: HTMLImageElement; ok: boolean; used: number; at: number; level: number; failed?: boolean; podTried?: boolean }
+interface Tile { img: HTMLImageElement; ok: boolean; used: number; at: number; level: number; failed?: boolean }
+
+/** Blended sibling of an R2 pyramid base (".../lod/" -> ".../lodb/", ".../lodx/" -> ".../lodxb/"), or "" */
+export const blendBase = (b: string): string => (/lodx?\/$/.test(b) ? b.replace(/\/$/, "b/") : "");
+
+/** URLs to try for a tile, in order: blended, original R2 tile, then (live levels) the pod's one-time builder. */
+export function tileSrcs(level: number, c: number, lodBase: string | undefined, httpBase: string): string[] {
+  const pad = String(c).padStart(6, "0"), out: string[] = [];
+  if (level >= 4) {
+    if (!lodBase || !/lod\/$/.test(lodBase)) return out;
+    const xb = lodBase.replace(/lod\/$/, "lodx/");
+    for (const b of [blendBase(xb), xb]) out.push(`${b}${level}/${pad}.webp`);
+    return out;
+  }
+  if (lodBase) { const bb = blendBase(lodBase); if (bb) out.push(`${bb}${level}/${pad}.jpg`); out.push(`${lodBase}${level}/${pad}.jpg`); }
+  out.push(`${httpBase}/lod/${level}/${c}.jpg`);
+  return out;
+}
+
+/** Overview URLs for n strips: blended, then original. */
+export const ovSrcs = (xb: string, n: number): string[] =>
+  [blendBase(xb), xb].filter(Boolean).map((b) => `${b}ov/${String(n).padStart(8, "0")}.webp`);
 export interface TileHit { img: HTMLImageElement; at: number }
 
 export class LodStore {
@@ -68,18 +93,16 @@ export class LodStore {
 
   private isX(level: number): boolean { return level >= 4; }
 
-  private load(key: string, level: number, src: string, low: boolean, pod?: string): Tile {
+  private load(key: string, level: number, srcs: string[], low: boolean): Tile {
     const tile: Tile = { img: new Image(), ok: false, used: 0, at: 0, level };
     tile.img.crossOrigin = "anonymous";
     if (low) tile.img.fetchPriority = "low";   // background prefetch: visible strips and tiles go first
     tile.img.decoding = "async";
-    tile.img.onload = () => { tile.ok = true; tile.at = performance.now(); cdnOk(src); };
-    // CDN first; a live tile not mirrored yet falls back to the pod once (which builds and mirrors it). R2 only.
-    tile.img.onerror = () => {
-      if (pod && tile.img.src !== pod && !tile.podTried) { tile.podTried = true; tile.img.src = pod; } else tile.failed = true;
-    };
-    tile.img.src = (src && cdn(src)) || pod || "";
-    if (!tile.img.src) tile.failed = true;
+    let i = 0;
+    tile.img.onload = () => { tile.ok = true; tile.at = performance.now(); cdnOk(srcs[i]); };
+    // each source once, in order (blended -> original -> pod, which builds and mirrors a missing live tile)
+    tile.img.onerror = () => { if (++i < srcs.length) tile.img.src = cdn(srcs[i]); else tile.failed = true; };
+    if (srcs.length) tile.img.src = cdn(srcs[0]); else tile.failed = true;
     this.cache.set(key, tile);
     if (this.cache.size > 400) this.evict();
     return tile;
@@ -100,9 +123,9 @@ export class LodStore {
     let t = this.cache.get(key);
     if (!t) {
       if (c < 0 || (c + 1) * LOD_N[level] > this.deps.maxIndex()) return null;   // chunk still filling
-      const pad = String(c).padStart(6, "0");
-      if (x) { const xb = this.xBase(); if (!xb) return null; t = this.load(key, level, `${xb}${level}/${pad}.webp`, low); }
-      else { const base = this.deps.lodBase(); t = this.load(key, level, base ? `${base}${level}/${pad}.jpg` : "", low, `${this.deps.httpBase()}/lod/${level}/${c}.jpg`); }
+      const srcs = tileSrcs(level, c, this.deps.lodBase(), this.deps.httpBase());
+      if (x && !srcs.length) return null;
+      t = this.load(key, level, srcs, low);
     }
     t.used = performance.now();
     return t.ok ? t : null;
@@ -126,11 +149,14 @@ export class LodStore {
     t.img.crossOrigin = "anonymous"; t.img.decoding = "async";
     this.ovPending = true;
     t.img.onload = () => { t.ok = true; t.at = performance.now(); this.ov = { n, t }; this.ovPending = false; };
+    const srcs = ovSrcs(xb, n);
+    let i = 0;
     t.img.onerror = () => {
+      if (++i < srcs.length) { t.img.src = cdn(srcs[i]); return; }   // blended not built yet: the original overview
       this.ovPending = false; this.ovFailed.add(n);
       if (!this.ov && n > OV_STEP && !this.ovFailed.has(n - OV_STEP)) this.ovLoad(xb, n - OV_STEP);
     };
-    t.img.src = cdn(`${xb}ov/${String(n).padStart(8, "0")}.webp`);
+    t.img.src = cdn(srcs[0]);
   }
 
   /** L1 + L2 tiles around a strip index (a seek / flight / coast landing): the underlay is in before the strips. */

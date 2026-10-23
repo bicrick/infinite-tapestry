@@ -9,6 +9,12 @@ a fixed 1024 x 128 pixels at every level and only the horizontal span grows x4 p
 
 X2 is built from 4 live L1 tiles (1024 x 256, 16 strips each), every higher level from its 4 children, the overview
 from the complete X5 tiles. Nothing here needs a GPU: it is downsampling only (Pillow, BOX filter).
+
+Blended pyramid (BLEND_LIVE / BLEND_X prefixes): each strip image is its 256 px slot plus a 192 px inpainted blend that
+is drawn over the end of the previous strip (that overdraw is the only blending the zoom-1 viewer does). An L1 tile that
+composes only its own 16 strips misses the next chunk's first strip, so its last slot shows a raw cut at every tile
+edge. The blended L1 also paints strip 16(c+1) (clipped to the tile), so it is exactly the zoom-1 composite,
+downsampled; L2/L3 and X2..X8 + the overview are then built from those, unchanged otherwise.
 The viewer picks the level by on-screen size, so any zoom needs a handful of tiles (see frontend/src/viewer/lod.ts).
 """
 
@@ -29,12 +35,20 @@ CTYPE = "image/webp"
 CACHE = "public, max-age=31536000, immutable"
 
 
-def key(level: int, chunk: int) -> str:
-    return f"lodx/{level}/{chunk:06d}.webp"
+BLEND_LIVE = "lodb"    # blended L1..L3 (same geometry and JPEG as lod/)
+BLEND_X = "lodxb"      # blended X2..X8 + overview (same geometry and WebP as lodx/)
 
 
-def ov_key(n: int) -> str:
-    return f"lodx/ov/{n:08d}.webp"
+def key(level: int, chunk: int, base: str = "lodx") -> str:
+    return f"{base}/{level}/{chunk:06d}.webp"
+
+
+def ov_key(n: int, base: str = "lodx") -> str:
+    return f"{base}/ov/{n:08d}.webp"
+
+
+def live_key(level: int, chunk: int, base: str = BLEND_LIVE) -> str:
+    return f"{base}/{level}/{chunk:06d}.jpg"
 
 
 def complete_chunks(level: int, max_index: int) -> int:
@@ -89,10 +103,13 @@ def overview(n: int, x5: Callable[[int], Optional[bytes]], fill=(10, 10, 12)) ->
     return encode(canvas.resize((OV_W, TILE_H), Image.Resampling.BOX))
 
 
-def l1_from_strips(strips: Sequence[Optional[bytes]], sw: int, h: int) -> Optional[bytes]:
-    """A missing live L1 tile (16 strips) composed from the strips like lod.LodBuilder (each strip image starts
-    `overlap` before its slot, later strips paint over earlier ones), returned as a 1024 x 256 JPEG."""
-    full = Image.new("RGB", (len(strips) * sw, h), (10, 10, 12))
+def l1_from_strips(strips: Sequence[Optional[bytes]], sw: int, h: int, n: Optional[int] = None,
+                   quality: int = 80) -> Optional[bytes]:
+    """A live L1 tile (n slots, default len(strips)) composed from the strips like the viewer draws them (each strip
+    image starts `overlap` before its slot, later strips paint over earlier ones), returned as a JPEG at 1/4 scale.
+    Blended: pass n=16 and 17 strips, the 17th being the next chunk's first, whose blend covers the last slot."""
+    n = len(strips) if n is None else n
+    full = Image.new("RGB", (n * sw, h), (10, 10, 12))
     got = 0
     for j, s in enumerate(strips):
         im = _open(s)
@@ -105,5 +122,20 @@ def l1_from_strips(strips: Sequence[Optional[bytes]], sw: int, h: int) -> Option
     if not got:
         return None
     b = io.BytesIO()
-    full.resize((len(strips) * sw // 4, h // 4), Image.Resampling.BOX).save(b, "JPEG", quality=80)
+    full.resize((n * sw // 4, h // 4), Image.Resampling.BOX).save(b, "JPEG", quality=quality)
+    return b.getvalue()
+
+
+def live_up(children: Sequence[Optional[bytes]], w: int, h: int, quality: int = 72) -> Optional[bytes]:
+    """L2 / L3 live tile (w x h JPEG) from its 4 children laid side by side, like lod.LodBuilder."""
+    ims = [_open(c) for c in children]
+    if not any(ims):
+        return None
+    cw = next(im for im in ims if im is not None).size
+    canvas = Image.new("RGB", (cw[0] * len(ims), cw[1]))
+    for j, im in enumerate(ims):
+        if im is not None:
+            canvas.paste(im.resize(cw, Image.Resampling.BOX), (j * cw[0], 0))
+    b = io.BytesIO()
+    canvas.resize((w, h), Image.Resampling.BOX).save(b, "JPEG", quality=quality)
     return b.getvalue()
