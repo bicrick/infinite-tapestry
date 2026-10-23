@@ -1,0 +1,13 @@
+import { chromium } from "playwright-core";
+const [U, VP] = process.argv.slice(2);
+const vps = { desktop: { viewport: { width: 1280, height: 800 } }, phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1" } };
+const b = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: [...(process.env.NOGL ? ["--disable-gpu","--disable-webgl"] : ["--ignore-gpu-blocklist","--enable-unsafe-swiftshader","--use-angle=swiftshader"]), ...(process.env.BLOCK ? [`--host-resolver-rules=MAP ${process.env.BLOCK} ~NOTFOUND`] : [])] });
+const c = await b.newContext({ ...vps[VP], colorScheme: "dark" }); const p = await c.newPage();
+p.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") console.log("console." + m.type(), m.text().slice(0, 300)); });
+p.on("pageerror", (e) => console.log("PAGEERROR", e.message, (e.stack || "").split("\n").slice(0, 4).join(" | ")));
+p.on("requestfailed", (r) => console.log("REQFAIL", r.url().slice(0, 150), r.failure() && r.failure().errorText));
+const hosts = {}; p.on("response", (r) => { if (/\.(webp|jpg)(\?|$)/.test(r.url()) && r.status() < 400) { const h = new URL(r.url()).host; hosts[h] = (hosts[h] || 0) + 1; } if (r.status() >= 400) console.log("HTTP", r.status(), r.url().slice(0, 150)); });
+await p.goto(U, { waitUntil: "load" }); await p.waitForTimeout(12000);
+console.log("STATE", JSON.stringify(await p.evaluate(() => { const V = window.TapestryView; return V ? { ready: V.ready(), cov: V.coverage(), max: V.max(), zoom: V.zoom(), center: V.center(), pan: V.panMode && V.panMode(), intro: document.body.className } : "noview"; })));
+console.log("IMG_OK_BY_HOST", JSON.stringify(hosts));
+await p.screenshot({ path: `/tmp/probe-${VP}${process.env.NOGL ? "-nogl" : ""}${process.env.BLOCK ? "-block" : ""}.png` }); await b.close();
