@@ -111,6 +111,7 @@ export function startViewer(): void {
     afterFrame: () => updateTimeline(),
     beforeDraw: () => { if (zoom) zoom.step(); },
     hud: (speed, ahead) => updateHud(speed, ahead),
+    ticks: () => timeline.ticks(),
   });
   renderer.gestureHeld = () => gesture !== null;
   // Zoom (on for everyone; ?zoom=0 turns it off): ctrl/trackpad-pinch wheel and two-finger touch pinch zoom about the

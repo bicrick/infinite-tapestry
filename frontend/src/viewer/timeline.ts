@@ -3,6 +3,7 @@
 // tlPoints: [stripIndex, unixTime] samples from the pod's /timeline (absent while the GPU is off).
 import type { SceneTuple } from "../core/protocol";
 import { LOD_N } from "./lod";
+import { timeTicks, type TickSet } from "./ticks";
 
 export type SceneRow = [number, string, string, string, string];
 export interface SceneAt { index: number; title: string; by: string; style: string; origin: string }
@@ -79,6 +80,14 @@ export class Timeline {
    *  (/api/about?kind=history, one sample per 64 strips) so it also works with the GPU off. timeAt() is unchanged. */
   whenAt(idx: number): number | null { return timeAt(this.points.length ? this.points : this.histPoints, idx, this.d.stripSeconds()); }
   histPoints: Array<[number, number]> = [];
+  private tickSrc: Array<[number, number]> | null = null;
+  private tickSet: TickSet | null = null;
+  /** Hour / day notches (America/Chicago) from the same samples as whenAt(), rebuilt only when they change. */
+  ticks(): TickSet {
+    const P = this.points.length ? this.points : this.histPoints;
+    if (P !== this.tickSrc || !this.tickSet) { this.tickSrc = P; this.tickSet = timeTicks(P); }
+    return this.tickSet;
+  }
   private histAt = 0;
   private async loadHistPoints(): Promise<void> {
     if (this.points.length || Date.now() - this.histAt < 10 * 60000) return;
