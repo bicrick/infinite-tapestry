@@ -169,9 +169,6 @@ export class Camera {
     return this.last;
   }
 
-  /** World x of (fractional) strip index idx: the inverse of centerIdx(), so time notches line up with the date line. */
-  idxToWorld(idx: number): number { return (idx + 0.5) * this.SW() - this.d.maxOv(); }
-
   /** Centre of what's actually drawn as a strip index (-0.5 so callers' Math.round() picks the strip under the centre). */
   centerIdx(viewLeft: number): number {
     const c = this.drawCenter != null ? this.drawCenter : viewLeft + this.viewWorld() / 2;

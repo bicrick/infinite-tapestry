@@ -8,7 +8,6 @@ import type { Motion } from "./motion";
 import type { LiveFollower } from "./live-follower";
 import type { Reflection, SurroundView } from "./reflection";
 import { FAR_REACH, surroundFar, surroundGlow, surroundReach } from "./layout";
-import { TICK_ZOOM, TickLayer, type TickSet } from "./ticks";
 
 declare global {
   interface Window { __probe?: number[]; __ov?: number[]; __dx?: number; __nolod?: boolean; __noblur?: boolean }
@@ -26,8 +25,6 @@ export interface RendererDeps {
   hud: (speed: number, ahead: number) => void;
   /** after the camera springs, before drawing (zoom anchor) */
   beforeDraw?: () => void;
-  /** hour / day notches for the zoomed-out view (Timeline.ticks) */
-  ticks?: () => TickSet;
 }
 
 export class Renderer {
@@ -48,7 +45,6 @@ export class Renderer {
   private readonly lodSpans: Array<[number, number]> = [];
   /** a LOD refinement is still fading in (keeps the layer on) */ private lodFading = false;
   private readonly refl: Reflection | null;
-  /** created the first time the view zooms out past TICK_ZOOM */ private tickLayer: TickLayer | null = null;
   private readonly pastVeil: HTMLDivElement;
   private readonly ambBlobs: HTMLElement[];
   private ambCv: HTMLCanvasElement | null = null;
@@ -327,14 +323,6 @@ export class Renderer {
       const sa = this.surroundA, k = (1 - cam.ribbon) / (1 - RIB); this.surroundA = sa * k * k * (3 - 2 * k);
       this.drawSurround(w, h, Math.max(0, yOff), H * sy); this.surroundA = sa;
     } else if (this.surroundAStr !== "0.00") { this.surroundAStr = "0.00"; document.documentElement.style.setProperty("--amb-a", "0"); if (this.refl) this.refl.off(); }
-    // Time notches (zoomed out only; nothing exists or runs at zoom 1).
-    if (cam.zoom < TICK_ZOOM && this.d.ticks) {
-      if (!this.tickLayer) this.tickLayer = new TickLayer(canvas);
-      const kx = w / Math.max(1, canvas.clientWidth), ky = h / Math.max(1, canvas.clientHeight);
-      this.tickLayer.draw({ ticks: this.d.ticks(), zoom: cam.zoom, x: (idx) => (cam.idxToWorld(idx) - left) * s / kx, stripPx: SW * s / kx,
-        firstIdx, lastIdx: Math.min(lastIdx, strips.maxIndex), bandBot: (yOff + H * sy) / ky, width: canvas.clientWidth,
-        rgb: this.SURR === "5,5,6" ? "255,255,255" : "40,32,24" });
-    } else if (this.tickLayer) this.tickLayer.hide();
     // Speed blur that scales with scrub velocity, as a GPU-composited CSS filter (touch only).
     const blur = Math.min(12, Math.max(0, (Math.abs(cam.velS) / cam.feel() - 500) / 420)) * (window.devicePixelRatio || 1);
     {
