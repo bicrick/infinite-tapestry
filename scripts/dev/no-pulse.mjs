@@ -45,7 +45,10 @@ for (const zs of ZOOMS) {
   const swing = mean > 0 ? (mx - mn) / mean : 0; const modes = {}; tr.rows.forEach((r) => { modes[r[2]] = (modes[r[2]] || 0) + 1; });
   // turning points: count of rises/falls by > MAXSWING/2 of mean (a pulse is a fall + rise)
   let swings = 0, ref = L[0] || 0, dir = 0; for (const x of L) { if (x > ref * (1 + MAXSWING / 2) && dir <= 0) { swings++; dir = 1; ref = x; } else if (x < ref * (1 - MAXSWING / 2) && dir >= 0) { swings++; dir = -1; ref = x; } else if ((dir > 0 && x > ref) || (dir < 0 && x < ref)) ref = x; }
-  const ok = swing <= MAXSWING && tr.fades === 0 && !errs.length; allOk = allOk && ok;
+  // A pulse is dark <-> bright repeating: any CSS fade, or a fall and a rise (>= 2 turning points). At zoom 1 a single
+  // brightness drift is just different strips scrolling past while replay glides (prod shows the same), so the overall
+  // swing bound applies zoomed out only, where the glide is slow enough that the band should be flat.
+  const ok = tr.fades === 0 && swings < 2 && (z >= 1 || swing <= MAXSWING) && !errs.length; allOk = allOk && ok;
   const r = { zoom: zs, z: +z.toPrecision(3), frames: L.length, mean: +mean.toFixed(1), min: mn, max: mx, swing: +swing.toFixed(3), swings, fades: tr.fades, modes, ok, errs: errs.slice(0, 2) };
   res.push(r); console.error(JSON.stringify(r));
   if (process.env.TRACE) fs.writeFileSync(`${process.env.TRACE}-${VP}-${zs}.json`, JSON.stringify(tr.rows));

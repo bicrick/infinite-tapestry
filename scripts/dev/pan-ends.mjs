@@ -2,7 +2,9 @@
 // Usage: node scripts/dev/pan-ends.mjs <base> [outDir]   Env: CHROME, VERCEL_BYPASS_FILE (never printed), VP=desktop|phone.
 // Reports per zoom: world x under the screen centre and left edge after panning to the start (strip index units),
 // whether strip 0 reached the centre (|centre| <= 1 strip at zoom < 1, left edge <= 0 at zoom 1), and whether
-// panning back returns to live. Shots: <VP>-start-z<zoom>.png when outDir is given.
+// panning back returns to live. Zoomed out (zoom < 1) it also asserts the centred ends: strip 0 and the live end can each
+// be dragged to the screen centre, stay there 3 s after release (no snap-back, no hand-over to live), and stay centred
+// when zoomed in 4x at that spot. Shots: <VP>-start-z<zoom>.png, <VP>-liveend-z<zoom>(-in).png when outDir is given.
 import { chromium } from "playwright-core";
 import fs from "node:fs";
 const [BASE, OUT = ""] = process.argv.slice(2);
@@ -33,8 +35,13 @@ const load = async (q) => {
 };
 const st = () => page.evaluate(([W]) => { const V = window.TapestryView; const l = V.worldAt(0) / 256, r = V.worldAt(W) / 256;
   // strip units of world x; liveX = CSS x of the newest strip's right edge
-  return { c: V.worldAt(W / 2) / 256, l, r, ci: V.center(), z: V.zoom(), live: V.live(), max: V.max(), liveX: ((V.max() + 1) - l) / (r - l) * W }; }, [W]);
-const atLive = (s) => s.live || Math.abs(s.liveX - W) < 40;
+  return { c: V.worldAt(W / 2) / 256, l, r, ci: V.center(), z: V.zoom(), live: V.live(), max: V.max(), liveX: ((V.max() + 1) - l) / (r - l) * W,
+    x0: (0 - l) / (r - l) * W, mode: V.panMode ? V.panMode() : "",
+    // the drawn live line: the newest strips + inpaint band are staged off it (camera STAGE), so it sits STAGE before max+1
+    lineX: ((V.max() + 1) - (V.stage ? V.stage() : 0) / 256 - l) / (r - l) * W }; }, [W]);
+// zoom 1: in live (prod rules). Zoomed out the live end may rest anywhere up to the centre, so "back at the end" = the
+// end of the drawn strips (liveX) is on screen and not left of the centre band.
+const atLive = (s) => s.z < 1 ? s.live || (s.liveX <= W + 40 && s.liveX >= W / 2 - W * 0.06) : s.live || Math.abs(s.liveX - W) < 40;
 // pod off: reaching the live edge hands over to replay (existing rule: fade, then a random history spot), so
 // "back to live" = the live edge was reached at some moment, sampled every 100 ms
 const watch = async (ms) => { let hit = false, replay = false; const t0 = Date.now();
@@ -58,7 +65,11 @@ const drag = async (dx, hold = false) => {
   } else { await page.mouse.move(x0, y); await page.mouse.down(); for (let i = 1; i <= 8; i++) { await page.mouse.move(x0 + dx * i / 8, y); await page.waitForTimeout(16); } await page.waitForTimeout(120);
     const rel = async () => { await page.mouse.up(); }; if (hold) return rel; await rel(); }
   await page.waitForTimeout(60); return null; };
+// zoom-in check stays below 1: zoom 1 itself keeps the prod clamps (no centred ends), by design
+const zIn = (z) => Math.min(0.8, z * 4);
 const zoomTo = async (z) => { await page.evaluate(([z, x]) => window.TapestryView.zoomTo(z, x), [z, W / 2]); await page.waitForTimeout(1800); };
+// centred = within 6% of the screen width of the centre (CSS px)
+const TOL = W * 0.06;
 await load("");
 const minZ = await page.evaluate(() => window.TapestryView.minZoom());
 const out = { base: BASE, vp: VP, minZoom: minZ, zooms: [] };
@@ -71,14 +82,19 @@ for (const zs of ZS) {
   r.before = await st();
   let n = 0;
   for (; n < 30; n++) { const s = await st(); if (z < 1 ? s.c <= 0.5 : s.l <= 0.01) break; await drag(W * 0.7); }
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(300); r.start0 = await st();
+  await page.waitForTimeout(2700);
   r.start = await st(); r.dragsToStart = n;
-  r.ok = z < 1 ? Math.abs(r.start.c) <= 1.5 : r.start.l <= 0.01 && r.start.l > -0.01;
+  r.ok = z < 1 ? Math.abs(r.start.c) <= 1.5 && Math.abs(r.start.x0 - W / 2) <= TOL : r.start.l <= 0.01 && r.start.l > -0.01;
+  if (z < 1) r.startStays = Math.abs(r.start.x0 - r.start0.x0) <= 4;
   if (OUT) await page.screenshot({ path: `${OUT}/${VP}-start-z${zs}.png` });
+  // zoom in 4x at the centred start: the anchor keeps strip 0 centred
+  if (z < 1) { const z2 = zIn(z); await zoomTo(z2); r.startIn = await st(); r.startInOk = Math.abs(r.startIn.x0 - W / 2) <= TOL;
+    if (OUT) await page.screenshot({ path: `${OUT}/${VP}-start-z${zs}-in.png` }); await zoomTo(z); }
   // one drag back toward live must move the view at once (no dead travel at the start)
   await drag(-W * 0.3); await page.waitForTimeout(800); r.afterDragBack = await st(); r.movesAtOnce = r.afterDragBack.c - r.start.c > 0.5;
   // 2) full traversal back to live where feasible (the whole timeline is a few screens wide)
-  if (z <= 0.0025) { for (let i = 0; i < 40; i++) { if (atLive(await st())) break; await drag(-W * 0.7); await page.waitForTimeout(200); } await page.waitForTimeout(2000); r.traverseToLive = atLive(await st()); }
+  if (z <= 0.0025) { for (let i = 0; i < 90; i++) { if (atLive(await st())) break; await drag(-W * 0.7); await page.waitForTimeout(200); } await page.waitForTimeout(2000); r.traverseToLive = atLive(await st()); }
   // 3) leave live and come back (existing scrub rules), at this zoom
   await load(""); await zoomTo(z); r.atEnd0 = await st();
   await drag(W * 0.5); await drag(W * 0.5); await page.waitForTimeout(800); r.leftLive = !atLive(await st());
@@ -88,8 +104,19 @@ for (const zs of ZS) {
   // 4) the live end: hold a forward pull while live, measure where the live end sits, release -> live
   const rel = await drag(-W * 0.9, true); await page.waitForTimeout(300); r.pullLiveX = Math.round((await st()).liveX);
   if (OUT && zs === "min") await page.screenshot({ path: `${OUT}/${VP}-liveend-pull-z${zs}.png` });
-  await rel(); const pw = await watch(1800); r.afterPull = await st(); r.pullBackToLive = pw.hit;
-  out.zooms.push(r); console.error(JSON.stringify({ zoom: zs, ok: r.ok, c: r.start.c, l: r.start.l, drags: n, movesAtOnce: r.movesAtOnce, traverse: r.traverseToLive, left: r.leftLive, back: r.backToLive, replay: r.back.replay, pullLiveX: r.pullLiveX, pullBack: r.pullBackToLive }));
+  await rel(); const pw = await watch(1800); r.afterPull = await st(); r.pullBackToLive = pw.hit;   // zoom < 1: the pull rests (checked in 5)
+  // 5) zoomed out: drag the live end to the centre, release, it stays (not handed to live), zoom in 4x there, still centred
+  if (z < 1) { await load(""); await zoomTo(z);
+    // pull a little past the centre each time: the free range ends there, so the end comes to rest exactly centred
+    for (let i = 0; i < 12; i++) { const s = await st(); const d = s.liveX - W / 2; if (d <= 2) break; await drag(-(d + W * 0.1)); await page.waitForTimeout(400); }
+    await page.waitForTimeout(300); r.end0 = await st(); await page.waitForTimeout(2700); r.endC = await st();
+    r.endCentred = Math.abs(r.endC.liveX - W / 2) <= TOL; r.endStays = Math.abs(r.endC.liveX - r.end0.liveX) <= 4 && r.endC.mode !== "live" && r.endC.mode !== "return";
+    if (OUT) await page.screenshot({ path: `${OUT}/${VP}-liveend-z${zs}.png` });
+    await zoomTo(zIn(z)); r.endIn = await st(); r.endInOk = Math.abs(r.endIn.liveX - W / 2) <= TOL;
+    if (OUT) await page.screenshot({ path: `${OUT}/${VP}-liveend-z${zs}-in.png` });
+    r.ok = r.ok && r.startStays && r.startInOk && r.endCentred && r.endStays && r.endInOk; }
+  out.zooms.push(r); console.error(JSON.stringify({ zoom: zs, ok: r.ok, c: r.start.c, x0: Math.round(r.start.x0), stays: r.startStays, startIn: r.startIn && Math.round(r.startIn.x0), drags: n, movesAtOnce: r.movesAtOnce, traverse: r.traverseToLive, left: r.leftLive, back: r.backToLive, replay: r.back.replay, pullLiveX: r.pullLiveX, pullBack: r.pullBackToLive,
+    endX: r.endC && Math.round(r.endC.liveX), endStays: r.endStays, endMode: r.endC && r.endC.mode, endIn: r.endIn && Math.round(r.endIn.liveX) }));
 }
 out.errors = errs;
 console.log(JSON.stringify(out));
