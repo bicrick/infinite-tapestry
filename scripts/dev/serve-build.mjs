@@ -3,6 +3,7 @@
 // Usage: node scripts/dev/serve-build.mjs <dir> [port=8765] [api-origin=https://infinitetapestry.app]
 // Env LOCAL_LOD=<dir>: test a not-yet-uploaded LOD build. /api/live's config.lod_base points here; /live-sdxl/... is
 // served from <dir>/live-sdxl/... when the file exists, else redirected to the CDN (so lod/, lodx/ come from R2).
+// LOCAL_LOD_ORIGIN=http://127.0.0.1:<p2> points lod_base at a second server instead (own connection pool, like the CDN).
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -34,7 +35,7 @@ http.createServer(async (req, res) => {
       const r = await fetch(api + u.pathname + u.search, { headers: { "user-agent": "it-parity" }, redirect: "manual" });
       let body = Buffer.from(await r.arrayBuffer());
       if (LOCAL_LOD && u.pathname === "/api/live" && r.ok) {
-        try { const j = JSON.parse(body.toString()); if (j.config && j.config.lod_base) { j.config.lod_base = j.config.lod_base.replace(/^https?:\/\/[^/]+/, `http://127.0.0.1:${port}`); body = Buffer.from(JSON.stringify(j)); } } catch { /* pass through */ }
+        try { const j = JSON.parse(body.toString()); if (j.config && j.config.lod_base) { j.config.lod_base = j.config.lod_base.replace(/^https?:\/\/[^/]+/, process.env.LOCAL_LOD_ORIGIN || `http://127.0.0.1:${port}`); body = Buffer.from(JSON.stringify(j)); } } catch { /* pass through */ }
       }
       res.writeHead(r.status, { "content-type": r.headers.get("content-type") || "application/octet-stream", "cache-control": "no-store" });
       return res.end(body);

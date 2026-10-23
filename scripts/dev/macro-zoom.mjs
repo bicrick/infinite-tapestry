@@ -18,7 +18,7 @@ const VPS = { desktop: { viewport: { width: 1280, height: 800 }, deviceScaleFact
     userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" } };
 if (OUT) fs.mkdirSync(OUT, { recursive: true });
 const browser = await chromium.launch({ executablePath: process.env.CHROME || "/usr/bin/google-chrome",
-  args: ["--ignore-gpu-blocklist", "--enable-unsafe-swiftshader", "--use-angle=swiftshader"] });
+  args: ["--ignore-gpu-blocklist", "--enable-unsafe-swiftshader", "--use-angle=swiftshader", ...(process.env.CHROME_ARGS || "").split(" ").filter(Boolean)] });
 const ctx = await browser.newContext({ ...VPS[VP], colorScheme: "dark" });
 const page = await ctx.newPage();
 const errs = []; page.on("pageerror", (e) => errs.push(String(e.message)));
