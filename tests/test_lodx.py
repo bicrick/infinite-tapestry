@@ -117,3 +117,22 @@ def test_live_up_builds_l2_from_four_children():
     assert t.getpixel((128, 32))[0] > 150 and t.getpixel((384, 32))[1] > 150 and t.getpixel((640, 32))[2] > 150
     assert max(t.getpixel((900, 32))) < 30   # missing child stays dark, as the pod builder does
     assert lodx.live_up([None] * 4, 1024, 64) is None
+
+
+def test_pod_builds_the_blended_l1_once_the_next_chunk_starts(tmp_path):
+    from types import SimpleNamespace
+    from infinite_tapestry.lod import LodBuilder
+    st = _Store(tmp_path, {})
+    have = {i: _img(448, 1024, (200, 0, 0) if i < 16 else (0, 0, 200)) for i in range(17)}
+    st.load_strip = lambda i, meta=None: SimpleNamespace(jpeg=have[i]) if i in have else None
+    b = LodBuilder(st, 256, 1024)
+    b.on_strip(15)   # chunk 0 complete: original L1 only (no next strip yet)
+    b._pool.shutdown(wait=True)
+    assert "public:lodb/1/000000.jpg" not in st.mirror.objs and "public:lod/1/000000.jpg" in st.mirror.objs
+    b = LodBuilder(st, 256, 1024)
+    b.on_strip(16)
+    b._pool.shutdown(wait=True)
+    assert ("public:lodb/1/000000.jpg", "image/jpeg") in st.mirror.puts
+    t = _open(st.mirror.objs["public:lodb/1/000000.jpg"])
+    assert t.getpixel((1020, 128))[2] > 150 and t.getpixel((500, 128))[0] > 150
+    assert b.get_b(1, 1, build=True) is None   # strip 32 missing: not built
