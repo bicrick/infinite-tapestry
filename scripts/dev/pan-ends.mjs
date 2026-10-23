@@ -45,7 +45,8 @@ const drag = async (dx, hold = false) => {
   // start on the canvas itself: with the chrome awake the chat rail covers the left of the screen (a drag there is not a pan)
   const y = H / 2;
   const free = await page.evaluate(([W, y]) => { const xs = []; for (let x = 4; x < W - 4; x += 8) { const e = document.elementFromPoint(x, y); xs.push(!!e && e.id === "view"); } return xs; }, [W, y]);
-  const lo = free.indexOf(true) * 8 + 4, hi = (free.length - 1 - [...free].reverse().indexOf(true)) * 8 + 4;
+  // keep clear of the 20 px touch edge zones (left to iOS back/forward swipes, so a touch there is not a scrub)
+  const lo = Math.max(28, free.indexOf(true) * 8 + 4), hi = Math.min(W - 28, (free.length - 1 - [...free].reverse().indexOf(true)) * 8 + 4);
   dx = Math.sign(dx) * Math.min(Math.abs(dx), hi - lo - 4);
   const x0 = dx > 0 ? lo + 2 : hi - 2;
   if (VP === "phone") { const c = await page.context().newCDPSession(page);
@@ -81,7 +82,7 @@ for (const zs of ZS) {
   // 3) leave live and come back (existing scrub rules), at this zoom
   await load(""); await zoomTo(z); r.atEnd0 = await st();
   await drag(W * 0.5); await drag(W * 0.5); await page.waitForTimeout(800); r.leftLive = !atLive(await st());
-  r.back = { hit: false, replay: false }; for (let i = 0; i < 12 && !r.back.hit; i++) { await drag(-W * 0.7); r.back = await watch(500); }
+  r.back = { hit: false, replay: false }; for (let i = 0; i < 30 && !r.back.hit; i++) { await drag(-W * 0.7); r.back = await watch(900); }
   if (r.back.hit) { const w = await watch(3000); r.back.replay = r.back.replay || w.replay; }
   r.end = await st(); r.backToLive = r.back.hit;
   // 4) the live end: hold a forward pull while live, measure where the live end sits, release -> live
