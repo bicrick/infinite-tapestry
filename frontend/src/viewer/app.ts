@@ -976,7 +976,7 @@ export function startViewer(): void {
         const start = window.TapestryReplayStart(it[it.length - 1].i);   // random spot across the whole history
         replay = true; motion.live = false;
         strips.onRef(it[it.length - 1], false);   // sets maxIndex so the pan range covers the start position
-        motion.panPos = cam.zoom < 1 ? Math.max(motion.restMin(), Math.min(motion.maxPan(), start * SW() - cam.viewCenter())) : Math.max(0, start * SW() - viewWorld() / 2);   // zoomed out: start at the centre, never in the start slack motion.panVel = 0; motion.panMode = "glide";
+        motion.panPos = cam.zoom < 1 ? Math.max(motion.restMin(), Math.min(motion.maxPan(), start * SW() - cam.viewCenter())) : Math.max(0, start * SW() - viewWorld() / 2); motion.panVel = 0; motion.panMode = "glide";   // zoomed out: start at the centre, never in the start slack
         lastFreshAt = performance.now() - 61000;
         apiMissing(start - 12, start + 12);   // on-screen refs first (the bootstrap only carries the newest 240)
         lod.prefetch(start);
@@ -1003,7 +1003,7 @@ export function startViewer(): void {
     fadeSwap(() => {
       replay = true;
       motion.enterHistory(); setAway(false);
-      motion.panPos = cam.zoom < 1 ? Math.max(motion.restMin(), Math.min(motion.maxPan(), start * SW() - cam.viewCenter())) : Math.max(0, start * SW() - viewWorld() / 2);   // zoomed out: start at the centre, never in the start slack motion.panVel = 0; motion.panMode = "glide";
+      motion.panPos = cam.zoom < 1 ? Math.max(motion.restMin(), Math.min(motion.maxPan(), start * SW() - cam.viewCenter())) : Math.max(0, start * SW() - viewWorld() / 2); motion.panVel = 0; motion.panMode = "glide";   // zoomed out: start at the centre, never in the start slack
     });
     lod.prefetch(start);
   }
