@@ -45,8 +45,8 @@ const drag = async (dx, hold = false) => {
   // start on the canvas itself: with the chrome awake the chat rail covers the left of the screen (a drag there is not a pan)
   const y = H / 2;
   const free = await page.evaluate(([W, y]) => { const xs = []; for (let x = 4; x < W - 4; x += 8) { const e = document.elementFromPoint(x, y); xs.push(!!e && e.id === "view"); } return xs; }, [W, y]);
-  // keep clear of the 20 px touch edge zones (left to iOS back/forward swipes, so a touch there is not a scrub)
-  const lo = Math.max(28, free.indexOf(true) * 8 + 4), hi = Math.min(W - 28, (free.length - 1 - [...free].reverse().indexOf(true)) * 8 + 4);
+  // touch: keep clear of the 20 px edge zones (left to iOS back/forward swipes, so a touch there is not a scrub)
+  const E = VP === "phone" ? 28 : 0, lo = Math.max(E, free.indexOf(true) * 8 + 4), hi = Math.min(W - E, (free.length - 1 - [...free].reverse().indexOf(true)) * 8 + 4);
   dx = Math.sign(dx) * Math.min(Math.abs(dx), hi - lo - 4);
   const x0 = dx > 0 ? lo + 2 : hi - 2;
   if (VP === "phone") { const c = await page.context().newCDPSession(page);
