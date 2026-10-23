@@ -42,6 +42,11 @@ for (const spec of (process.env.SHOTS || "end:0.25,end:0.02,end:min,start:0.02,z
   for (let i = 0; i < 40; i++) { const s = await st(); const d = kind === "end" ? s.liveX - W / 2 : W / 2 - s.x0; if (d <= 2) break; await drag(kind === "end" ? -(d + W * 0.1) : d + W * 0.1); }
   await page.waitForTimeout(2500); const s = await st();
   const f = `${OUT}/${VP}-${kind}-z${zs}.png`; await page.screenshot({ path: f }); res.push({ spec, f, x: Math.round(kind === "end" ? s.liveX : s.x0) });
+  // BREATH=1: trace the seam's brightness (just inside it) for 10 s: a live end breathes softly, otherwise it is static
+  if (process.env.BREATH && kind === "end") res[res.length - 1].breath = await page.evaluate(([x]) => new Promise((done) => { const cv = window.TapestryView.canvas, k = cv.width / cv.clientWidth;
+    const sc = document.createElement("canvas"); sc.width = sc.height = 1; const g = sc.getContext("2d", { willReadFrequently: true }); const L = [], t0 = performance.now();
+    const f = () => { g.drawImage(cv, (x + 6) * k, cv.height * 0.45, 20 * k, cv.height * 0.1, 0, 0, 1, 1); const d = g.getImageData(0, 0, 1, 1).data; L.push(d[0] + d[1] + d[2]);
+      if (performance.now() - t0 < 10000) setTimeout(f, 100); else { const m = L.reduce((a, b) => a + b, 0) / L.length; done({ mean: +m.toFixed(1), min: Math.min(...L), max: Math.max(...L), rel: +((Math.max(...L) - Math.min(...L)) / Math.max(1, m)).toFixed(3) }); } }; f(); }), [s.liveX]);
 }
 console.log(JSON.stringify(res));
 await browser.close();

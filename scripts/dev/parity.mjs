@@ -30,8 +30,19 @@ const VIEWPORTS = {
 };
 // Settled: strips on screen and the scene captions (timeline) in, so both builds are in the same state.
 const live = async (p) => { await p.waitForFunction(() => { const V = window.TapestryView; return V && V.ready && V.ready() && V.coverage() >= 0.95 && document.body.classList.contains("hist-cap"); }, null, { timeout: 25000 }).catch(() => {}); };
-// [name, url, kind ("chrome" | "full"), action(page) before the shot, settle ms]
+// Live end at zoom 1: /api/live reports the pod running (this page only, read-only; the pod is off so no strips arrive and
+// the live view rests at the newest strip). The band ends' treatments must not show at zoom 1, even here or pulled past live.
+const simLive = (p) => p.route(/\/api\/live\?n=/, async (route) => { try { const res = await route.fetch(); const j = await res.json();
+  j.pod = Object.assign({}, j.pod || {}, { status: "running", desired: "on" }); j.heartbeat_at = j.now; await route.fulfill({ response: res, json: j }); } catch (_) { await route.continue().catch(() => {}); } });
+const pullPastLive = async (p) => { await live(p); await sleep(3000); const vp = p.viewportSize(), y = vp.height / 2, x0 = vp.width - 30, dx = -vp.width * 0.6;
+  if (VIEWPORTS[p.__vp] && VIEWPORTS[p.__vp].hasTouch) { const c = await p.context().newCDPSession(p); await c.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x0, y }] });
+    for (let i = 1; i <= 10; i++) { await c.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x0 + dx * i / 10, y }] }); await sleep(16); } }
+  else { await p.mouse.move(x0, y); await p.mouse.down(); for (let i = 1; i <= 10; i++) { await p.mouse.move(x0 + dx * i / 10, y); await sleep(16); } } };   // held at the shot
+// [name, url, kind ("chrome" | "full"), action(page) before the shot, settle ms, setup(page) before load]
 const SCENARIOS = [
+  ["live-end-z1-full", "/?nointro=1", "full", live, 7000, simLive],
+  ["live-end-z1-zoomflag-full", "/?nointro=1&zoom", "full", live, 7000, simLive],
+  ["live-end-z1-pull-full", "/?nointro=1&zoom", "full", pullPastLive, 1500, simLive],
   ["intro-0.8s", "/", "full", async () => {}, 800],
   ["intro-2.0s", "/", "full", async () => {}, 2000],
   ["intro-4.0s", "/", "full", async () => {}, 4000],
@@ -64,10 +75,11 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || "/
   args: ["--ignore-gpu-blocklist", "--enable-unsafe-swiftshader", "--use-angle=swiftshader", "--autoplay-policy=no-user-gesture-required"] });
 const rows = [];
 async function shot(base, vpName, scheme, sc) {
-  const [name, url, kind, act, settle] = sc;
+  const [name, url, kind, act, settle, setup] = sc;
   const ctx = await browser.newContext({ ...VIEWPORTS[vpName], colorScheme: scheme, reducedMotion: "no-preference" });
   await ctx.addInitScript(SEED); await ctx.addInitScript(PIN_REPLAY);
-  const page = await ctx.newPage();
+  const page = await ctx.newPage(); page.__vp = vpName;
+  if (setup) await setup(page);
   const errors = [];
   page.on("pageerror", (e) => errors.push("pageerror: " + String(e.message || e).slice(0, 200)));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|proxy\.runpod\.net|CORS policy/.test(m.text())) errors.push("console.error: " + m.text().slice(0, 200)); });
