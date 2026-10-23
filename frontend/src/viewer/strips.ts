@@ -1,4 +1,5 @@
 // Strip cache: refs (v2 JSON) or bytes (ITAP frames) -> fetched from the R2 CDN -> decoded ImageBitmaps near the view.
+import { cdn, cdnOk, cdnNetFail, CDN_PRIMARY } from "./cdn";
 import { decodeItap, type ClientMsg, type StreamConfig, type StripRef } from "../core/protocol";
 
 export interface Strip {
@@ -91,9 +92,18 @@ export class StripStore {
       if (!e.url || (e.retryAt as number) > performance.now()) return;
       if (e.readyAt && performance.now() < e.readyAt) { e.retryAt = e.readyAt; return; }
       e.decoding = true;
-      fetch(e.url, { mode: "cors" }).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.blob(); })
+      const src = cdn(e.url);
+      fetch(src, { mode: "cors" }).then((r) => { cdnOk(src); if (!r.ok) throw new Error(String(r.status)); return r.blob(); })
         .then((b) => { e.blob = b; e.decoding = false; this.ensureDecoded(e); })
-        .catch(() => {
+        .catch((err) => {
+          // Network error on the custom image domain (DNS blocked on this client): no .jpg probe and no try spent;
+          // retry soon, through the r2.dev fallback once CDN_FAILS such failures in a row have switched it on.
+          if (err instanceof TypeError && src.startsWith(CDN_PRIMARY)) {
+            e.decoding = false;
+            e.retryAt = cdnNetFail(src) ? 0 : performance.now() + 300;
+            if (!e.retryAt) this.ensureDecoded(e);
+            return;
+          }
           // Fresh live strips are always .webp and may simply not have landed yet: retry (no .jpg probes).
           if (e.fresh) {
             e.decoding = false; e.tries = (e.tries || 0) + 1;
