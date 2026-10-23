@@ -132,7 +132,7 @@ export function startViewer(): void {
     worldAt: (cssX: number) => cam.screenToWorld(cssX).x,
     cssPerWorld: () => (cam.last ? cam.last.s : 0) / (canvas.width / Math.max(1, canvas.clientWidth)),
     /** tests: zoom floor, overview tiles still loading, loaded tiles per level */
-    minZoom: () => zoom.minZoom(), lodPending: () => lod.pending(), lodStats: () => lod.stats(),
+    minZoom: () => zoom.minZoom(), panMode: () => motion.panMode, lodPending: () => lod.pending(), lodStats: () => lod.stats(),
     /** world x of the painted live line (past it nothing is drawn yet), or null */
     liveWorld: () => (follower.livePos === null ? null : follower.livePos - cam.STAGE()),
   });
@@ -997,10 +997,11 @@ export function startViewer(): void {
     }, 720);
   }
   function startReplay() {
-    if (replayBusy || strips.maxIndex < 40) return;
+    if (replayBusy || strips.maxIndex < 40 || activePointer !== null || !motion.replayRoom()) return;   // never under a finger; zoomed out with all history on screen: stay live
     if (!replay && !replayAt) { replayAt = performance.now(); window.TapestryOps && window.TapestryOps.report("replay", 0, { pod: podDown ? "down" : "running" }); }
     const start = window.TapestryReplayStart(strips.maxIndex);   // random spot across the whole history (also on each loop)
     fadeSwap(() => {
+      if (activePointer !== null) return;   // a finger landed during the fade-out: the user keeps the view
       replay = true;
       motion.enterHistory(); setAway(false);
       motion.panPos = cam.zoom < 1 ? Math.max(motion.restMin(), Math.min(motion.maxPan(), start * SW() - cam.viewCenter())) : Math.max(0, start * SW() - viewWorld() / 2); motion.panVel = 0; motion.panMode = "glide";   // zoomed out: start at the centre, never in the start slack

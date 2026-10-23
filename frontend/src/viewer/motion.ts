@@ -54,6 +54,9 @@ export class Motion {
   /** zoomed-out pan slack ramp (Camera.slackT; 0 at zoom 1) */
   private slackT(): number { const c = this.d.cam; return c.slackT ? c.slackT() : 0; }
   maxPan(): number { return Math.max(0, this.d.cam.liveScroll); }
+  /** Zoomed out: is there history left of live to replay, beyond the front magnet? (whole timeline on screen: no, and a
+   *  replay start would snap straight back to live and fade-loop.) Always true at zoom 1. */
+  replayRoom(): boolean { const c = this.d.cam; return c.zoom >= 1 || this.maxPan() - this.restMin() > c.viewWorld() * 0.5 * this.Z() * (1 - 0.8 * this.slackT()) + this.SW() * this.Z() * 4; }
   private OVER_MAX(): number { return Math.min(this.d.cam.viewWorld() * 0.08, this.SW() * 0.5); }
   /** iOS-style: resistance grows with overscroll distance; a small rubber-band past live (staged pixels stay hidden). */
   rubber(x: number): number {
