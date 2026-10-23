@@ -84,21 +84,21 @@ export class Camera {
   viewCenter(): number { return this.zoom >= 1 ? this.viewWorld() / 2 : this.leftOffset() + this.canvas.width / this.drawnScale() / 2; }
   /** World px across the screen for framing seeks (zoom 1: the legacy viewWorld()). */
   visibleWorld(): number { return this.zoom >= 1 ? this.viewWorld() : this.canvas.width / this.drawnScale(); }
-  /** 0 at zoom >= 1, easing to 1 as zoom goes 1 -> 0.75 (same ramp as feel()): how much of the zoomed-out pan slack applies. */
-  slackT(zoom = this.zoom): number { if (zoom >= 1) return 0; const t = Math.min(1, (1 - zoom) / 0.25); return t * t * (3 - 2 * t); }
+  /** 0 at zoom >= 1, easing to 1 as zoom goes 1 -> 0.97: how much of the zoomed-out pan slack (centred ends) applies.
+   *  Quick, so a centred end stays centred at every zoom below 1 (zoom 1 itself keeps the legacy clamps). */
+  slackT(zoom = this.zoom): number { if (zoom >= 1) return 0; const t = Math.min(1, (1 - zoom) / 0.03); return t * t * (3 - 2 * t); }
   /** Zoomed out, the drawn left edge may go below world 0 by up to half the screen, so strip 0 can be panned to the
    *  screen centre. 0 at zoom >= 1: the zoom-1 framing is unchanged. */
   startSlack(zoom = this.zoom): number { const t = this.slackT(zoom); return t ? t * this.canvas.width / this.drawnScale(zoom) / 2 : 0; }
   /** Lowest pan (Motion.minPan): the view whose drawn left edge is exactly -startSlack(), so there is no dead travel
    *  at the start (before, the >= 0 clamp in frame() swallowed up to a whole screen of pan; at max zoom-out all of it). */
   minViewLeft(zoom = this.zoom): number { const v = -this.startSlack(zoom) - this.leftOffset(zoom); return Number.isFinite(v) ? v : 0; }
-  /** Past-live pull allowed far out (world px): once the staged strips are sub-pixel the live end may be pulled to the
-   *  screen centre (released, it springs back into live as before). 0 at zoom >= 1 and wherever staging is visible. */
-  endSlack(zoom = this.zoom): number {
+  /** Zoomed out, the view may rest past the live edge by up to this much (world px): at most the newest painted strip
+   *  sits at the screen centre (Motion.hiFree), mirroring startSlack() at strip 0. 0 at zoom >= 1 (zoom 1 unchanged). */
+  endRoom(zoom = this.zoom): number {
     const t = this.slackT(zoom); if (!t) return 0;
-    const s = this.drawnScale(zoom), stagePx = this.STAGE() * s / this.cssK();
-    const e = t * Math.max(0, Math.min(1, (3 - stagePx) / 2));
-    return e ? e * this.canvas.width / s / 2 : 0;
+    const v = t * (this.viewWorld() - this.STAGE() - this.leftOffset(zoom) - this.canvas.width / this.drawnScale(zoom) / 2);
+    return Number.isFinite(v) ? Math.max(0, v) : 0;
   }
   /** Off-screen staging buffer: one full strip (the next arrival) + the inpaint band it repaints over its predecessor (+32 px). */
   BAND(): number { return this.d.maxOv() + 32; }

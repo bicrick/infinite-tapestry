@@ -54,23 +54,33 @@ export class Motion {
   /** zoomed-out pan slack ramp (Camera.slackT; 0 at zoom 1) */
   private slackT(): number { const c = this.d.cam; return c.slackT ? c.slackT() : 0; }
   maxPan(): number { return Math.max(0, this.d.cam.liveScroll); }
+  /** Zoomed out (zoom < 1): the pan may rest past live up to the newest painted strip at the screen centre (Camera.endRoom),
+   *  like strip 0 at the start; released there it stays. Zoom 1: maxPan() (live end rubber-bands back into live as before). */
+  hiFree(): number { const c = this.d.cam; return this.maxPan() + (c.zoom < 1 && c.endRoom ? c.endRoom() : 0); }
+  /** zoomed out: centred ends rest where released (no front magnet, no hand-over to live at the bound) */
+  private freeEnds(): boolean { return this.d.cam.zoom < 1; }
+  /** Replay pan for a start strip: centred on it, zoomed out kept inside [restMin, front - margin] so a replay never
+   *  starts where it would hand straight back to live (that start->live->restart loop was the fade "pulse"). */
+  replayPan(start: number): number {
+    const c = this.d.cam;
+    if (c.zoom >= 1) return Math.max(0, start * this.SW() - c.viewWorld() / 2);
+    const lo = this.restMin(), hi = Math.max(lo, this.maxPan() - this.replayMargin());
+    return Math.max(lo, Math.min(hi, start * this.SW() - c.viewCenter()));
+  }
+  private replayMargin(): number { return this.d.cam.viewWorld() * 0.5 * this.Z() * (1 - 0.8 * this.slackT()) + this.SW() * this.Z() * 4; }
   /** Zoomed out: is there history left of live to replay, beyond the front magnet? (whole timeline on screen: no, and a
    *  replay start would snap straight back to live and fade-loop.) Always true at zoom 1. */
-  replayRoom(): boolean { const c = this.d.cam; return c.zoom >= 1 || this.maxPan() - this.restMin() > c.viewWorld() * 0.5 * this.Z() * (1 - 0.8 * this.slackT()) + this.SW() * this.Z() * 4; }
+  replayRoom(): boolean { const c = this.d.cam; return c.zoom >= 1 || this.maxPan() - this.restMin() > this.replayMargin(); }
   private OVER_MAX(): number { return Math.min(this.d.cam.viewWorld() * 0.08, this.SW() * 0.5); }
   /** iOS-style: resistance grows with overscroll distance; a small rubber-band past live (staged pixels stay hidden). */
   rubber(x: number): number {
     // Resistance distance is screen-space; the past-live cap (OVER_MAX) stays in world px, so zoomed out a pull never
     // peeks further into the staged (unfinished) strips than it does at zoom 1.
-    const lo = this.minPan(), hi = this.maxPan(), d = this.d.cam.viewWorld() * 0.5 * this.Z();
+    const lo = this.minPan(), d = this.d.cam.viewWorld() * 0.5 * this.Z();
     const f = (o: number) => (1 - 1 / (o / d * 0.55 + 1)) * d;
     if (x < lo) return lo - f(lo - x);
-    if (x > hi) {
-      // far out (staged strips sub-pixel, Camera.endSlack) a firmer pull can bring the live end to the screen centre
-      const E = this.d.cam.endSlack ? this.d.cam.endSlack() : 0, e = E > 0 ? Math.min(1, E / d) : 0;
-      const o = Math.min(this.OVER_MAX(), f(x - hi) * 0.35);
-      return hi + (e ? o * (1 - e) + Math.min(E, (x - hi) * 0.6) * e : o);
-    }
+    const hf = this.hiFree();   // zoomed out: free up to the centred live end, then the same small rubber-band
+    if (x > hf) return hf + Math.min(this.OVER_MAX(), f(x - hf) * 0.35);
     return x;
   }
   shownPan(): number { return this.rubber(this.panPos); }
@@ -167,7 +177,8 @@ export class Motion {
       this.panVel = d * Math.min(SW * 60, v + (SW * 0.9 + FLY_GROW * v) * dt);   // FLY_BASE = 0.9 strips/s², FLY_MAX ~60 strips/s
     }
     this.panPos += this.panVel * dt;
-    if (this.panPos >= hi && this.panVel > 0) { this.panPos = hi; this.panVel = 0; this.flyCancel(); this.toLive(); return; }
+    if (this.freeEnds()) { const hf = this.hiFree(); if (this.panPos >= hf && this.panVel > 0) { this.panPos = hf; this.panVel = 0; } }   // zoomed out: stop at the centred live end
+    else if (this.panPos >= hi && this.panVel > 0) { this.panPos = hi; this.panVel = 0; this.flyCancel(); this.toLive(); return; }
     if (this.panPos <= lo && this.panVel < 0) { this.panPos = lo; this.panVel = 0; }
     if (performance.now() - this.landAt > 250) {   // prefetch ahead of the flight
       this.landAt = performance.now();
@@ -180,7 +191,7 @@ export class Motion {
     const gesture = this.d.gestureActive();
     if (this.panMode === "fly") { if (gesture || this.tlScrub) { this.flyCancel(); this.panMode = "drag"; } else { this.stepFly(dt); return; } }
     if (this.panMode !== "glide" || gesture || this.tlScrub) this.holdDrift();   // held / scrubbing / seeking: no drift
-    const lo = this.minPan(), hi = this.maxPan(), Z = this.Z();
+    const lo = this.minPan(), hi = this.maxPan(), Z = this.Z(), hf = this.hiFree(), free = this.freeEnds();
     if (this.panMode === "seek") {
       const seek = this.seek as NonNullable<Motion["seek"]>;
       const t = Math.min(1, (performance.now() - seek.t0) / seek.dur);
@@ -198,15 +209,15 @@ export class Motion {
     }
     if (this.panMode === "glide" || (this.panMode === "wheel" && performance.now() - this.wheelIdleAt > 140)) {
       this.panMode = "glide";
-      const out = this.panPos < lo ? lo - this.panPos : this.panPos > hi ? hi - this.panPos : 0;
+      const out = this.panPos < lo ? lo - this.panPos : this.panPos > hf ? hf - this.panPos : 0;
       if (out !== 0) {
         // Critically damped spring back to the bound.
         const k = 140, c = 2 * Math.sqrt(k);
         this.panVel += (k * out - c * this.panVel) * dt;
         this.panPos += this.panVel * dt;
         if (Math.abs(out) < 0.5 * Z && Math.abs(this.panVel) < 5 * Z) {
-          this.panPos = this.panPos > hi ? hi : Math.max(lo, this.panPos); this.panVel = 0;
-          if (this.panPos >= hi - 0.5 * Z) this.toLive();
+          this.panPos = this.panPos > hf ? hf : Math.max(lo, this.panPos); this.panVel = 0;
+          if (!free && this.panPos >= hi - 0.5 * Z) this.toLive();
         }
       } else {
         // Friction: firm at normal speeds (~0.4-0.7s glide), loose once in turbo so it hums.
@@ -219,11 +230,13 @@ export class Motion {
         this.panPos += this.panVel * dt;
         if (Math.abs(this.panVel) < 4 * Z) { this.panVel = 0; this.wheelGlide = false; }
         // zoomed out the magnet shrinks to a tenth of the screen (else at max zoom-out every release snapped back to live)
-        if (this.panPos >= hi - this.SW() * 0.25 * Z || (Math.abs(this.panVel) < 60 * Z && hi - this.panPos < this.d.cam.viewWorld() * 0.5 * Z * (1 - 0.8 * this.slackT()))) { this.startReturn(); return; }   // near the front: magnetic ease into live
+        if (!free && (this.panPos >= hi - this.SW() * 0.25 * Z || (Math.abs(this.panVel) < 60 * Z && hi - this.panPos < this.d.cam.viewWorld() * 0.5 * Z * (1 - 0.8 * this.slackT())))) { this.startReturn(); return; }   // near the front: magnetic ease into live (zoom 1 only)
         // Drift: once settled and the high-res strips are in, resume the slow forward drift with a
         // gelatinous spring ramp (0 → drift speed over ~1-1.5s, slight overshoot), never a jump.
         // (the drift itself stays in world px/s: it plays history back at the painting's real rate, like live)
-        if (Math.abs(this.panVel) < 4 * Z && !gesture && !this.tlScrub) {
+        // zoomed out, parked at an end (strip 0 right of the left edge, or past live) the view stays put
+        const parked = free && (this.panPos < this.restMin() - 0.5 * Z || this.panPos > hi);
+        if (Math.abs(this.panVel) < 4 * Z && !gesture && !this.tlScrub && !parked) {
           if (!this.driftArm && this.d.coverage() >= 0.95) this.driftArm = performance.now();
           if (this.driftArm && performance.now() - this.driftArm > 300) {
             const target = Math.max(0, this.d.follower.srvSpeed || (this.d.replay() ? this.d.scrollSpeed() || 60 : 0)), k = 9, c = 2 * 0.72 * Math.sqrt(k);
@@ -234,7 +247,7 @@ export class Motion {
           }
         } else this.holdDrift();
         // Gliding into the live edge with speed: just hand over to live.
-        if (this.panPos >= hi && this.panVel > 0) { this.panPos = hi; this.panVel = 0; this.toLive(); }
+        if (!free && this.panPos >= hi && this.panVel > 0) { this.panPos = hi; this.panVel = 0; this.toLive(); }
       }
     }
   }

@@ -47,9 +47,32 @@ describe("Motion", () => {
     const lo = m.minPan(), g = cam.frame(lo), ww = cam.canvas.width / g.s;
     expect(g.left).toBeCloseTo(-ww / 2, 3);                 // centre of the screen = world 0
     expect(cam.frame(lo + 1000).left).toBeCloseTo(g.left + 1000, 3);   // and no dead travel from there
-    const E = cam.endSlack(); expect(E).toBeGreaterThan(ww * 0.4);
-    expect(m.rubber(m.maxPan() + 4 * ww) - m.maxPan()).toBeCloseTo(E, 3);
-    cam.zoom = cam.zoomTarget = 1; expect(cam.endSlack()).toBe(0); expect(cam.startSlack()).toBe(0);
+    const E = cam.endRoom(); expect(E).toBeCloseTo(ww / 2, 3);
+    expect(m.hiFree()).toBeCloseTo(m.maxPan() + E, 3);
+    expect(m.rubber(m.hiFree() - 10)).toBeCloseTo(m.hiFree() - 10, 6);       // free (1:1) up to the centred live end
+    const liveLine = m.maxPan() + cam.viewWorld() - cam.STAGE(), gl = cam.frame(m.hiFree());
+    expect(gl.left + ww / 2).toBeCloseTo(liveLine, 3);                       // ... where the live line is the screen centre
+    cam.zoom = cam.zoomTarget = 1; expect(cam.endRoom()).toBe(0); expect(cam.startSlack()).toBe(0); expect(m.hiFree()).toBe(m.maxPan());
+  });
+  it("zoomed out, a view released at either centred end stays there (no snap-back, no hand-over to live)", () => {
+    const r = rig(); const { m, cam } = r;
+    cam.liveScroll = 20_000_000; cam.zoom = cam.zoomTarget = 0.001;
+    m.enterHistory(); m.panMode = "glide"; m.panVel = 0; m.panPos = m.hiFree();
+    r.tick(4); expect(m.panMode).toBe("glide"); expect(m.panPos).toBeCloseTo(m.hiFree(), 3);
+    m.panPos = m.minPan(); r.tick(4); expect(m.panMode).toBe("glide"); expect(m.panPos).toBeCloseTo(m.minPan(), 3);
+    m.panPos = m.maxPan() - 5; r.tick(2); expect(m.panMode).toBe("glide");   // no front magnet zoomed out
+  });
+  it("zoom 1: releasing at the live edge still springs into live", () => {
+    const r = rig(); const { m, cam } = r;
+    cam.liveScroll = 2_000_000; m.enterHistory(); m.panMode = "glide"; m.panVel = 0; m.panPos = m.maxPan() + 200;
+    r.tick(3); expect(m.panMode).toBe("live");
+  });
+  it("zoomed out, replay starts never land where they hand straight back to live", () => {
+    const { m, cam } = rig();
+    cam.liveScroll = 20_000_000; cam.zoom = cam.zoomTarget = 0.01;
+    const maxIdx = Math.round((cam.liveScroll + cam.viewWorld()) / SW);
+    const p = m.replayPan(maxIdx); expect(p).toBeLessThan(m.maxPan() - cam.viewWorld() * 0.5 * cam.feel() * 0.2);
+    expect(m.replayPan(0)).toBe(m.restMin());
   });
   it("seek eases to the target strip and marks it", () => {
     const { m, cam, lod } = rig();

@@ -49,7 +49,9 @@ export class ZoomController {
     // Zooming never pulls the drawn left edge into the start slack (before world 0) by itself: the anchored zoom stops
     // at world 0 as before (max zoom-out frames the whole timeline), unless the view was already in the slack (panned there).
     const lo = a.left0 < 0 ? Math.max(m.minPan(), a.left0 - cam.leftOffset()) : m.restMin();
-    m.panPos = Math.max(Math.min(lo, m.maxPan()), Math.min(m.maxPan(), vl));
+    // Upper bound: zoomed out a centred live end stays centred (Motion.hiFree); zoom 1: the live edge as before.
+    const hi = m.hiFree();
+    m.panPos = Math.max(Math.min(lo, hi), Math.min(hi, vl));
     if (cam.zoom === cam.zoomTarget && cam.zoomVel === 0) this.anchor = null;   // settled (the camera snaps exactly)
   }
 }
