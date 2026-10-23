@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOD_N, lodCovers, lodLevelDeep, lodLevelForScreen, lodLevelForZoom, overviewN } from "./lod";
+import { LOD_N, blendBase, lodCovers, lodLevelDeep, lodLevelForScreen, lodLevelForZoom, ovSrcs, overviewN, tileSrcs } from "./lod";
 
 describe("lodCovers (crossfade only over a painted underlay)", () => {
   it("needs contiguous spans", () => {
@@ -37,5 +37,30 @@ describe("macro levels (lodx)", () => {
     expect(overviewN(115418)).toBe(114688);
     expect(overviewN(4095)).toBe(0);
     expect(overviewN(4096)).toBe(4096);
+  });
+});
+
+describe("blended pyramid (lodb / lodxb) with fallback", () => {
+  const B = "https://img.infinitetapestry.app/live-sdxl/lod/", H = "https://pod.example";
+  it("derives the blended siblings", () => {
+    expect(blendBase(B)).toBe("https://img.infinitetapestry.app/live-sdxl/lodb/");
+    expect(blendBase("https://x/live-sdxl/lodx/")).toBe("https://x/live-sdxl/lodxb/");
+    expect(blendBase("https://x/other/")).toBe("");
+  });
+  it("tries blended, then the original tile, then the pod for live levels", () => {
+    expect(tileSrcs(1, 100, B, H)).toEqual([
+      "https://img.infinitetapestry.app/live-sdxl/lodb/1/000100.jpg",
+      "https://img.infinitetapestry.app/live-sdxl/lod/1/000100.jpg",
+      "https://pod.example/lod/1/100.jpg",
+    ]);
+    expect(tileSrcs(2, 7, undefined, H)).toEqual(["https://pod.example/lod/2/7.jpg"]);   // pod-only as before
+  });
+  it("tries blended then original for macro levels and the overview", () => {
+    expect(tileSrcs(5, 3, B, H)).toEqual([
+      "https://img.infinitetapestry.app/live-sdxl/lodxb/5/000003.webp",
+      "https://img.infinitetapestry.app/live-sdxl/lodx/5/000003.webp",
+    ]);
+    expect(tileSrcs(5, 3, undefined, H)).toEqual([]);
+    expect(ovSrcs("https://x/live-sdxl/lodx/", 114688)).toEqual(["https://x/live-sdxl/lodxb/ov/00114688.webp", "https://x/live-sdxl/lodx/ov/00114688.webp"]);
   });
 });
