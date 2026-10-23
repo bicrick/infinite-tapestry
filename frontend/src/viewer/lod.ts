@@ -5,6 +5,7 @@
 //    infinite_tapestry/lodx.py) for zooming out past L3 to the whole timeline, plus one whole-timeline overview image
 //    (lodx/ov/<n>.webp, strips [0, n), n a multiple of 4096) that is always resident as the bottom underlay.
 // Only complete chunks exist (immutable), so a URL never changes content.
+import { cdn, cdnOk, onCdnSwitch } from "./cdn";
 export const LOD_N: Record<number, number> = { 1: 16, 2: 64, 3: 256, 4: 1024, 5: 4096, 6: 16384, 7: 65536, 8: 262144 };
 export type LodLevel = number;
 export const MAX_LEVEL = 8;
@@ -47,7 +48,13 @@ export interface TileHit { img: HTMLImageElement; at: number }
 export class LodStore {
   private cache = new Map<string, Tile>();
   private ov: { n: number; t: Tile } | null = null;   // loaded overview
-  constructor(private readonly deps: { maxIndex: () => number; lodBase: () => string | undefined; httpBase: () => string }) {}
+  constructor(private readonly deps: { maxIndex: () => number; lodBase: () => string | undefined; httpBase: () => string }) {
+    // CDN failover switched on (see cdn.ts): forget tiles that failed on the primary host so they are re-requested.
+    onCdnSwitch(() => {
+      for (const [k, t] of [...this.cache.entries()]) if (t.failed) this.cache.delete(k);
+      this.ovFailed.clear();
+    });
+  }
 
   /** R2 base for the macro pyramid (lod_base's sibling), or "" when tiles come from the pod only */
   xBase(): string { const b = this.deps.lodBase(); return b && /lod\/$/.test(b) ? b.replace(/lod\/$/, "lodx/") : ""; }
@@ -66,12 +73,12 @@ export class LodStore {
     tile.img.crossOrigin = "anonymous";
     if (low) tile.img.fetchPriority = "low";   // background prefetch: visible strips and tiles go first
     tile.img.decoding = "async";
-    tile.img.onload = () => { tile.ok = true; tile.at = performance.now(); };
+    tile.img.onload = () => { tile.ok = true; tile.at = performance.now(); cdnOk(src); };
     // CDN first; a live tile not mirrored yet falls back to the pod once (which builds and mirrors it). R2 only.
     tile.img.onerror = () => {
       if (pod && tile.img.src !== pod && !tile.podTried) { tile.podTried = true; tile.img.src = pod; } else tile.failed = true;
     };
-    tile.img.src = src || pod || "";
+    tile.img.src = (src && cdn(src)) || pod || "";
     if (!tile.img.src) tile.failed = true;
     this.cache.set(key, tile);
     if (this.cache.size > 400) this.evict();
@@ -123,7 +130,7 @@ export class LodStore {
       this.ovPending = false; this.ovFailed.add(n);
       if (!this.ov && n > OV_STEP && !this.ovFailed.has(n - OV_STEP)) this.ovLoad(xb, n - OV_STEP);
     };
-    t.img.src = `${xb}ov/${String(n).padStart(8, "0")}.webp`;
+    t.img.src = cdn(`${xb}ov/${String(n).padStart(8, "0")}.webp`);
   }
 
   /** L1 + L2 tiles around a strip index (a seek / flight / coast landing): the underlay is in before the strips. */
