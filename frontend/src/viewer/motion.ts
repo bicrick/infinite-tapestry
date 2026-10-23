@@ -47,6 +47,9 @@ export class Motion {
   /** Screen-space feel factor (Camera.feel): 1 at zoom 1, so every constant below keeps its zoom-1 value. */
   private Z(): number { return this.d.cam.feel(); }
   /** Lowest pan: the drawn left edge at world 0 (zoom 1), or strip 0 at the screen centre once zoomed out (Camera.minViewLeft). */
+  /** Lowest pan a seek / replay jump / anchored zoom lands on by itself: zoomed out, the drawn left edge stays at world 0
+   *  (the start slack before it is reached only by panning there). Zoom 1: 0 (legacy). */
+  restMin(): number { const c = this.d.cam; return c.zoom < 1 && c.leftOffset ? Math.min(this.maxPan(), Math.max(0, -c.leftOffset())) : 0; }
   minPan(): number { const c = this.d.cam; return Math.min(this.maxPan(), c.minViewLeft ? c.minViewLeft() : 0); }
   /** zoomed-out pan slack ramp (Camera.slackT; 0 at zoom 1) */
   private slackT(): number { const c = this.d.cam; return c.slackT ? c.slackT() : 0; }
@@ -93,7 +96,7 @@ export class Motion {
     const SW = this.SW(), cam = this.d.cam, vw = cam.visibleWorld(), Z = this.Z();
     const span = (to - from + 1) * SW;
     // zoom 1: frame the range centred in viewWorld (legacy); zoomed: centred on the drawn screen
-    const target = Math.max(0, cam.zoom >= 1 ? from * SW - Math.max(0, (vw - span) / 2) : from * SW + span / 2 - cam.viewCenter());
+    const target = Math.max(this.restMin(), cam.zoom >= 1 ? from * SW - Math.max(0, (vw - span) / 2) : from * SW + span / 2 - cam.viewCenter());
     const seek = { from: this.shownPan(), to: target, t0: performance.now(), dur: Math.min(2200, 600 + Math.sqrt(Math.abs(target - this.shownPan()) / Z) * 12) };
     this.seek = seek;
     this.panMode = "seek"; this.panVel = 0;
@@ -103,7 +106,7 @@ export class Motion {
 
   jumpTo(idx: number): void {
     this.enterHistory();
-    const target = Math.max(0, Math.min(this.maxPan(), idx * this.SW() - this.d.cam.viewCenter()));
+    const target = Math.max(this.restMin(), Math.min(this.maxPan(), idx * this.SW() - this.d.cam.viewCenter()));
     this.seek = { from: this.shownPan(), to: target, t0: performance.now(), dur: Math.min(1600, 500 + Math.sqrt(Math.abs(target - this.shownPan()) / this.Z()) * 6) };
     this.panMode = "seek"; this.panVel = 0;
   }

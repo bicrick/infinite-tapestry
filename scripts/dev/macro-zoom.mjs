@@ -47,7 +47,7 @@ await page.evaluate(() => {
         sx.drawImage(cv, 0, y0, cv.width, hh, 0, 0, 256, 16);
         const d = sx.getImageData(0, 0, 256, 16).data; let n = 0;
         // only [world 0, live edge - 2 strips): past the live line there is nothing to paint yet (not a gap)
-        const cpw = V.cssPerWorld(), L = V.left(), cw = cv.clientWidth, SW = window.__mzSW || 256;
+        const cpw = V.cssPerWorld(), L = V.worldAt ? V.worldAt(0) : V.left(), cw = cv.clientWidth, SW = window.__mzSW || 256;
         const lw = V.liveWorld ? V.liveWorld() : null, xa = (0 - L) * cpw, xb = ((lw === null ? (V.max() - 1) * SW : lw - SW) - L) * cpw;
         for (let i = 0; i < d.length; i += 4) { const xc = (((i >> 2) % 256) + 0.5) / 256 * cw; if (xc < xa || xc >= xb) continue;
           if (Math.abs(d[i] - 5) <= 1 && Math.abs(d[i + 1] - 5) <= 1 && Math.abs(d[i + 2] - 5) <= 1) n++; }

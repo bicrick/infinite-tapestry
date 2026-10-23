@@ -11,7 +11,7 @@ import { LOD_N } from "./lod";
 export const MAX_TILES = 40;
 
 export class ZoomController {
-  private anchor: { cssX: number; worldX: number } | null = null;
+  private anchor: { cssX: number; worldX: number; left0: number } | null = null;
   /** deep: strips in the whole timeline when the macro pyramid is available, else null */
   constructor(private readonly cam: Camera, private readonly motion: Motion, private readonly deep: () => number | null = () => null) {}
 
@@ -30,7 +30,7 @@ export class ZoomController {
     if (this.motion.panMode !== "live" && this.motion.panMode !== "return") {
       if (this.motion.panMode !== "glide") { this.motion.panMode = "glide"; }
       this.motion.panVel = 0;
-      this.anchor = { cssX: x, worldX: cam.screenToWorld(x).x };
+      this.anchor = { cssX: x, worldX: cam.screenToWorld(x).x, left0: cam.screenToWorld(0).x };
     } else this.anchor = null;
     cam.zoomTarget = z;
   }
@@ -46,7 +46,10 @@ export class ZoomController {
     // world(cssX) = viewLeft + c + cssX*k/s.
     const k = cam.canvas.width / Math.max(1, cam.canvas.clientWidth);
     const vl = a.worldX - a.cssX * k / cam.drawnScale() - cam.leftOffset();
-    m.panPos = Math.max(m.minPan(), Math.min(m.maxPan(), vl));
+    // Zooming never pulls the drawn left edge into the start slack (before world 0) by itself: the anchored zoom stops
+    // at world 0 as before (max zoom-out frames the whole timeline), unless the view was already in the slack (panned there).
+    const lo = a.left0 < 0 ? Math.max(m.minPan(), a.left0 - cam.leftOffset()) : m.restMin();
+    m.panPos = Math.max(Math.min(lo, m.maxPan()), Math.min(m.maxPan(), vl));
     if (cam.zoom === cam.zoomTarget && cam.zoomVel === 0) this.anchor = null;   // settled (the camera snaps exactly)
   }
 }
