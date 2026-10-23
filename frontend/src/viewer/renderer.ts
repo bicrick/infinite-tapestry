@@ -8,6 +8,7 @@ import type { Motion } from "./motion";
 import type { LiveFollower } from "./live-follower";
 import type { Reflection, SurroundView } from "./reflection";
 import { FAR_REACH, surroundFar, surroundGlow, surroundReach } from "./layout";
+import { easeRgb, endsGeom, endsMask, seamBreath, type Ends } from "./ends";
 
 declare global {
   interface Window { __probe?: number[]; __ov?: number[]; __dx?: number; __nolod?: boolean; __noblur?: boolean }
@@ -52,12 +53,23 @@ export class Renderer {
   // Theme: follow the OS. Surround tint (rgb) + empty-canvas fill.
   private SURR = "5,5,6";
   private EMPTY = "#050505";
+  private EMPTY_RGB = "5,5,5";
+  private light = false;
+  // Band ends (ends.ts): this frame's geometry, the reflection mask, and the seam colour (eased toward the newest strip's edge).
+  private ends: Ends | null = null;
+  private endsM: readonly number[] | undefined;
+  private readonly seamC = [255, 236, 214];
+  private readonly seamTo = [255, 236, 214];
+  private seamIdx = -2; private seamAt = 0; private seamCv: HTMLCanvasElement | null = null; private seamCtx: CanvasRenderingContext2D | null = null;
+  /** dev only (localhost/vite dev): ?seam=breathe previews the live breathing with the pod off */
+  private readonly devBreath = (import.meta.env.DEV || /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) && /[?&]seam=breathe\b/.test(location.search);
+  private veilK = 1;
 
   constructor(private readonly d: RendererDeps) {
     const canvas = d.cam.canvas;
     this.ctx = canvas.getContext("2d", { alpha: false }) as CanvasRenderingContext2D;
     const lightMq = typeof window.matchMedia === "function" ? matchMedia("(prefers-color-scheme: light)") : null;
-    const applyTheme = () => { const l = !!(lightMq && lightMq.matches); this.SURR = l ? "244,239,231" : "5,5,6"; this.EMPTY = l ? "#f4efe7" : "#050505"; };
+    const applyTheme = () => { const l = !!(lightMq && lightMq.matches); this.SURR = l ? "244,239,231" : "5,5,6"; this.EMPTY = l ? "#f4efe7" : "#050505"; this.EMPTY_RGB = l ? "244,239,231" : "5,5,5"; this.light = l; };
     applyTheme(); if (lightMq && lightMq.addEventListener) lightMq.addEventListener("change", applyTheme);
     // Reflection: shared WebGL2 module (refl), drawn from the band each frame it moves.
     this.refl = window.TapestryReflection ? window.TapestryReflection.create(canvas, { surr: () => this.SURR, coarse: () => COARSE }) : null;
@@ -112,13 +124,69 @@ export class Renderer {
     if (a !== this.surroundAStr) { this.surroundAStr = a; document.documentElement.style.setProperty("--amb-a", a); }
     if (this.refl && this.surroundV) {
       const z = this.d.cam.zoom;   // zoomed out: keep the halo/reflection large around the smaller band
-      if (z >= 1) this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA);
+      if (z >= 1) this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA, bandH, 1, 0, this.endsM);
       // reach never needs to exceed ~0.42 of the screen height (the halo already fills the surround there)
-      else {
-        const far = surroundFar(z), reach = Math.min(bandH * surroundReach(z), Math.max(bandH, h * 0.42));
-        this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA, reach + (Math.max(bandH, h * FAR_REACH) - reach) * far, surroundGlow(z), far);
-      }
+      else this.refl.frame(this.surroundV, yOff, bandH, w, h, this.surroundA, this.haloReach(z, bandH, h), surroundGlow(z), surroundFar(z), this.endsM);
     }
+  }
+
+  /** halo/mirror falloff unit (device px): bandH at zoom 1, growing with the zoom-out */
+  private haloReach(z: number, bandH: number, h: number): number {
+    if (z >= 1) return bandH;
+    const far = surroundFar(z), reach = Math.min(bandH * surroundReach(z), Math.max(bandH, h * 0.42));
+    return reach + (Math.max(bandH, h * FAR_REACH) - reach) * far;
+  }
+
+  /** Seam tint: the newest strip's right-edge colour (one 1x1 readback per new strip, at most every 0.5 s). */
+  private sampleSeam(): void {
+    const { strips } = this.d, i = strips.maxIndex, now = performance.now();
+    if (i === this.seamIdx || now - this.seamAt < 500) return;
+    const e = strips.get(i); if (!e || !e.bitmap) return;
+    this.seamAt = now; this.seamIdx = i;
+    if (!this.seamCv) { this.seamCv = document.createElement("canvas"); this.seamCv.width = this.seamCv.height = 1; this.seamCtx = this.seamCv.getContext("2d", { willReadFrequently: true }); }
+    const c = this.seamCtx as CanvasRenderingContext2D, bw = e.bitmap.width, bh = e.bitmap.height;
+    c.clearRect(0, 0, 1, 1); c.drawImage(e.bitmap, Math.max(0, bw - 24), 0, Math.min(24, bw), bh, 0, 0, 1, 1);
+    const d = c.getImageData(0, 0, 1, 1).data, m = Math.max(1, d[0], d[1], d[2]), k = Math.min(4, 235 / m);
+    for (let n = 0; n < 3; n++) this.seamTo[n] = Math.min(255, d[n] * k * 0.7 + 255 * 0.3);   // the edge's hue, lifted to light
+  }
+
+  /** The newest strips feather into the background at the drawn end, strip 0 fades in from it (band rect only). */
+  private drawEndFades(e: Ends, top: number, bh: number): void {
+    const ctx = this.ctx, c = this.EMPTY_RGB;
+    if (e.start && e.fs > 0) {
+      const g = ctx.createLinearGradient(e.sx, 0, e.sx + e.fs, 0);
+      g.addColorStop(0, `rgba(${c},1)`); g.addColorStop(0.5, `rgba(${c},.38)`); g.addColorStop(1, `rgba(${c},0)`);
+      ctx.fillStyle = g; ctx.fillRect(e.sx, top, e.fs, bh);
+    }
+    if (e.end && e.fe > 0) {
+      const g = ctx.createLinearGradient(e.ex - e.fe, 0, e.ex, 0);
+      g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(0.55, `rgba(${c},.3)`); g.addColorStop(1, `rgba(${c},.94)`);
+      ctx.fillStyle = g; ctx.fillRect(e.ex - e.fe, top, e.fe, bh);
+    }
+  }
+
+  /** Light seam at the drawn end: a soft tinted bloom + a narrow brighter core, two radial gradients (no full-canvas pass). */
+  private drawSeam(e: Ends, cy: number, dt: number): void {
+    const ctx = this.ctx, C = this.seamC;
+    easeRgb(C, this.seamTo, dt);
+    const breathing = this.devBreath || this.d.connected();
+    const b = seamBreath(performance.now() / 1000, breathing) * this.surroundA;
+    const k = Math.min(1, Math.max(0, (e.rx / e.ry - 0.2) / 0.3));   // 0 at zoom 1 (rx = .2 ry) .. 1 far out (rx = .5 ry)
+    const col = `${C[0] | 0},${C[1] | 0},${C[2] | 0}`;
+    const core = `${(C[0] + 255) / 2 | 0},${(C[1] + 255) / 2 | 0},${(C[2] + 255) / 2 | 0}`;
+    const lk = this.light ? 0.55 : 1;
+    ctx.save();
+    if (!this.light) ctx.globalCompositeOperation = "lighter";
+    ctx.translate(e.ex, cy);
+    ctx.save(); ctx.scale(e.rx, e.ry);
+    let g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1), a = 0.34 * b * lk;
+    g.addColorStop(0, `rgba(${col},${a})`); g.addColorStop(0.3, `rgba(${col},${a * 0.5})`); g.addColorStop(0.65, `rgba(${col},${a * 0.14})`); g.addColorStop(1, `rgba(${col},0)`);
+    ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2); ctx.restore();
+    ctx.scale(e.rx * (0.45 + 0.2 * k), e.ry * 0.7);
+    g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1); a = (0.26 + 0.3 * k) * b * lk;
+    g.addColorStop(0, `rgba(${core},${a})`); g.addColorStop(0.25, `rgba(${core},${a * 0.6})`); g.addColorStop(0.55, `rgba(${core},${a * 0.18})`); g.addColorStop(1, `rgba(${core},0)`);
+    ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2);
+    ctx.restore();
   }
 
   private lodCovers(x0: number, x1: number): boolean { return lodCovers(this.lodSpans, x0, x1); }
@@ -213,7 +281,7 @@ export class Renderer {
     if (this.d.saver.on && this.lastTs && ts - this.lastTs < 24) { requestAnimationFrame(this.frame); return; }
     if (!this.lastTs) this.lastTs = ts;
     const dt = Math.min(0.1, (ts - this.lastTs) / 1000);
-    this.lastTs = ts;
+    this.lastTs = ts; this.drawDt = dt;
     follower.step(dt);
     motion.step(dt);
     if (!this.gestureHeld()) cam.stepNudge(dt);   // spring the nudge back to the live edge
@@ -234,6 +302,7 @@ export class Renderer {
   /** set by the app: a pointer gesture holds the nudge */
   gestureHeld: () => boolean = () => false;
 
+  /** frame dt for the seam colour easing */ private drawDt = 1 / 60;
   draw(): void {
     const { cam, strips, motion, follower } = this.d;
     const ctx = this.ctx, canvas = cam.canvas;
@@ -258,8 +327,10 @@ export class Renderer {
     {   // Past the live line (only during a rubber-band overscroll): veil it, blurred and dimmed, via one small CSS overlay.
       const ov = follower.livePos !== null && motion.panMode !== "live" ? Math.max(0, left + w / s - (follower.livePos - STAGE)) : 0;
       if (window.__ov) window.__ov.push(ov);
-      const px = Math.round(ov * s / (window.devicePixelRatio || 1));
-      if (px !== this.ovPx) { this.ovPx = px; this.pastVeil.style.width = px + "px"; this.pastVeil.style.opacity = px > 0 ? "1" : "0"; }
+      // zoomed out the veil gives way to the end feather + seam (fades out over zoom 1 -> 0.97; zoom 1 unchanged)
+      const vk = cam.zoom >= 1 ? 1 : Math.round(Math.max(0, Math.min(1, (cam.zoom - 0.97) / 0.03)) * 20) / 20;
+      const px = vk > 0 ? Math.round(ov * s / (window.devicePixelRatio || 1)) : 0;
+      if (px !== this.ovPx || vk !== this.veilK) { this.ovPx = px; this.veilK = vk; this.pastVeil.style.width = px + "px"; this.pastVeil.style.opacity = px > 0 ? String(vk) : "0"; }
     }
     if (follower.livePos !== null) { cam.drawExcess = Math.max(0, left + w / s - (follower.livePos - STAGE)); window.__dx = cam.drawExcess / SW; }
     this.publishBand(yOff, H * sy, h);
@@ -268,9 +339,14 @@ export class Renderer {
     if ((cam.zoom < 1) !== this.zoomedOut) { this.zoomedOut = cam.zoom < 1; document.body.classList.toggle("zoomed-out", this.zoomedOut); }
     const fast = Math.abs(cam.velS) / cam.feel() > 1600;   // on-screen speed
     const intro = document.body.classList.contains("intro");
+    const bandH = H * sy, pw = strips.panoramaWidth();
+    const E = endsGeom({ w, left, s, pw, SW, bandH, reach: this.haloReach(cam.zoom, bandH, h), zoom: cam.zoom, stageX: follower.livePos === null ? null : follower.livePos - STAGE });
+    this.ends = E.start || E.end ? E : null;
+    this.endsM = this.ends ? endsMask(E, w) : undefined;
     ctx.save();
     ctx.translate(0, yOff);
     ctx.scale(s, sy);
+    if (this.ends) { ctx.beginPath(); ctx.rect(-left, -2, pw, H + 4); ctx.clip(); }   // past either end: background only
     // Overview layer: LOD tiles under everything while zoomed out or when strips aren't loaded yet. Kept on while any
     // strip is still crossfading: dropping it the frame coverage hit 1 faded those strips over the bare background.
     const lodOn = !window.__nolod && (cam.zoom < 0.97 || fast || this.coverage < 1 || this.fading > 0 || this.lodFading); let fading = 0;
@@ -316,6 +392,7 @@ export class Renderer {
       }
     }
     ctx.restore();
+    if (this.ends) this.drawEndFades(this.ends, yOff, bandH);
     this.surroundV = { left, ww: w / s, fi: Math.max(0, firstIdx), li: Math.min(lastIdx, strips.maxIndex), cov: this.coverage, lod: lodOn, fading };
     const RIB = 0.6;
     if (cam.portrait()) this.drawSurround(w, h, Math.max(0, yOff), H * sy);
@@ -323,6 +400,7 @@ export class Renderer {
       const sa = this.surroundA, k = (1 - cam.ribbon) / (1 - RIB); this.surroundA = sa * k * k * (3 - 2 * k);
       this.drawSurround(w, h, Math.max(0, yOff), H * sy); this.surroundA = sa;
     } else if (this.surroundAStr !== "0.00") { this.surroundAStr = "0.00"; document.documentElement.style.setProperty("--amb-a", "0"); if (this.refl) this.refl.off(); }
+    if (this.ends && this.ends.end) { this.sampleSeam(); this.drawSeam(this.ends, yOff + bandH / 2, this.drawDt); }
     // Speed blur that scales with scrub velocity, as a GPU-composited CSS filter (touch only).
     const blur = Math.min(12, Math.max(0, (Math.abs(cam.velS) / cam.feel() - 500) / 420)) * (window.devicePixelRatio || 1);
     {
