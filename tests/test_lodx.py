@@ -93,3 +93,27 @@ def test_pod_never_rebuilds_an_existing_macro_tile_and_builds_the_overview(tmp_p
     assert ov and st.mirror.puts == [("public:lodx/ov/00004096.webp", "image/webp")]
     assert _open(ov).size == (lodx.OV_W, lodx.TILE_H)
     assert b.overview(lodx.OV_STEP) == ov and len(st.mirror.puts) == 1
+
+
+def test_blended_l1_paints_the_next_chunks_overlap():
+    # 448 x 1024 strips: 192 px inpainted overlap + 256 px slot. The 17th strip covers the 16th slot's right 192 px,
+    # exactly as the zoom-1 renderer overdraws it, so the tile edge carries the blend instead of a hard cut.
+    strips = [_img(448, 1024, (200, 0, 0))] * 16 + [_img(448, 1024, (0, 0, 200))]
+    raw = _open(lodx.l1_from_strips(strips[:16], 256, 1024, n=16))
+    blend = _open(lodx.l1_from_strips(strips, 256, 1024, n=16))
+    assert raw.size == blend.size == (1024, 256)
+    assert raw.getpixel((1020, 128))[0] > 150                      # original: own strip to the edge
+    r, g, b = blend.getpixel((1020, 128)); assert b > 150 and r < 60    # blended: next strip's overlap
+    assert blend.getpixel((1024 - 44, 128))[0] < 60 and blend.getpixel((1024 - 54, 128))[0] > 150  # 192/4 = 48 px
+    assert blend.getpixel((500, 128)) == raw.getpixel((500, 128))   # interior unchanged
+    assert lodx.live_key(1, 7) == "lodb/1/000007.jpg" and lodx.key(5, 3, lodx.BLEND_X) == "lodxb/5/000003.webp"
+    assert lodx.ov_key(4096, lodx.BLEND_X) == "lodxb/ov/00004096.webp"
+
+
+def test_live_up_builds_l2_from_four_children():
+    kids = [_img(1024, 256, c) for c in ((200, 0, 0), (0, 200, 0), (0, 0, 200))] + [None]
+    t = _open(lodx.live_up(kids, 1024, 64))
+    assert t.size == (1024, 64)
+    assert t.getpixel((128, 32))[0] > 150 and t.getpixel((384, 32))[1] > 150 and t.getpixel((640, 32))[2] > 150
+    assert max(t.getpixel((900, 32))) < 30   # missing child stays dark, as the pod builder does
+    assert lodx.live_up([None] * 4, 1024, 64) is None
