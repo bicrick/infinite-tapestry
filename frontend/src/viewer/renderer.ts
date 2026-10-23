@@ -42,6 +42,7 @@ export class Renderer {
   private surroundA = 1;
   private surroundAStr: string | undefined;
   private bandCache = "";
+  private zoomedOut = false;
   private surroundV: SurroundView | null = null;
   /** World-x spans the LOD layer actually painted this frame: a strip only crossfades where it has an underlay. */
   private readonly lodSpans: Array<[number, number]> = [];
@@ -266,6 +267,9 @@ export class Renderer {
     }
     if (follower.livePos !== null) { cam.drawExcess = Math.max(0, left + w / s - (follower.livePos - STAGE)); window.__dx = cam.drawExcess / SW; }
     this.publishBand(yOff, H * sy, h);
+    // Zoomed out the band thins and the chat strip under it grows to fill the screen centre: flag it so its empty area
+    // lets swipes through to the canvas (style.css). Class write only on change; never set at zoom 1.
+    if ((cam.zoom < 1) !== this.zoomedOut) { this.zoomedOut = cam.zoom < 1; document.body.classList.toggle("zoomed-out", this.zoomedOut); }
     const fast = Math.abs(cam.velS) / cam.feel() > 1600;   // on-screen speed
     const intro = document.body.classList.contains("intro");
     ctx.save();
