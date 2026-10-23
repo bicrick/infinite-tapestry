@@ -54,9 +54,13 @@ export class Motion {
   /** zoomed-out pan slack ramp (Camera.slackT; 0 at zoom 1) */
   private slackT(): number { const c = this.d.cam; return c.slackT ? c.slackT() : 0; }
   maxPan(): number { return Math.max(0, this.d.cam.liveScroll); }
-  /** Zoomed out (zoom < 1): the pan may rest past live up to the newest painted strip at the screen centre (Camera.endRoom),
+  /** Zoomed out (zoom < 1): the pan may rest past live up to the end of the drawn strips at the screen centre (Camera.endRoom),
    *  like strip 0 at the start; released there it stays. Zoom 1: maxPan() (live end rubber-bands back into live as before). */
-  hiFree(): number { const c = this.d.cam; return this.maxPan() + (c.zoom < 1 && c.endRoom ? c.endRoom() : 0); }
+  hiFree(): number {
+    const c = this.d.cam; if (!(c.zoom < 1) || !c.endRoom) return this.maxPan();
+    const beyond = this.d.strips.panoramaWidth ? this.d.strips.panoramaWidth() - c.liveScroll - c.viewWorld() : 0;
+    return this.maxPan() + c.endRoom(beyond);
+  }
   /** zoomed out: centred ends rest where released (no front magnet, no hand-over to live at the bound) */
   private freeEnds(): boolean { return this.d.cam.zoom < 1; }
   /** Replay pan for a start strip: centred on it, zoomed out kept inside [restMin, front - margin] so a replay never

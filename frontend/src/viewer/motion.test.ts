@@ -42,17 +42,18 @@ describe("Motion", () => {
     expect(over).toBeLessThanOrEqual(Math.min(cam.viewWorld() * 0.08, SW * 0.5) + 1e-9);
   });
   it("zoomed out, strip 0 can be panned to the screen centre and the live end pulled toward it", () => {
-    const { m, cam } = rig();
+    const { m, cam, strips } = rig({ maxIndex: 200000 });
     cam.liveScroll = 20_000_000; cam.zoom = cam.zoomTarget = 0.001;
     const lo = m.minPan(), g = cam.frame(lo), ww = cam.canvas.width / g.s;
     expect(g.left).toBeCloseTo(-ww / 2, 3);                 // centre of the screen = world 0
     expect(cam.frame(lo + 1000).left).toBeCloseTo(g.left + 1000, 3);   // and no dead travel from there
-    const E = cam.endRoom(); expect(E).toBeCloseTo(ww / 2, 3);
-    expect(m.hiFree()).toBeCloseTo(m.maxPan() + E, 3);
-    expect(m.rubber(m.hiFree() - 10)).toBeCloseTo(m.hiFree() - 10, 6);       // free (1:1) up to the centred live end
-    const liveLine = m.maxPan() + cam.viewWorld() - cam.STAGE(), gl = cam.frame(m.hiFree());
-    expect(gl.left + ww / 2).toBeCloseTo(liveLine, 3);                       // ... where the live line is the screen centre
-    cam.zoom = cam.zoomTarget = 1; expect(cam.endRoom()).toBe(0); expect(cam.startSlack()).toBe(0); expect(m.hiFree()).toBe(m.maxPan());
+    cam.liveScroll = strips.panoramaWidth() - cam.viewWorld() - 2 * cam.SW();   // as onFirstIndex sets it
+    const beyond = strips.panoramaWidth() - cam.liveScroll - cam.viewWorld();
+    expect(m.hiFree()).toBeCloseTo(m.maxPan() + cam.endRoom(beyond), 3);
+    expect(m.rubber(m.hiFree() - 10)).toBeCloseTo(m.hiFree() - 10, 6);       // free (1:1) up to the centred end
+    const gl = cam.frame(m.hiFree());
+    expect(gl.left + ww / 2).toBeCloseTo(strips.panoramaWidth(), 3);         // ... where the end of the drawn strips is the screen centre
+    cam.zoom = cam.zoomTarget = 1; expect(cam.endRoom(beyond)).toBe(0); expect(cam.startSlack()).toBe(0); expect(m.hiFree()).toBe(m.maxPan());
   });
   it("zoomed out, a view released at either centred end stays there (no snap-back, no hand-over to live)", () => {
     const r = rig(); const { m, cam } = r;

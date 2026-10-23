@@ -93,11 +93,13 @@ export class Camera {
   /** Lowest pan (Motion.minPan): the view whose drawn left edge is exactly -startSlack(), so there is no dead travel
    *  at the start (before, the >= 0 clamp in frame() swallowed up to a whole screen of pan; at max zoom-out all of it). */
   minViewLeft(zoom = this.zoom): number { const v = -this.startSlack(zoom) - this.leftOffset(zoom); return Number.isFinite(v) ? v : 0; }
-  /** Zoomed out, the view may rest past the live edge by up to this much (world px): at most the newest painted strip
-   *  sits at the screen centre (Motion.hiFree), mirroring startSlack() at strip 0. 0 at zoom >= 1 (zoom 1 unchanged). */
-  endRoom(zoom = this.zoom): number {
+  /** Zoomed out, the view may rest past the live edge by up to this much (world px): at most the end of the drawn
+   *  strips sits at the screen centre (Motion.hiFree), mirroring startSlack() at strip 0. `beyond` = how far the drawn
+   *  strips reach past the live view's right edge (liveScroll + viewWorld; the staged strips, shown veiled when parked).
+   *  0 at zoom >= 1 (zoom 1 unchanged). */
+  endRoom(beyond = 0, zoom = this.zoom): number {
     const t = this.slackT(zoom); if (!t) return 0;
-    const v = t * (this.viewWorld() - this.STAGE() - this.leftOffset(zoom) - this.canvas.width / this.drawnScale(zoom) / 2);
+    const v = t * (this.viewWorld() + Math.max(0, beyond) - this.leftOffset(zoom) - this.canvas.width / this.drawnScale(zoom) / 2);
     return Number.isFinite(v) ? Math.max(0, v) : 0;
   }
   /** Off-screen staging buffer: one full strip (the next arrival) + the inpaint band it repaints over its predecessor (+32 px). */
